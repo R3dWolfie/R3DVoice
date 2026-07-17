@@ -4,7 +4,7 @@ import { ApiClient } from "../lib/api.js";
 import { ensureTransport, setCurrentlyViewingThread, type ChatTransport } from "../lib/chat-transport.js";
 import { useAuthStore } from "../lib/auth-context.js";
 import { decryptDM, encryptDM, type EncryptedDMPayload } from "../lib/crypto.js";
-import { loadKeyPair } from "../lib/key-storage.js";
+import { loadKeyPair, parseKeyBackup, saveKeyPair } from "../lib/key-storage.js";
 import { Avatar } from "./Avatar.js";
 import { useDismiss } from "../lib/use-dismiss.js";
 import { pushToast } from "../lib/toast-store.js";
@@ -202,7 +202,15 @@ export function RoomChatPanel({
   const transportRef = useRef<ChatTransport | null>(null);
 
   // E2EE state — only relevant for DMs.
-  const myKeyPair = useMemo(() => (threadType === "dm" ? loadKeyPair() : null), [threadType]);
+  // keyEpoch bumps when the restore banner installs a key in-place, so the
+  // memo re-reads localStorage and the whole history decrypts without a reload.
+  const [keyEpoch, setKeyEpoch] = useState(0);
+  const [restoreMsg, setRestoreMsg] = useState<{ ok: boolean; text: string } | null>(null);
+  const keyFileInputRef = useRef<HTMLInputElement | null>(null);
+  const myKeyPair = useMemo(
+    () => (threadType === "dm" ? loadKeyPair() : null),
+    [threadType, keyEpoch],
+  );
   const [peerPublicKey, setPeerPublicKey] = useState<string | null>(null);
   const peerUserId = useMemo(() => {
     if (threadType !== "dm") return null;
@@ -451,6 +459,25 @@ export function RoomChatPanel({
 
   const discardPending = (clientId: string): void => {
     setPending((p) => p.filter((x) => x.clientId !== clientId));
+  };
+
+  // Restore an E2EE key backup (Settings → "Download key backup" on the device
+  // that has the key) directly from the DM view, so a keyless device can unlock
+  // its history in place instead of having to log out and use the login screen.
+  const restoreKeyFile = (file: File): void => {
+    const reader = new FileReader();
+    reader.onload = () => {
+      const kp = parseKeyBackup(String(reader.result ?? ""));
+      if (!kp) {
+        setRestoreMsg({ ok: false, text: "That file isn't a valid R3DVoice key backup." });
+        return;
+      }
+      saveKeyPair(kp);
+      setKeyEpoch((n) => n + 1);
+      setRestoreMsg({ ok: true, text: "Key restored — your messages should decrypt now." });
+    };
+    reader.onerror = () => setRestoreMsg({ ok: false, text: "Couldn't read that file." });
+    reader.readAsText(file);
   };
 
   // Display-side decryption: walks every DM message and replaces its body
@@ -746,6 +773,64 @@ export function RoomChatPanel({
           gap: "var(--s-3)",
         }}
       >
+        {threadType === "dm" && !myKeyPair && (
+          <div
+            style={{
+              position: "sticky",
+              top: 0,
+              zIndex: 6,
+              display: "flex",
+              flexDirection: "column",
+              gap: "var(--s-2)",
+              padding: "var(--s-3)",
+              borderRadius: "var(--r-md)",
+              background: "var(--bg-elev)",
+              border: "1px solid var(--border)",
+              boxShadow: "var(--shadow-sm, 0 2px 8px rgba(0,0,0,.25))",
+            }}
+          >
+            <div style={{ display: "flex", alignItems: "center", gap: "var(--s-2)", fontWeight: 600, fontSize: "var(--t-sm)" }}>
+              <span aria-hidden>🔒</span>
+              <span>Encrypted messages need your key on this device</span>
+            </div>
+            <div style={{ fontSize: "var(--t-xs)", color: "var(--text-mid)", lineHeight: 1.5 }}>
+              Your encryption key isn&rsquo;t on this device yet, so this conversation can&rsquo;t be read.
+              Restore it from a key backup, or sign in fresh on the device that already has your key to
+              sync it automatically.
+            </div>
+            <div style={{ display: "flex", alignItems: "center", gap: "var(--s-2)", flexWrap: "wrap" }}>
+              <button
+                type="button"
+                className="rv-btn"
+                data-variant="primary"
+                onClick={() => keyFileInputRef.current?.click()}
+              >
+                Restore key backup&hellip;
+              </button>
+              <input
+                ref={keyFileInputRef}
+                type="file"
+                accept="application/json,.json"
+                style={{ display: "none" }}
+                onChange={(e) => {
+                  const f = e.target.files?.[0];
+                  if (f) restoreKeyFile(f);
+                  e.target.value = "";
+                }}
+              />
+              {restoreMsg && (
+                <span
+                  style={{
+                    fontSize: "var(--t-xs)",
+                    color: restoreMsg.ok ? "var(--ok, #4caf50)" : "var(--danger, #e5484d)",
+                  }}
+                >
+                  {restoreMsg.text}
+                </span>
+              )}
+            </div>
+          </div>
+        )}
         {historyLoading ? (
           <ChatHistorySkeleton />
         ) : visible.length === 0 && pending.length === 0 ? (
