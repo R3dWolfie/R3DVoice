@@ -1,7 +1,8 @@
 import { createStore, type StoreApi } from "zustand/vanilla";
 import type { UserDTO } from "@r3dvoice/shared";
 import { ApiClient, ApiError } from "./api.js";
-import { ensureKeyPair, downloadKeyBackup, clearKeyPair } from "./key-storage.js";
+import { ensureKeyPair, downloadKeyBackup, clearKeyPair, loadKeyPair, saveKeyPair } from "./key-storage.js";
+import { wrapSecretKey, unwrapSecretKey, publicKeyFromSecret } from "./crypto.js";
 import { useUnreadStore } from "./unread-store.js";
 
 export interface AuthStorageAdapter {
@@ -35,6 +36,47 @@ export interface AuthState {
 
 const DEFAULT_SERVER_URL = "https://voice.r3dwolfie.com";
 
+
+/**
+ * Hybrid E2EE key sync: make the user's DM key available on every device via
+ * their password (escrow). Called after each successful auth with the plaintext
+ * password (which the client already has in hand at that moment).
+ *  - Local key present, server has none → escrow it (backfill / first device).
+ *  - No local key, server has an escrow blob → unwrap with the password and
+ *    install it, so DMs are immediately readable on this new device.
+ *  - No local key, no escrow → legacy account; user restores from file.
+ * Best-effort: never throws into the auth flow.
+ */
+async function syncE2eeKey(api: ApiClient, password: string): Promise<void> {
+  try {
+    const local = loadKeyPair();
+    const remote = await api.getWrappedKey();
+    if (local) {
+      if (!remote.wrapped) {
+        await api.putWrappedKey(await wrapSecretKey(local.secretKey, password));
+      }
+      return;
+    }
+    if (remote.wrapped && remote.salt && remote.nonce) {
+      const secretKey = await unwrapSecretKey(
+        { wrapped: remote.wrapped, salt: remote.salt, nonce: remote.nonce },
+        password,
+      );
+      if (secretKey) {
+        saveKeyPair({ secretKey, publicKey: publicKeyFromSecret(secretKey) });
+      }
+    }
+  } catch (err) {
+    // eslint-disable-next-line no-console
+    console.warn("[auth] e2ee key sync failed:", err);
+  }
+}
+
+// Transient password stash for the TOTP two-step (loginTotp has no password of
+// its own but still needs it to unwrap the escrowed key). Module-scoped, never
+// persisted, cleared right after use.
+let pendingTotpPassword: string | null = null;
+
 export function createAuthStore(
   api: ApiClient,
   storage: AuthStorageAdapter,
@@ -52,11 +94,13 @@ export function createAuthStore(
       try {
         const res = await api.login({ email, password });
         if ("requiresTotp" in res) {
+          pendingTotpPassword = password;
           set({ status: "totp-required", twoFactorToken: res.twoFactorToken, error: null });
           return;
         }
         const { token, user } = res;
         api.setToken(token);
+        await syncE2eeKey(api, password);
         // Persisting the session must never fail the login: on Linux without a
         // keyring, safeStorage is unavailable — the token still works in-memory
         // for this run (token-store also falls back to a private file).
@@ -94,6 +138,10 @@ export function createAuthStore(
       try {
         const { token, user } = await api.loginTotp({ twoFactorToken, code });
         api.setToken(token);
+        if (pendingTotpPassword) {
+          await syncE2eeKey(api, pendingTotpPassword);
+          pendingTotpPassword = null;
+        }
         // Persisting the session must never fail the login: on Linux without a
         // keyring, safeStorage is unavailable — the token still works in-memory
         // for this run (token-store also falls back to a private file).
@@ -114,6 +162,7 @@ export function createAuthStore(
     },
 
     cancelTotp() {
+      pendingTotpPassword = null;
       set({ status: "unauthenticated", twoFactorToken: null, error: null });
     },
 
@@ -131,6 +180,8 @@ export function createAuthStore(
           e2eePublicKey: kp.publicKey,
         });
         api.setToken(token);
+        // Escrow the fresh key under the password so it reaches other devices.
+        await syncE2eeKey(api, password);
         // Persisting the session must never fail the login: on Linux without a
         // keyring, safeStorage is unavailable — the token still works in-memory
         // for this run (token-store also falls back to a private file).

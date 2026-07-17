@@ -36,6 +36,12 @@ export interface EncryptedDMPayload {
   s: string;
 }
 
+/** Derive the X25519 public key from a secret key (base64 in/out). */
+export function publicKeyFromSecret(secretKeyB64: string): string {
+  const kp = nacl.box.keyPair.fromSecretKey(naclUtil.decodeBase64(secretKeyB64));
+  return naclUtil.encodeBase64(kp.publicKey);
+}
+
 export function generateKeyPair(): KeyPair {
   const kp = nacl.box.keyPair();
   return {
@@ -144,5 +150,63 @@ export function isPlausibleKey(s: string): boolean {
     return bytes.length === 32;
   } catch {
     return false;
+  }
+}
+
+// ── Password-synced key escrow (hybrid E2EE) ───────────────────────────────
+// To make DMs readable across devices without giving up E2EE, the user's
+// secret key is wrapped (encrypted) with a key derived from their PASSWORD and
+// stored server-side. The server never sees the password (only its hash) nor
+// the derived key nor the plaintext secret key — only the wrapped blob. On
+// login (on any device) the client fetches the blob and unwraps it with the
+// password it already has in hand. Threat model: resistant to a passive /
+// honest-but-curious server (it cannot read DMs), NOT to a server that
+// actively captures the password at login — an accepted tradeoff for usability.
+
+export interface WrappedSecretKey {
+  wrapped: string; // base64 secretbox ciphertext of the 32-byte secret key
+  salt: string; // base64 PBKDF2 salt
+  nonce: string; // base64 secretbox nonce
+}
+
+const KDF_ITERATIONS = 210_000;
+
+async function deriveWrapKey(password: string, salt: Uint8Array): Promise<Uint8Array> {
+  const baseKey = await crypto.subtle.importKey(
+    "raw",
+    new TextEncoder().encode(password),
+    "PBKDF2",
+    false,
+    ["deriveBits"],
+  );
+  const bits = await crypto.subtle.deriveBits(
+    { name: "PBKDF2", salt: salt as BufferSource, iterations: KDF_ITERATIONS, hash: "SHA-256" },
+    baseKey,
+    256, // 32 bytes → nacl.secretbox key length
+  );
+  return new Uint8Array(bits);
+}
+
+/** Encrypt a secret key with a password-derived key (for server escrow). */
+export async function wrapSecretKey(secretKeyB64: string, password: string): Promise<WrappedSecretKey> {
+  const salt = nacl.randomBytes(16);
+  const nonce = nacl.randomBytes(nacl.secretbox.nonceLength);
+  const key = await deriveWrapKey(password, salt);
+  const box = nacl.secretbox(naclUtil.decodeBase64(secretKeyB64), nonce, key);
+  return {
+    wrapped: naclUtil.encodeBase64(box),
+    salt: naclUtil.encodeBase64(salt),
+    nonce: naclUtil.encodeBase64(nonce),
+  };
+}
+
+/** Decrypt a wrapped secret key with the password. Returns null on wrong password. */
+export async function unwrapSecretKey(w: WrappedSecretKey, password: string): Promise<string | null> {
+  try {
+    const key = await deriveWrapKey(password, naclUtil.decodeBase64(w.salt));
+    const sk = nacl.secretbox.open(naclUtil.decodeBase64(w.wrapped), naclUtil.decodeBase64(w.nonce), key);
+    return sk ? naclUtil.encodeBase64(sk) : null;
+  } catch {
+    return null;
   }
 }

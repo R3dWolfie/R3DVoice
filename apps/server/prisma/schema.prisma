@@ -27,6 +27,15 @@ model User {
   // because legacy accounts created before E2EE shipped won't have one.
   e2eePublicKey String?
 
+  // Hybrid E2EE key escrow: the user's secret key encrypted with a key derived
+  // from their PASSWORD (client-side PBKDF2). The server stores only this
+  // opaque blob — it can't decrypt it without the password. Lets the same key
+  // reach every device the user logs into, so DMs are readable everywhere
+  // without a manual key-file restore.
+  e2eeWrappedKey String?
+  e2eeKeySalt    String?
+  e2eeKeyNonce   String?
+
   // handle is the user-displayed form (preserves casing chosen at signup).
   // handleLower is the canonical case-insensitive form used for uniqueness
   // and lookups so @Red and @red collide as the same identity.

@@ -235,6 +235,39 @@ export async function authRoutes(app: FastifyInstance): Promise<void> {
     },
   );
 
+  // Hybrid key escrow: store the password-wrapped secret key. The server can't
+  // read it (wrapped client-side with a password-derived key) — it only holds
+  // the opaque blob so the key can reach the user's other devices.
+  const wrappedKeySchema = z.object({
+    wrapped: z.string().min(1).max(1000),
+    salt: z.string().min(1).max(100),
+    nonce: z.string().min(1).max(100),
+  });
+  app.put("/auth/e2ee/wrapped-key", { preHandler: requireAuth }, async (request, reply) => {
+    const parsed = wrappedKeySchema.safeParse(request.body);
+    if (!parsed.success) throw new ValidationError("invalid wrapped key");
+    await prisma.user.update({
+      where: { id: request.auth!.userId },
+      data: {
+        e2eeWrappedKey: parsed.data.wrapped,
+        e2eeKeySalt: parsed.data.salt,
+        e2eeKeyNonce: parsed.data.nonce,
+      },
+    });
+    reply.status(204).send();
+  });
+
+  app.get("/auth/e2ee/wrapped-key", { preHandler: requireAuth }, async (request) => {
+    const user = await prisma.user.findUnique({
+      where: { id: request.auth!.userId },
+      select: { e2eeWrappedKey: true, e2eeKeySalt: true, e2eeKeyNonce: true },
+    });
+    if (!user?.e2eeWrappedKey || !user.e2eeKeySalt || !user.e2eeKeyNonce) {
+      return { wrapped: null };
+    }
+    return { wrapped: user.e2eeWrappedKey, salt: user.e2eeKeySalt, nonce: user.e2eeKeyNonce };
+  });
+
   app.post("/auth/logout", { preHandler: requireAuth }, async (request, reply) => {
     await prisma.session.update({
       where: { id: request.auth!.sessionId },

@@ -105,6 +105,12 @@ export class ApiClient {
   setE2eePublicKey(e2eePublicKey: string): Promise<void> {
     return this.request("POST", "/auth/e2ee/public-key", { e2eePublicKey });
   }
+  putWrappedKey(body: { wrapped: string; salt: string; nonce: string }): Promise<void> {
+    return this.request("PUT", "/auth/e2ee/wrapped-key", body);
+  }
+  getWrappedKey(): Promise<{ wrapped: string | null; salt?: string; nonce?: string }> {
+    return this.request("GET", "/auth/e2ee/wrapped-key");
+  }
   getUserPublicKey(userId: string): Promise<{ id: string; displayName: string; publicKey: string | null }> {
     return this.request("GET", `/users/${encodeURIComponent(userId)}/public-key`);
   }
