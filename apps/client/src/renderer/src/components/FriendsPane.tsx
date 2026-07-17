@@ -4,6 +4,7 @@ import { useAuthStore } from "../lib/auth-context.js";
 import { ApiClient } from "../lib/api.js";
 import { getTransport } from "../lib/chat-transport.js";
 import { Avatar } from "./Avatar.js";
+import { HandleMatchCard, useHandleMatch } from "./HandleMatchCard.js";
 import { I } from "./Icons.js";
 import { InviteCreateModal } from "./InviteCreateModal.js";
 import { MyInvitesList } from "./MyInvitesList.js";
@@ -20,6 +21,8 @@ export function FriendsPane({ onJoinRoom }: Props = {}): ReactElement {
   const [busy, setBusy] = useState(false);
   const [error, setError] = useState<string | null>(null);
   const [inviteOpen, setInviteOpen] = useState(false);
+  // 2.2a — live match preview while a handle is typed.
+  const addMatch = useHandleMatch(addInput);
 
   const apiFor = useCallback(() => {
     const api = new ApiClient(serverUrl); api.setToken(token); return api;
@@ -104,6 +107,11 @@ export function FriendsPane({ onJoinRoom }: Props = {}): ReactElement {
             <I.Plus size={12} />
           </button>
         </div>
+        {addMatch && (
+          <div style={{ marginTop: "var(--s-2)" }}>
+            <HandleMatchCard match={addMatch} />
+          </div>
+        )}
         <button
           type="button"
           className="rv-btn"

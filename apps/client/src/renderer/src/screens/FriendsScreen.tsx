@@ -3,7 +3,10 @@ import type { FriendDTO } from "@r3dvoice/shared";
 import { useAuthStore } from "../lib/auth-context.js";
 import { ApiClient } from "../lib/api.js";
 import { getTransport } from "../lib/chat-transport.js";
+import { usePrefs } from "../lib/prefs-singleton.js";
 import { Avatar } from "../components/Avatar.js";
+import { ContextMenu, MenuItem, MenuDivider } from "../components/ContextMenu.js";
+import { HandleMatchCard, useHandleMatch } from "../components/HandleMatchCard.js";
 import { I } from "../components/Icons.js";
 import { InviteCreateModal } from "../components/InviteCreateModal.js";
 import { MyInvitesList } from "../components/MyInvitesList.js";
@@ -27,7 +30,15 @@ export function FriendsScreen({ onJoinRoom, onOpenDms }: Props = {}): ReactEleme
   const [error, setError] = useState<string | null>(null);
   const [invitesOpen, setInvitesOpen] = useState(false);
   const [inviteCreateOpen, setInviteCreateOpen] = useState(false);
+  const [overflowOpen, setOverflowOpen] = useState(false);
+  const [rowMenu, setRowMenu] = useState<{ friend: FriendDTO; x: number; y: number } | null>(null);
+  const [removeArmed, setRemoveArmed] = useState(false);
   const addRef = useRef<HTMLDivElement>(null);
+  const overflowRef = useRef<HTMLDivElement>(null);
+  const outgoingRef = useRef<HTMLDivElement>(null);
+  const openSettingsKeybind = usePrefs((s) => s.openSettingsKeybind);
+  // 2.2a — live match preview while the popover is open and a handle is typed.
+  const addMatch = useHandleMatch(addOpen ? addInput : "");
 
   const apiFor = useCallback(() => {
     const api = new ApiClient(serverUrl);
@@ -70,6 +81,15 @@ export function FriendsScreen({ onJoinRoom, onOpenDms }: Props = {}): ReactEleme
     window.addEventListener("mousedown", onDown);
     return () => window.removeEventListener("mousedown", onDown);
   }, [addOpen]);
+
+  useEffect(() => {
+    if (!overflowOpen) return;
+    function onDown(e: MouseEvent): void {
+      if (overflowRef.current && !overflowRef.current.contains(e.target as Node)) setOverflowOpen(false);
+    }
+    window.addEventListener("mousedown", onDown);
+    return () => window.removeEventListener("mousedown", onDown);
+  }, [overflowOpen]);
 
   const sendRequest = async (): Promise<void> => {
     const raw = addInput.trim();
@@ -116,7 +136,7 @@ export function FriendsScreen({ onJoinRoom, onOpenDms }: Props = {}): ReactEleme
   const online = accepted.filter((f) => f.isOnline).length;
 
   return (
-    <div style={{ display: "grid", gridTemplateRows: "auto 1fr", height: "100%", minHeight: 0 }}>
+    <div style={{ display: "grid", gridTemplateRows: "auto 1fr auto", height: "100%", minHeight: 0 }}>
       {/* Top bar */}
       <div
         style={{
@@ -148,28 +168,67 @@ export function FriendsScreen({ onJoinRoom, onOpenDms }: Props = {}): ReactEleme
           {addOpen && (
             <div
               className="rv-menu rv-fade-in"
-              style={{ position: "absolute", top: "calc(100% + 6px)", right: 0, width: 290, padding: "var(--s-3)", zIndex: 40 }}
+              style={{ position: "absolute", top: "calc(100% + 6px)", right: 0, width: 300, padding: "var(--s-3)", zIndex: 40 }}
             >
-              <div className="rv-label" style={{ marginBottom: "var(--s-2)", fontSize: "var(--t-2xs)" }}>
-                Add by handle or email
-              </div>
-              <div style={{ display: "flex", gap: "var(--s-2)" }}>
-                <input
-                  autoFocus
-                  className="rv-input"
-                  placeholder="@handle or email"
-                  value={addInput}
-                  onChange={(e) => setAddInput(e.target.value)}
-                  onKeyDown={(e) => {
-                    if (e.key === "Enter") {
-                      e.preventDefault();
-                      void sendRequest();
-                    }
-                    if (e.key === "Escape") setAddOpen(false);
+              {/* 2.2a head: icon plate + title/sub */}
+              <div style={{ display: "flex", alignItems: "center", gap: "var(--s-3)", marginBottom: "var(--s-3)" }}>
+                <span
+                  aria-hidden
+                  style={{
+                    width: 28,
+                    height: 28,
+                    borderRadius: "var(--r-md)",
+                    background: "var(--bg-elev-2)",
+                    border: "1px solid var(--border)",
+                    display: "grid",
+                    placeItems: "center",
+                    fontWeight: 700,
+                    color: "var(--text-mid)",
+                    flexShrink: 0,
                   }}
-                  disabled={busy}
+                >
+                  ＋
+                </span>
+                <span style={{ display: "flex", flexDirection: "column" }}>
+                  <span style={{ fontSize: "var(--t-sm)", fontWeight: 600 }}>Add a friend</span>
+                  <span style={{ fontSize: "var(--t-2xs)", color: "var(--text-dim)" }}>Type their @handle.</span>
+                </span>
+              </div>
+              <div className="rv-label" style={{ marginBottom: "var(--s-2)", fontSize: "var(--t-2xs)" }}>
+                @handle or email
+              </div>
+              <input
+                autoFocus
+                className="rv-input"
+                placeholder="@handle or email"
+                value={addInput}
+                onChange={(e) => setAddInput(e.target.value)}
+                onKeyDown={(e) => {
+                  if (e.key === "Enter") {
+                    e.preventDefault();
+                    void sendRequest();
+                  }
+                  if (e.key === "Escape") setAddOpen(false);
+                }}
+                disabled={busy}
+                style={{ height: "2rem", fontSize: "var(--t-xs)" }}
+              />
+              {/* 2.2a — live match preview while typing a known handle */}
+              {addMatch && (
+                <div style={{ marginTop: "var(--s-2)" }}>
+                  <HandleMatchCard match={addMatch} />
+                </div>
+              )}
+              <div style={{ display: "flex", justifyContent: "flex-end", gap: "var(--s-2)", marginTop: "var(--s-3)" }}>
+                <button
+                  type="button"
+                  className="rv-btn"
+                  data-variant="ghost"
+                  onClick={() => setAddOpen(false)}
                   style={{ height: "2rem", fontSize: "var(--t-xs)" }}
-                />
+                >
+                  Cancel
+                </button>
                 <button
                   type="button"
                   className="rv-btn"
@@ -178,7 +237,7 @@ export function FriendsScreen({ onJoinRoom, onOpenDms }: Props = {}): ReactEleme
                   disabled={busy || !addInput.trim()}
                   style={{ height: "2rem", padding: "0 var(--s-3)", fontSize: "var(--t-xs)" }}
                 >
-                  Send
+                  Send request
                 </button>
               </div>
             </div>
@@ -192,6 +251,44 @@ export function FriendsScreen({ onJoinRoom, onOpenDms }: Props = {}): ReactEleme
         >
           🔗 Invite links
         </button>
+        {/* 2.2 top-bar overflow (⋮): pending-sent + manage links */}
+        <div ref={overflowRef} style={{ position: "relative" }}>
+          <button
+            type="button"
+            className="rv-btn rv-btn-icon"
+            title="More"
+            aria-label="More"
+            onClick={() => setOverflowOpen((v) => !v)}
+            style={{ height: "2rem", width: "2rem", fontSize: "var(--t-md)", fontWeight: 700 }}
+          >
+            ⋮
+          </button>
+          {overflowOpen && (
+            <div
+              className="rv-menu rv-fade-in"
+              style={{ position: "absolute", top: "calc(100% + 6px)", right: 0, width: 240, zIndex: 40 }}
+            >
+              <MenuItem
+                label="Pending sent requests"
+                kbd={String(outgoing.length)}
+                disabled={outgoing.length === 0}
+                disabledHint="No pending sent requests."
+                onClick={() => {
+                  setOverflowOpen(false);
+                  outgoingRef.current?.scrollIntoView({ behavior: "smooth", block: "center" });
+                }}
+              />
+              <MenuDivider />
+              <MenuItem
+                label="Manage invite links"
+                onClick={() => {
+                  setOverflowOpen(false);
+                  setInvitesOpen(true);
+                }}
+              />
+            </div>
+          )}
+        </div>
       </div>
 
       {/* Body */}
@@ -314,13 +411,35 @@ export function FriendsScreen({ onJoinRoom, onOpenDms }: Props = {}): ReactEleme
                   >
                     <I.Chat size={13} />
                   </button>
+                  <button
+                    className="rv-btn rv-btn-icon"
+                    title="More"
+                    aria-label={`More options for ${f.user.displayName}`}
+                    style={{ height: "1.8rem", width: "1.8rem", fontWeight: 700 }}
+                    onClick={(e) => {
+                      e.stopPropagation();
+                      const rect = e.currentTarget.getBoundingClientRect();
+                      setRemoveArmed(false);
+                      setRowMenu({ friend: f, x: rect.right, y: rect.bottom + 4 });
+                    }}
+                  >
+                    ⋮
+                  </button>
                 </div>
               </div>
             ))
           )}
 
+          {accepted.length > 0 && (
+            <div style={{ textAlign: "center", padding: "var(--s-4) 0 var(--s-2)" }}>
+              <span className="rv-label" style={{ fontSize: "var(--t-2xs)", color: "var(--text-faint)" }}>
+                · end of list ·
+              </span>
+            </div>
+          )}
+
           {outgoing.length > 0 && (
-            <div style={{ marginTop: "var(--s-5)" }}>
+            <div ref={outgoingRef} style={{ marginTop: "var(--s-5)" }}>
               <div className="rv-label" style={{ marginBottom: "var(--s-2)", fontSize: "var(--t-2xs)" }}>
                 Pending — sent
               </div>
@@ -347,6 +466,86 @@ export function FriendsScreen({ onJoinRoom, onOpenDms }: Props = {}): ReactEleme
           )}
         </div>
       </div>
+
+      {/* 2.2 PTT hint strip */}
+      <div className="rv-ptt-hint">
+        <span style={{ flex: 1, display: "flex", alignItems: "center", gap: 6, flexWrap: "wrap" }}>
+          <span>Push-to-talk binds{openSettingsKeybind ? " in" : " live in"}</span>
+          {openSettingsKeybind &&
+            openSettingsKeybind.split("+").map((k) => (
+              <kbd key={k} className="rv-kbd">
+                {k}
+              </kbd>
+            ))}
+          <span>{openSettingsKeybind ? "→ " : ""}Settings → Keybinds.</span>
+        </span>
+      </div>
+
+      {/* Per-row ⋮ menu: DM · copy handle · remove (two-click confirm) */}
+      {rowMenu && (
+        <ContextMenu
+          x={rowMenu.x}
+          y={rowMenu.y}
+          onClose={() => {
+            setRowMenu(null);
+            setRemoveArmed(false);
+          }}
+          header={
+            <>
+              <Avatar
+                src={rowMenu.friend.user.avatarUrl ?? null}
+                fallbackInitials={rowMenu.friend.user.displayName}
+                fallbackColorSeed={rowMenu.friend.user.id}
+                size={26}
+              />
+              <div style={{ display: "flex", flexDirection: "column", minWidth: 0 }}>
+                <span style={{ fontSize: "var(--t-xs)", fontWeight: 600 }}>{rowMenu.friend.user.displayName}</span>
+                {rowMenu.friend.user.handle && (
+                  <span className="rv-mono" style={{ fontSize: "var(--t-2xs)", color: "var(--text-dim)" }}>
+                    @{rowMenu.friend.user.handle}
+                  </span>
+                )}
+              </div>
+            </>
+          }
+        >
+          <MenuItem
+            icon="✉"
+            label="Send DM"
+            onClick={() => {
+              setRowMenu(null);
+              onOpenDms?.();
+            }}
+          />
+          <MenuItem
+            icon="＠"
+            label="Copy handle"
+            disabled={!rowMenu.friend.user.handle}
+            disabledHint="No handle set."
+            onClick={() => {
+              const h = rowMenu.friend.user.handle;
+              setRowMenu(null);
+              if (h) void navigator.clipboard.writeText(`@${h}`).catch(() => {});
+            }}
+          />
+          <MenuDivider />
+          <MenuItem
+            icon="✕"
+            label={removeArmed ? "Really remove? Click again" : "Remove friend"}
+            tone="danger"
+            onClick={() => {
+              if (!removeArmed) {
+                setRemoveArmed(true);
+                return;
+              }
+              const id = rowMenu.friend.friendshipId;
+              setRowMenu(null);
+              setRemoveArmed(false);
+              void reject(id);
+            }}
+          />
+        </ContextMenu>
+      )}
 
       {/* Manage invite links (2.3 as a modal until it earns a page) */}
       <Modal
