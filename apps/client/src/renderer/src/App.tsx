@@ -13,6 +13,9 @@ import { LeftIconColumn, type TopPage } from "./components/LeftIconColumn.js";
 import { DmsScreen } from "./screens/DmsScreen.js";
 import { SettingsModal } from "./components/SettingsModal.js";
 import { UpdateToast } from "./components/UpdateToast.js";
+import { ToastHost } from "./components/ToastHost.js";
+import { ConnectionBanner } from "./components/ConnectionBanner.js";
+import { InviteQueue } from "./components/InviteQueue.js";
 
 function Router({ topPage, setTopPage }: { topPage: TopPage; setTopPage: (p: TopPage) => void }): ReactElement {
   const status = useAuthStore((s) => s.status);
@@ -131,6 +134,13 @@ function Router({ topPage, setTopPage }: { topPage: TopPage; setTopPage: (p: Top
         </div>
         {settingsOpen && <SettingsModal onClose={() => setSettingsOpen(false)} />}
         <UpdateToast />
+        {/* 4.3 — corner queue for directed room invites arriving live. */}
+        <InviteQueue
+          onJoinRoom={(roomId) => {
+            setPendingJoinRoomId(roomId);
+            setTopPage("lobby");
+          }}
+        />
       </div>
     );
   }
@@ -158,9 +168,15 @@ function Chrome(): ReactElement {
 
   return (
     <WindowChrome title={chromeTitle} serverLabel={serverLabel}>
-      <div key={status} className="rv-fade-in" style={{ minHeight: 0, height: "100%" }}>
-        <Router topPage={topPage} setTopPage={setTopPage} />
+      <div style={{ display: "flex", flexDirection: "column", minHeight: 0, height: "100%" }}>
+        {/* App-wide connection banner slot, directly under the titlebar
+            (system/connection-banners.html) — renders nothing when healthy. */}
+        <ConnectionBanner />
+        <div key={status} className="rv-fade-in" style={{ flex: 1, minHeight: 0 }}>
+          <Router topPage={topPage} setTopPage={setTopPage} />
+        </div>
       </div>
+      <ToastHost />
     </WindowChrome>
   );
 }

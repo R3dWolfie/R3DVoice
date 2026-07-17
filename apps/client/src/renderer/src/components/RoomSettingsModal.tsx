@@ -2,11 +2,13 @@ import { useCallback, useEffect, useState, type ReactElement } from "react";
 import type { FriendDTO, InviteDTO, RoomDTO, RoomMemberDTO } from "@r3dvoice/shared";
 import { useAuthStore } from "../lib/auth-context.js";
 import { ApiClient } from "../lib/api.js";
+import { pushToast } from "../lib/toast-store.js";
 import { Modal } from "./Modal.js";
 import { Field } from "./Primitives.js";
 import { Avatar } from "./Avatar.js";
-import { CopyableInvite } from "./CopyableInvite.js";
+import { EditInviteModal } from "./EditInviteModal.js";
 import { InviteCreateModal } from "./InviteCreateModal.js";
+import { TransferOwnershipModal } from "./TransferOwnershipModal.js";
 import { I } from "./Icons.js";
 
 type Tab = "overview" | "members" | "invites" | "delete";
@@ -92,11 +94,32 @@ export function RoomSettingsModal({
             <OverviewTab room={room} isOwner={isOwner} api={api} onChanged={onChanged} onError={setError} />
           )}
           {tab === "members" && (
-            <MembersTab room={room} isOwner={isOwner} meId={meId ?? ""} api={api} onChanged={onChanged} onError={setError} />
+            <MembersTab
+              room={room}
+              isOwner={isOwner}
+              meId={meId ?? ""}
+              api={api}
+              onError={setError}
+              onOwnershipTransferred={(left) => {
+                if (left) {
+                  onGone();
+                } else {
+                  onChanged();
+                  onClose();
+                }
+              }}
+            />
           )}
           {tab === "invites" && isOwner && <InvitesTab room={room} api={api} onError={setError} />}
           {tab === "delete" && (
-            <DangerTab room={room} isOwner={isOwner} api={api} onGone={onGone} onError={setError} />
+            <DangerTab
+              room={room}
+              isOwner={isOwner}
+              api={api}
+              onGone={onGone}
+              onError={setError}
+              onCancel={() => setTab("overview")}
+            />
           )}
         </div>
       </div>
@@ -121,7 +144,6 @@ function OverviewTab({
   const [description, setDescription] = useState(room.description ?? "");
   const [isPublic, setIsPublic] = useState(room.isPublic);
   const [busy, setBusy] = useState(false);
-  const [saved, setSaved] = useState(false);
 
   const dirty =
     name.trim() !== room.name ||
@@ -138,8 +160,7 @@ function OverviewTab({
         description: description.trim() === "" ? null : description.trim(),
       });
       onChanged();
-      setSaved(true);
-      setTimeout(() => setSaved(false), 1500);
+      pushToast({ kind: "success", text: "Room settings saved", sub: name.trim() });
     } catch (e) {
       onError(e instanceof Error ? e.message : "failed to save");
     } finally {
@@ -218,7 +239,7 @@ function OverviewTab({
               if (dirty && !busy && name.trim()) void save();
             }}
           >
-            {busy ? "Saving…" : saved ? "Saved ✓" : "Save changes"}
+            {busy ? "Saving…" : "Save changes"}
           </button>
         </div>
       )}
@@ -231,18 +252,19 @@ function MembersTab({
   isOwner,
   meId,
   api,
-  onChanged,
   onError,
+  onOwnershipTransferred,
 }: {
   room: RoomDTO;
   isOwner: boolean;
   meId: string;
   api: () => ApiClient;
-  onChanged: () => void;
   onError: (e: string | null) => void;
+  onOwnershipTransferred: (left: boolean) => void;
 }): ReactElement {
   const [members, setMembers] = useState<RoomMemberDTO[] | null>(null);
   const [busyId, setBusyId] = useState<string | null>(null);
+  const [transferFor, setTransferFor] = useState<RoomMemberDTO | null>(null);
 
   const refresh = useCallback(async () => {
     try {
@@ -264,20 +286,6 @@ function MembersTab({
       await refresh();
     } catch (e) {
       onError(e instanceof Error ? e.message : "failed to remove");
-    } finally {
-      setBusyId(null);
-    }
-  };
-
-  const transfer = async (userId: string): Promise<void> => {
-    setBusyId(userId);
-    onError(null);
-    try {
-      await api().transferRoomOwnership(room.id, userId);
-      onChanged();
-      await refresh();
-    } catch (e) {
-      onError(e instanceof Error ? e.message : "failed to transfer");
     } finally {
       setBusyId(null);
     }
@@ -325,7 +333,7 @@ function MembersTab({
                 style={{ height: "1.7rem", fontSize: "var(--t-2xs)" }}
                 disabled={busyId !== null}
                 title="Make this member the owner"
-                onClick={() => void transfer(m.userId)}
+                onClick={() => setTransferFor(m)}
               >
                 Make owner
               </button>
@@ -351,6 +359,20 @@ function MembersTab({
 
       {isOwner && (
         <InviteFriendsSection roomId={room.id} memberIds={members.map((m) => m.userId)} api={api} onInvited={refresh} />
+      )}
+
+      {transferFor && (
+        <TransferOwnershipModal
+          room={room}
+          members={members}
+          preselectedUserId={transferFor.userId}
+          api={api}
+          onClose={() => setTransferFor(null)}
+          onDone={(left) => {
+            setTransferFor(null);
+            onOwnershipTransferred(left);
+          }}
+        />
       )}
     </div>
   );
@@ -425,6 +447,19 @@ function InviteFriendsSection({
   );
 }
 
+/** 4.9c meta line: "Expires in 5 days · 12 uses" / "Single-use · unused" / "Never expires · 47 uses". */
+function inviteMetaLine(inv: InviteDTO): string {
+  if (inv.maxUses === 1) return `Single-use · ${inv.uses === 0 ? "unused" : "used"}`;
+  const uses = inv.maxUses !== null ? `${inv.uses}/${inv.maxUses} uses` : `${inv.uses} use${inv.uses === 1 ? "" : "s"}`;
+  if (inv.expiresAt === null) return `Never expires · ${uses}`;
+  const ms = Date.parse(inv.expiresAt) - Date.now();
+  if (ms <= 0) return `Expired · ${uses}`;
+  const days = Math.round(ms / 86_400_000);
+  if (days >= 2) return `Expires in ${days} days · ${uses}`;
+  const hours = Math.max(1, Math.round(ms / 3_600_000));
+  return `Expires in ${hours}h · ${uses}`;
+}
+
 function InvitesTab({
   room,
   api,
@@ -435,8 +470,10 @@ function InvitesTab({
   onError: (e: string | null) => void;
 }): ReactElement {
   const serverUrl = useAuthStore((s) => s.serverUrl);
+  const myHandle = useAuthStore((s) => s.user?.handle ?? null);
   const [invites, setInvites] = useState<InviteDTO[] | null>(null);
   const [createOpen, setCreateOpen] = useState(false);
+  const [editing, setEditing] = useState<InviteDTO | null>(null);
 
   const refresh = useCallback(async () => {
     try {
@@ -461,19 +498,34 @@ function InvitesTab({
     }
   };
 
+  const copy = async (inv: InviteDTO): Promise<void> => {
+    const url = `${serverUrl.replace(/\/$/, "")}/invite/${inv.code}`;
+    try {
+      await navigator.clipboard.writeText(url);
+      pushToast({ kind: "success", text: "Invite link copied", sub: url });
+    } catch {
+      pushToast({ kind: "error", text: "Couldn't access the clipboard" });
+    }
+  };
+
   return (
     <div style={{ display: "flex", flexDirection: "column", gap: "var(--s-3)" }}>
-      <div style={{ display: "flex", alignItems: "center" }}>
-        <span className="rv-label" style={{ fontSize: "var(--t-2xs)", flex: 1 }}>
-          Invite links for this room
+      {/* 4.9c header: "N active links to {room}. Anyone with a link can join." */}
+      <div style={{ display: "flex", alignItems: "center", gap: "var(--s-3)" }}>
+        <span style={{ fontSize: "var(--t-sm)", color: "var(--text-mid)", flex: 1 }}>
+          {invites === null
+            ? "Loading links…"
+            : `${invites.length} active link${invites.length === 1 ? "" : "s"} to `}
+          {invites !== null && <b style={{ fontWeight: 600, color: "var(--text)" }}>{room.name}</b>}
+          {invites !== null && ". Anyone with a link can join."}
         </span>
         <button
           className="rv-btn"
           data-variant="primary"
-          style={{ height: "1.8rem", fontSize: "var(--t-xs)" }}
+          style={{ height: "1.8rem", fontSize: "var(--t-xs)", flexShrink: 0 }}
           onClick={() => setCreateOpen(true)}
         >
-          <I.Plus size={12} /> Generate
+          <I.Plus size={12} /> Generate invite link
         </button>
       </div>
       {invites === null ? (
@@ -485,15 +537,58 @@ function InvitesTab({
         </div>
       ) : (
         invites.map((inv) => (
-          <div key={inv.id} style={{ display: "flex", alignItems: "center", gap: "var(--s-2)" }}>
-            <div style={{ flex: 1, minWidth: 0 }}>
-              <CopyableInvite code={inv.code} serverUrl={serverUrl} onClose={() => {}} />
-              <div className="rv-mono" style={{ fontSize: "var(--t-2xs)", color: "var(--text-faint)", marginTop: 2 }}>
-                {inv.uses} use{inv.uses === 1 ? "" : "s"}
-                {inv.maxUses !== null && ` / ${inv.maxUses}`}
-                {inv.expiresAt && ` · expires ${new Date(inv.expiresAt).toLocaleDateString()}`}
+          <div
+            key={inv.id}
+            style={{
+              display: "flex",
+              alignItems: "center",
+              gap: "var(--s-2)",
+              padding: "var(--s-2) var(--s-3)",
+              border: "1px solid var(--border-soft)",
+              borderRadius: "var(--r-md)",
+              background: "var(--bg-elev)",
+            }}
+          >
+            <button
+              type="button"
+              onClick={() => setEditing(inv)}
+              title="Invite link settings"
+              style={{
+                flex: 1,
+                minWidth: 0,
+                appearance: "none",
+                border: 0,
+                background: "transparent",
+                textAlign: "left",
+                cursor: "pointer",
+                padding: 0,
+              }}
+            >
+              <div
+                className="rv-mono"
+                style={{
+                  fontSize: "var(--t-sm)",
+                  overflow: "hidden",
+                  textOverflow: "ellipsis",
+                  whiteSpace: "nowrap",
+                }}
+              >
+                {serverUrl.replace(/^https?:\/\//, "").replace(/\/$/, "")}/invite/{inv.code}
               </div>
-            </div>
+              <div style={{ fontSize: "var(--t-2xs)", color: "var(--text-dim)", marginTop: 2 }}>
+                {myHandle ? `by @${myHandle}` : "by you"} · {inviteMetaLine(inv)}
+              </div>
+            </button>
+            <button
+              className="rv-btn rv-btn-icon"
+              data-variant="ghost"
+              title="Copy link"
+              aria-label="Copy link"
+              style={{ height: "1.7rem", width: "1.7rem" }}
+              onClick={() => void copy(inv)}
+            >
+              <I.Copy size={13} />
+            </button>
             <button
               className="rv-btn"
               data-variant="danger"
@@ -506,6 +601,56 @@ function InvitesTab({
         ))
       )}
       {createOpen && <InviteCreateModal open={true} roomId={room.id} onClose={() => setCreateOpen(false)} />}
+      {editing && (
+        <EditInviteModal
+          invite={editing}
+          roomName={room.name}
+          serverUrl={serverUrl}
+          myHandle={myHandle}
+          api={api}
+          onClose={() => setEditing(null)}
+          onChanged={() => void refresh()}
+        />
+      )}
+    </div>
+  );
+}
+
+/** Red callout used by both delete steps (4.9d / 4.9d2). */
+function DangerCallout({ head, sub }: { head: string; sub: string }): ReactElement {
+  return (
+    <div
+      style={{
+        display: "flex",
+        gap: "var(--s-3)",
+        alignItems: "flex-start",
+        padding: "var(--s-3) var(--s-4)",
+        background: "color-mix(in srgb, var(--danger) 6%, transparent)",
+        border: "1px solid color-mix(in srgb, var(--danger) 35%, transparent)",
+        borderRadius: "var(--r-md)",
+      }}
+    >
+      <span
+        aria-hidden
+        style={{
+          width: "1.5rem",
+          height: "1.5rem",
+          borderRadius: "50%",
+          border: "1.5px solid var(--danger)",
+          color: "var(--danger)",
+          display: "grid",
+          placeItems: "center",
+          fontWeight: 700,
+          fontSize: "var(--t-sm)",
+          flexShrink: 0,
+        }}
+      >
+        !
+      </span>
+      <div style={{ fontSize: "var(--t-sm)", lineHeight: 1.45 }}>
+        <div style={{ fontWeight: 600 }}>{head}</div>
+        <div style={{ color: "var(--text-mid)" }}>{sub}</div>
+      </div>
     </div>
   );
 }
@@ -516,16 +661,45 @@ function DangerTab({
   api,
   onGone,
   onError,
+  onCancel,
 }: {
   room: RoomDTO;
   isOwner: boolean;
   api: () => ApiClient;
   onGone: () => void;
   onError: (e: string | null) => void;
+  onCancel: () => void;
 }): ReactElement {
+  // 4.9d two-step flow: step 1 = impact summary, step 2 = type-name confirm.
+  const [step, setStep] = useState<1 | 2>(1);
   const [confirmText, setConfirmText] = useState("");
   const [busy, setBusy] = useState(false);
+  const [memberCount, setMemberCount] = useState<number | null>(null);
+  const [inviteCount, setInviteCount] = useState<number | null>(null);
   const matches = confirmText === room.name;
+
+  useEffect(() => {
+    if (!isOwner) return;
+    let cancelled = false;
+    void api()
+      .listRoomMembers(room.id)
+      .then((m) => {
+        if (!cancelled) setMemberCount(m.length);
+      })
+      .catch(() => {});
+    void api()
+      .listMyInvites()
+      .then((r) => {
+        if (!cancelled)
+          setInviteCount(
+            r.invites.filter((i) => i.targetRoomId === room.id && i.revokedAt === null).length,
+          );
+      })
+      .catch(() => {});
+    return () => {
+      cancelled = true;
+    };
+  }, [api, room.id, isOwner]);
 
   const act = async (): Promise<void> => {
     setBusy(true);
@@ -533,6 +707,10 @@ function DangerTab({
     try {
       if (isOwner) await api().deleteRoom(room.id);
       else await api().leaveRoom(room.id);
+      pushToast({
+        kind: isOwner ? "info" : "undo",
+        text: isOwner ? `Deleted ${room.name}` : `Left ${room.name}`,
+      });
       onGone();
     } catch (e) {
       onError(e instanceof Error ? e.message : "failed");
@@ -556,32 +734,96 @@ function DangerTab({
     );
   }
 
-  // 4.9d2: type-name confirm, Cancel-side-free — danger action gated on match.
-  return (
-    <div style={{ display: "flex", flexDirection: "column", gap: "var(--s-4)", maxWidth: 380 }}>
-      <div
-        style={{
-          padding: "var(--s-3) var(--s-4)",
-          background: "color-mix(in srgb, var(--danger) 6%, transparent)",
-          border: "1px solid color-mix(in srgb, var(--danger) 35%, transparent)",
-          borderRadius: "var(--r-md)",
-          fontSize: "var(--t-sm)",
-          lineHeight: 1.5,
-        }}
-      >
-        Deleting <b style={{ fontWeight: 600 }}>{room.name}</b> disconnects everyone in it,
-        deletes its memberships, and kills every invite link. There is no undo.
+  const members = memberCount ?? 0;
+  const links = inviteCount ?? 0;
+
+  if (step === 1) {
+    // 4.9d step 1 — impact summary. Nothing destructive happens here.
+    return (
+      <div style={{ display: "flex", flexDirection: "column", gap: "var(--s-4)", maxWidth: 420 }}>
+        <DangerCallout head="This is irreversible." sub="Read everything below before continuing." />
+        <div style={{ fontSize: "var(--t-sm)", lineHeight: 1.55 }}>
+          Are you sure you want to delete <b style={{ fontWeight: 600 }}>{room.name}</b>?
+          <ul style={{ margin: "var(--s-2) 0 0", paddingLeft: "1.1rem", color: "var(--text-mid)" }}>
+            <li>
+              All {memberCount ?? "…"} member{members === 1 ? "" : "s"} will be ejected from the
+              room.
+            </li>
+            <li>
+              All {inviteCount ?? "…"} active invite link{links === 1 ? "" : "s"} will be revoked
+              permanently.
+            </li>
+            <li>The full room chat history will be deleted.</li>
+            <li>Anyone currently in voice will be disconnected mid-call.</li>
+            <li>Members will not be notified ahead of time.</li>
+          </ul>
+        </div>
+        <div
+          style={{
+            display: "flex",
+            gap: "var(--s-3)",
+            alignItems: "flex-start",
+            padding: "var(--s-3) var(--s-4)",
+            background: "var(--bg-elev-2)",
+            border: "1px solid var(--border-soft)",
+            borderRadius: "var(--r-md)",
+            fontSize: "var(--t-xs)",
+            lineHeight: 1.5,
+            color: "var(--text-mid)",
+          }}
+        >
+          <span aria-hidden style={{ color: "var(--rv-amber)", fontWeight: 700 }}>
+            ⚠
+          </span>
+          <span>
+            Please be careful. Once a room is deleted, R3DVoice cannot recover it — not even by
+            support, not even with the room ID. If this room has any value to anyone else, consider
+            transferring ownership instead from the Members tab.
+          </span>
+        </div>
+        <div style={{ display: "flex", gap: "var(--s-2)", justifyContent: "flex-end" }}>
+          <button className="rv-btn" data-variant="ghost" onClick={onCancel}>
+            Cancel
+          </button>
+          <button className="rv-btn" data-variant="danger" onClick={() => setStep(2)}>
+            I understand, continue
+          </button>
+        </div>
       </div>
-      <Field label={`Type the room name to confirm`} hint={room.name}>
+    );
+  }
+
+  // 4.9d2 step 2 — type-name confirm; the delete button gates on an exact match.
+  return (
+    <div style={{ display: "flex", flexDirection: "column", gap: "var(--s-4)", maxWidth: 420 }}>
+      <DangerCallout head="Last chance." sub="Type the room name to confirm deletion." />
+      <p style={{ margin: 0, fontSize: "var(--t-sm)", color: "var(--text-mid)", lineHeight: 1.55 }}>
+        You&apos;re about to permanently delete{" "}
+        <b style={{ fontWeight: 600, color: "var(--text)" }}>{room.name}</b> and disconnect{" "}
+        {memberCount ?? "…"} member{members === 1 ? "" : "s"}. This cannot be undone — please be
+        careful.
+      </p>
+      <Field label="Confirm room name" hint={`Type ${room.name} exactly to enable the delete button.`}>
         <input
           className="rv-input"
           value={confirmText}
           onChange={(e) => setConfirmText(e.target.value)}
           placeholder={room.name}
           spellCheck={false}
+          autoFocus
         />
       </Field>
-      <div>
+      <div style={{ display: "flex", gap: "var(--s-2)", justifyContent: "flex-end" }}>
+        <button
+          className="rv-btn"
+          data-variant="ghost"
+          onClick={() => {
+            setConfirmText("");
+            setStep(1);
+          }}
+        >
+          Cancel
+        </button>
         <button
           className="rv-btn"
           data-variant="danger"
@@ -590,7 +832,7 @@ function DangerTab({
             if (matches && !busy) void act();
           }}
         >
-          {busy ? "Deleting…" : "Delete room forever"}
+          {busy ? "Deleting…" : "Delete room"}
         </button>
       </div>
     </div>
