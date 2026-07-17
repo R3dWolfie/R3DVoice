@@ -25,6 +25,13 @@ export type DisconnectKind =
 
 export interface RoomStateSnapshot {
   connected: boolean;
+  /**
+   * True while the LiveKit SDK is trying to re-establish a dropped connection
+   * (RoomEvent.Reconnecting fired, Reconnected/Connected/Disconnected not yet).
+   * `connected` stays true through a blip, so this is the only signal the UI
+   * has that audio has silently cut and is being recovered.
+   */
+  reconnecting: boolean;
   local: LocalParticipant | null;
   remotes: RemoteParticipant[];
   error: string | null;
@@ -241,6 +248,7 @@ export class LiveKitRoom {
   readonly room: Room;
   private listeners = new Set<RoomStateListener>();
   private connected = false;
+  private reconnecting = false;
   private err: string | null = null;
   private disconnectKind: DisconnectKind | null = null;
   private keyProvider: ExternalE2EEKeyProvider | null;
@@ -301,6 +309,7 @@ export class LiveKitRoom {
 
     this.room.on(RoomEvent.Connected, () => {
       this.connected = true;
+      this.reconnecting = false;
       this.err = null;
       // Start broadcasting our RTT to peers every 3 s so the sidebar can
       // show each participant's own ping, not just ours. Tiny payload —
@@ -313,11 +322,23 @@ export class LiveKitRoom {
     });
     this.room.on(RoomEvent.Disconnected, (reason?: DisconnectReason) => {
       this.connected = false;
+      this.reconnecting = false;
       this.disconnectKind = mapDisconnectReason(reason);
       if (this.rttBroadcastTimer) {
         clearInterval(this.rttBroadcastTimer);
         this.rttBroadcastTimer = null;
       }
+      this.emit();
+    });
+    // Media/signal blip recovery. The SDK keeps `connected` true through this,
+    // so without surfacing `reconnecting` the UI would show a healthy call
+    // while audio is actually cut. Reconnecting → banner; Reconnected clears it.
+    this.room.on(RoomEvent.Reconnecting, () => {
+      this.reconnecting = true;
+      this.emit();
+    });
+    this.room.on(RoomEvent.Reconnected, () => {
+      this.reconnecting = false;
       this.emit();
     });
 
@@ -535,6 +556,7 @@ export class LiveKitRoom {
     }
     return {
       connected: this.connected,
+      reconnecting: this.reconnecting,
       local: this.room.localParticipant,
       remotes: this.cachedRemotes,
       error: this.err,
@@ -631,41 +653,49 @@ export class LiveKitRoom {
     if (options.publishScreen) {
       const q = options.screenQuality;
       if (q) {
-        await this.room.localParticipant.setScreenShareEnabled(
-          true,
-          {
-            resolution: { width: q.width, height: q.height, frameRate: q.frameRate },
-            audio: false,
-            // "detail" (not "motion") tells the encoder this is screen content:
-            // it favors spatial sharpness (readable text/UI) and, with
-            // maintain-resolution below, sheds framerate before it blurs the
-            // picture — the right tradeoff for sharing a screen. "motion" was
-            // making text mushy and wasting bitrate on frame-rate it couldn't
-            // sustain.
-            contentHint: q.frameRate >= 50 ? "motion" : "detail",
-          },
-          {
-            screenShareEncoding: {
-              maxBitrate: computeScreenShareBitrate(q.width, q.height, q.frameRate),
-              maxFramerate: q.frameRate,
-              priority: "high",
-            },
-            videoCodec: "vp9",
-            // High-fps shares (games) want smoothness; everything else keeps
-            // resolution and drops fps so text stays sharp under congestion.
-            degradationPreference: q.frameRate >= 50 ? "maintain-framerate" : "maintain-resolution",
-          },
-        );
-        this.applyScreenShareSenderOverrides({ sourceWidth: q.width, sourceHeight: q.height });
-        if (q.audioSource !== null) {
-          await this.enableScreenShareAudio(
-            q.audioSource === "all" ? undefined : q.audioSource,
-          );
-        }
+        await this.publishScreenShareWithQuality(q);
       } else {
         await this.room.localParticipant.setScreenShareEnabled(true);
         this.applyScreenShareSenderOverrides({});
       }
+    }
+  }
+
+  /**
+   * Publish the screenshare video track at an explicit resolution/fps, wiring
+   * the encoder + transport overrides and optional system-audio capture.
+   * Shared by the join-time path and the in-room quality dialog so both start
+   * a share identically (same bitrate curve, contentHint, degradation policy).
+   */
+  private async publishScreenShareWithQuality(q: ScreenShareQuality): Promise<void> {
+    await this.room.localParticipant.setScreenShareEnabled(
+      true,
+      {
+        resolution: { width: q.width, height: q.height, frameRate: q.frameRate },
+        audio: false,
+        // "detail" (not "motion") tells the encoder this is screen content:
+        // it favors spatial sharpness (readable text/UI) and, with
+        // maintain-resolution below, sheds framerate before it blurs the
+        // picture — the right tradeoff for sharing a screen. "motion" was
+        // making text mushy and wasting bitrate on frame-rate it couldn't
+        // sustain.
+        contentHint: q.frameRate >= 50 ? "motion" : "detail",
+      },
+      {
+        screenShareEncoding: {
+          maxBitrate: computeScreenShareBitrate(q.width, q.height, q.frameRate),
+          maxFramerate: q.frameRate,
+          priority: "high",
+        },
+        videoCodec: "vp9",
+        // High-fps shares (games) want smoothness; everything else keeps
+        // resolution and drops fps so text stays sharp under congestion.
+        degradationPreference: q.frameRate >= 50 ? "maintain-framerate" : "maintain-resolution",
+      },
+    );
+    this.applyScreenShareSenderOverrides({ sourceWidth: q.width, sourceHeight: q.height });
+    if (q.audioSource !== null) {
+      await this.enableScreenShareAudio(q.audioSource === "all" ? undefined : q.audioSource);
     }
   }
 
@@ -985,14 +1015,21 @@ export class LiveKitRoom {
     return { rttMs, jitterMs, packetsLost, bitrateKbps };
   }
 
-  async setScreenShare(enabled: boolean): Promise<void> {
-    await this.room.localParticipant.setScreenShareEnabled(enabled);
-    if (enabled) {
-      // Apply the same encoder/transport overrides the join-time path uses
-      // — without this, in-room toggle gets LiveKit defaults (no
-      // degradationPreference, no scale-down, no priority) and screenshare
-      // collapses to ~1 fps under any BWE pressure.
-      this.applyScreenShareSenderOverrides({});
+  async setScreenShare(enabled: boolean, quality?: ScreenShareQuality): Promise<void> {
+    if (enabled && quality) {
+      // In-room quality dialog path — publish at the chosen resolution/fps and
+      // (optionally) system audio, using the exact same encoder/transport
+      // overrides as the join-time path.
+      await this.publishScreenShareWithQuality(quality);
+    } else {
+      await this.room.localParticipant.setScreenShareEnabled(enabled);
+      if (enabled) {
+        // Apply the same encoder/transport overrides the join-time path uses
+        // — without this, in-room toggle gets LiveKit defaults (no
+        // degradationPreference, no scale-down, no priority) and screenshare
+        // collapses to ~1 fps under any BWE pressure.
+        this.applyScreenShareSenderOverrides({});
+      }
     }
     this.emit();
   }
@@ -1099,6 +1136,104 @@ export class LiveKitRoom {
     element.autoplay = true;
     (element as HTMLElement & { playsInline?: boolean }).playsInline = true;
     return element;
+  }
+}
+
+/* ────────────────────────────────────────────────────────────────────────
+ * Per-participant voice GAIN graph (in-room 0–200% volume).
+ *
+ * HTMLMediaElement.volume is clamped to [0,1] and *throws* IndexSizeError
+ * above 1, so LiveKit's setVolume can only attenuate, never boost. To let a
+ * user push a quiet friend to 200% we route that participant's mic <audio>
+ * element through Web Audio: MediaElementSource → GainNode → destination, and
+ * the GainNode multiplies (it happily takes values >1).
+ *
+ * We only ever capture an element when a boost (>1) is actually requested —
+ * default users (all volumes ≤1) keep the native element path untouched, so
+ * mono-output.ts (which also captures elements, only when its toggle is on)
+ * keeps working for everyone who never boosts. If both features want the same
+ * element, whichever captures first wins and the other degrades silently
+ * (a rare combination: mono output + an above-100% per-user boost).
+ *
+ * element.volume is still LiveKit-controlled for the 0..1 range and for
+ * deafen/mute-for-me (setVolume(0)), which multiplies through the gain node
+ * (0 × gain = silence), so those paths need no special-casing here.
+ * ──────────────────────────────────────────────────────────────────────── */
+let gainCtx: AudioContext | null = null;
+const gainNodes = new Map<string, GainNode>();
+const gainElements = new Map<string, HTMLAudioElement>();
+const gainDesired = new Map<string, number>();
+const gainCaptured = new WeakMap<HTMLAudioElement, GainNode>();
+
+function ensureGainCtx(): AudioContext {
+  if (!gainCtx) gainCtx = new AudioContext();
+  if (gainCtx.state === "suspended") void gainCtx.resume();
+  return gainCtx;
+}
+
+function captureForGain(key: string, el: HTMLAudioElement): GainNode | null {
+  const existing = gainCaptured.get(el);
+  if (existing) {
+    gainNodes.set(key, existing);
+    return existing;
+  }
+  try {
+    const ctx = ensureGainCtx();
+    const src = ctx.createMediaElementSource(el);
+    const node = ctx.createGain();
+    node.gain.value = gainDesired.get(key) ?? 1;
+    src.connect(node);
+    node.connect(ctx.destination);
+    gainCaptured.set(el, node);
+    gainNodes.set(key, node);
+    return node;
+  } catch {
+    // Element already owned by another AudioContext (e.g. mono output) — can't
+    // add gain. Leave it native; boost simply won't apply for this element.
+    return null;
+  }
+}
+
+/** Remember a participant's mic <audio> element; capture now if a boost is pending. */
+export function registerParticipantGainElement(key: string, el: HTMLAudioElement): void {
+  gainElements.set(key, el);
+  if ((gainDesired.get(key) ?? 1) > 1) captureForGain(key, el);
+}
+
+/**
+ * Set the post-attenuation gain multiplier for a participant (1 = unity).
+ * Values >1 lazily capture the element into Web Audio; ≤1 is a no-op unless
+ * the element was already captured, in which case we just reset the node.
+ */
+export function setParticipantGain(key: string, gain: number): void {
+  const g = Number.isFinite(gain) && gain > 0 ? gain : 1;
+  gainDesired.set(key, g);
+  let node = gainNodes.get(key);
+  if (!node && g > 1) {
+    const el = gainElements.get(key);
+    if (el) node = captureForGain(key, el) ?? undefined;
+  }
+  if (node) node.gain.value = g;
+}
+
+/** Drop a participant's gain bookkeeping when their track unsubscribes. */
+export function unregisterParticipantGain(key: string): void {
+  gainElements.delete(key);
+  gainNodes.delete(key);
+  gainDesired.delete(key);
+}
+
+/** Mirror the selected speaker onto the gain graph's context (captured
+ * elements play through the AudioContext, not the element's own sinkId). */
+export async function setParticipantGainSink(deviceId: string | null): Promise<void> {
+  if (!gainCtx) return;
+  const c = gainCtx as AudioContext & { setSinkId?: (id: string) => Promise<void> };
+  if (typeof c.setSinkId === "function") {
+    try {
+      await c.setSinkId(deviceId ?? "");
+    } catch {
+      /* unsupported sink — default output */
+    }
   }
 }
 

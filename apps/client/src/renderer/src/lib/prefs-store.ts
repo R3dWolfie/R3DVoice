@@ -115,6 +115,15 @@ export interface PrefsState {
   toggleFavoriteRoom(id: string): void;
   setParticipantVolume(id: string, volume: number): void;
   setParticipantScreenVolume(id: string, volume: number): void;
+
+  // ── feat(inroom): per-participant voice gain (0–200% in-call volume) ──────
+  /**
+   * Per-participant voice GAIN multiplier (>1 boost, up to ~2.0). Kept apart
+   * from participantVolumes because element.volume is clamped to ≤1; the 100–
+   * 200% band rides a Web Audio GainNode instead. 1.0 = no boost.
+   */
+  participantGains: Record<string, number>;
+  setParticipantGain(id: string, gain: number): void;
 }
 
 const DEFAULTS = {
@@ -174,6 +183,8 @@ const DEFAULTS = {
   favoriteRoomIds: [] as string[],
   participantVolumes: {} as Record<string, number>,
   participantScreenVolumes: {} as Record<string, number>,
+  // feat(inroom): per-participant voice gain (>1 boost) — see PrefsState.
+  participantGains: {} as Record<string, number>,
 };
 
 // LiveKit setVolume → HTMLMediaElement.volume which throws if outside [0, 1].
@@ -257,6 +268,8 @@ export function createPrefsStore(storage: PrefsStorage): StoreApi<PrefsState> {
       favoriteRoomIds: state.favoriteRoomIds,
       participantVolumes: state.participantVolumes,
       participantScreenVolumes: state.participantScreenVolumes,
+      // feat(inroom): per-participant voice gain (>1 boost).
+      participantGains: state.participantGains,
     };
     storage.write(JSON.stringify(payload));
   }
@@ -312,6 +325,11 @@ export function createPrefsStore(storage: PrefsStorage): StoreApi<PrefsState> {
     },
     setParticipantScreenVolume: (id, volume) => {
       set({ participantScreenVolumes: { ...get().participantScreenVolumes, [id]: volume } });
+      persistFromState(get());
+    },
+    // feat(inroom): per-participant voice gain (>1 boost).
+    setParticipantGain: (id, gain) => {
+      set({ participantGains: { ...get().participantGains, [id]: gain } });
       persistFromState(get());
     },
   }));
