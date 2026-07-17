@@ -122,6 +122,8 @@ export interface ChatMessageDTO {
   createdAt: string; // ISO 8601
   editedAt: string | null;
   deletedAt: string | null;
+  /** Set while pinned (2.5p). */
+  pinnedAt?: string | null;
   mentions?: string[];
 }
 
@@ -167,7 +169,9 @@ export type ChatWsEvent =
   | { type: "friend.accepted"; by: { id: string; handle: string | null; displayName: string } }
   | { type: "invite.redeemed"; code: string; by: { id: string; handle: string | null; displayName: string }; kind: InviteKind; targetRoomId: string | null }
   | { type: "presence.update"; userId: string; currentRoom: { id: string; name: string } | null }
-  | { type: "chat.typing"; threadType: ChatThreadType; threadId: string; userId: string };
+  | { type: "chat.typing"; threadType: ChatThreadType; threadId: string; userId: string }
+  | { type: "pinned"; message: ChatMessageDTO }
+  | { type: "unpinned"; id: string; threadType: ChatThreadType; threadId: string };
 
 /** Client → server WebSocket frames. */
 export type ChatWsCommand =

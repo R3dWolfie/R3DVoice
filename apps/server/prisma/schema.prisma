@@ -105,10 +105,14 @@ model Message {
   createdAt  DateTime @default(now())
   editedAt   DateTime?
   deletedAt  DateTime?
+  /** 2.5p pins — set by any thread participant, cleared on unpin. */
+  pinnedAt   DateTime?
+  pinnedById String?
 
   author User @relation(fields: [authorId], references: [id], onDelete: Cascade)
 
   @@index([threadType, threadId, createdAt])
+  @@index([threadType, threadId, pinnedAt])
   @@index([authorId])
 }
 

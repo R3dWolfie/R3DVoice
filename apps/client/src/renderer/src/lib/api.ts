@@ -165,6 +165,18 @@ export class ApiClient {
   deleteAccount(password: string): Promise<void> {
     return this.request("DELETE", "/me", { password });
   }
+  pinChatMessage(id: string): Promise<void> {
+    return this.request("POST", `/chat/messages/${encodeURIComponent(id)}/pin`);
+  }
+  unpinChatMessage(id: string): Promise<void> {
+    return this.request("DELETE", `/chat/messages/${encodeURIComponent(id)}/pin`);
+  }
+  listPins(threadType: "room" | "dm", threadId: string): Promise<{ messages: ChatMessageDTO[] }> {
+    return this.request(
+      "GET",
+      `/chat/pins?threadType=${encodeURIComponent(threadType)}&threadId=${encodeURIComponent(threadId)}`,
+    );
+  }
   editChatMessage(id: string, body: string): Promise<void> {
     return this.request("PATCH", `/chat/messages/${encodeURIComponent(id)}`, { body });
   }

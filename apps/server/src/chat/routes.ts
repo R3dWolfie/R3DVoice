@@ -35,6 +35,7 @@ interface MessageDTO {
   createdAt: string;
   editedAt: string | null;
   deletedAt: string | null;
+  pinnedAt?: string | null;
   mentions?: string[];
 }
 
@@ -47,6 +48,7 @@ function toDTO(m: {
   createdAt: Date;
   editedAt: Date | null;
   deletedAt: Date | null;
+  pinnedAt?: Date | null;
   mentions: string | null;
   author: { displayName: string };
 }): MessageDTO {
@@ -75,6 +77,7 @@ function toDTO(m: {
     createdAt: m.createdAt.toISOString(),
     editedAt: m.editedAt?.toISOString() ?? null,
     deletedAt: m.deletedAt?.toISOString() ?? null,
+    pinnedAt: m.pinnedAt?.toISOString() ?? null,
     ...(parsed !== undefined && { mentions: parsed }),
   };
 }
@@ -336,6 +339,73 @@ export async function chatRoutes(app: FastifyInstance): Promise<void> {
         };
       });
       return { threads };
+    },
+  );
+
+  // ---------------------------------------------------------------------
+  // Pins (2.5p): any thread participant can pin/unpin; pinned list is a
+  // plain filtered query. Live updates ride a "pinned"/"unpinned" event.
+  // ---------------------------------------------------------------------
+  app.post<{ Params: { id: string } }>(
+    "/chat/messages/:id/pin",
+    { preHandler: requireAuth },
+    async (request, reply) => {
+      const userId = request.auth!.userId;
+      const msg = await prisma.message.findUnique({ where: { id: request.params.id } });
+      if (!msg || msg.deletedAt) throw new NotFoundError("message not found");
+      await assertThreadAccess(msg.threadType as ThreadType, msg.threadId, userId);
+      const updated = await prisma.message.update({
+        where: { id: msg.id },
+        data: { pinnedAt: new Date(), pinnedById: userId },
+        include: { author: { select: { displayName: true } } },
+      });
+      broadcastToThread(msg.threadType as ThreadType, msg.threadId, {
+        type: "pinned",
+        message: toDTO(updated),
+      });
+      reply.status(204).send();
+    },
+  );
+
+  app.delete<{ Params: { id: string } }>(
+    "/chat/messages/:id/pin",
+    { preHandler: requireAuth },
+    async (request, reply) => {
+      const userId = request.auth!.userId;
+      const msg = await prisma.message.findUnique({ where: { id: request.params.id } });
+      if (!msg) throw new NotFoundError("message not found");
+      await assertThreadAccess(msg.threadType as ThreadType, msg.threadId, userId);
+      await prisma.message.update({
+        where: { id: msg.id },
+        data: { pinnedAt: null, pinnedById: null },
+      });
+      broadcastToThread(msg.threadType as ThreadType, msg.threadId, {
+        type: "unpinned",
+        id: msg.id,
+        threadType: msg.threadType,
+        threadId: msg.threadId,
+      });
+      reply.status(204).send();
+    },
+  );
+
+  app.get(
+    "/chat/pins",
+    { preHandler: requireAuth },
+    async (request) => {
+      const q = request.query as { threadType?: string; threadId?: string };
+      if (!q.threadType || !q.threadId || !isThreadType(q.threadType)) {
+        throw new ValidationError("threadType and threadId required");
+      }
+      const userId = request.auth!.userId;
+      await assertThreadAccess(q.threadType, q.threadId, userId);
+      const rows = await prisma.message.findMany({
+        where: { threadType: q.threadType, threadId: q.threadId, pinnedAt: { not: null }, deletedAt: null },
+        include: { author: { select: { displayName: true } } },
+        orderBy: { pinnedAt: "desc" },
+        take: 50,
+      });
+      return { messages: rows.map(toDTO) };
     },
   );
 }

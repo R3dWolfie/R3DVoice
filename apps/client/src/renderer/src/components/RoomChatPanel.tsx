@@ -47,7 +47,9 @@ export function RoomChatPanel({
   const [mentionAnchor, setMentionAnchor] = useState<number>(0);
   const [error, setError] = useState<string | null>(null);
   // 2.5k message context menu + edit-in-composer state.
-  const [msgMenu, setMsgMenu] = useState<{ id: string; x: number; y: number; body: string; mine: boolean } | null>(null);
+  const [msgMenu, setMsgMenu] = useState<{ id: string; x: number; y: number; body: string; mine: boolean; pinned: boolean } | null>(null);
+  const [pinsOpen, setPinsOpen] = useState(false);
+  const [pins, setPins] = useState<ChatMessageDTO[] | null>(null);
   const [editingId, setEditingId] = useState<string | null>(null);
   // 2.5l typing indicator: peers' typing pings extend the deadline; a ticker
   // clears it. Own sends are throttled via lastTypingSentRef.
@@ -132,6 +134,16 @@ export function RoomChatPanel({
       } else if (event.type === "chat.typing") {
         if (event.threadType === threadType && event.threadId === threadId) {
           setTypingUntil(Date.now() + 4000);
+        }
+      } else if (event.type === "pinned") {
+        if (event.message.threadType === threadType && event.message.threadId === threadId) {
+          setMessages((prev) => prev.map((m) => (m.id === event.message.id ? event.message : m)));
+          setPins(null); // refetch on next open
+        }
+      } else if (event.type === "unpinned") {
+        if (event.threadType === threadType && event.threadId === threadId) {
+          setMessages((prev) => prev.map((m) => (m.id === event.id ? { ...m, pinnedAt: null } : m)));
+          setPins((prev) => prev?.filter((x) => x.id !== event.id) ?? null);
         }
       }
     });
@@ -272,9 +284,102 @@ export function RoomChatPanel({
               display: "grid",
               gridTemplateRows: "1fr auto",
               minHeight: 0,
+              position: "relative",
             }
       }
     >
+      {/* 2.5p pinned messages: floating toggle + overlay panel */}
+      <button
+        type="button"
+        title="Pinned messages"
+        onClick={() => {
+          setPinsOpen((v) => !v);
+          if (pins === null) {
+            void apiRef.current
+              ?.listPins(threadType, threadId)
+              .then((r) => setPins(r.messages))
+              .catch(() => setPins([]));
+          }
+        }}
+        style={{
+          position: "absolute",
+          top: variant === "overlay" ? "3.2rem" : "var(--s-2)",
+          right: "var(--s-2)",
+          zIndex: 45,
+          width: "1.75rem",
+          height: "1.75rem",
+          borderRadius: "var(--r-sm)",
+          border: "1px solid var(--border)",
+          background: pinsOpen ? "var(--accent-tint)" : "var(--bg-elev)",
+          cursor: "pointer",
+          fontSize: 13,
+          display: "grid",
+          placeItems: "center",
+        }}
+      >
+        📌
+      </button>
+      {pinsOpen && (
+        <div
+          className="rv-menu rv-fade-in rv-scroll"
+          style={{
+            position: "absolute",
+            top: variant === "overlay" ? "5.2rem" : "2.4rem",
+            right: "var(--s-2)",
+            width: 280,
+            maxHeight: 300,
+            overflowY: "auto",
+            zIndex: 46,
+            padding: "var(--s-3)",
+          }}
+        >
+          <div className="rv-label" style={{ fontSize: "var(--t-2xs)", marginBottom: "var(--s-2)" }}>
+            Pinned messages
+          </div>
+          {pins === null ? (
+            <div className="rv-skeleton" style={{ height: "2rem" }} />
+          ) : pins.length === 0 ? (
+            <div style={{ fontSize: "var(--t-xs)", color: "var(--text-dim)", padding: "var(--s-2) 0" }}>
+              Nothing pinned yet — right-click a message.
+            </div>
+          ) : (
+            pins.map((p) => (
+              <div key={p.id} style={{ padding: "var(--s-2) 0", borderBottom: "1px solid var(--border-soft)" }}>
+                <div style={{ display: "flex", alignItems: "baseline", gap: "var(--s-2)", fontSize: "var(--t-2xs)" }}>
+                  <span style={{ fontWeight: 600, color: "var(--text-mid)", flex: 1 }}>{p.authorName}</span>
+                  <button
+                    type="button"
+                    onClick={() => {
+                      void apiRef.current?.unpinChatMessage(p.id).then(() => {
+                        setPins((prev) => prev?.filter((x) => x.id !== p.id) ?? null);
+                        setMessages((prev) => prev.map((m) => (m.id === p.id ? { ...m, pinnedAt: null } : m)));
+                      });
+                    }}
+                    style={{
+                      appearance: "none",
+                      background: "transparent",
+                      border: 0,
+                      padding: 0,
+                      fontSize: "var(--t-2xs)",
+                      color: "var(--text-dim)",
+                      cursor: "pointer",
+                      textDecoration: "underline",
+                      textUnderlineOffset: 2,
+                    }}
+                  >
+                    unpin
+                  </button>
+                </div>
+                <div style={{ fontSize: "var(--t-xs)", color: "var(--text)", wordBreak: "break-word", marginTop: 2 }}>
+                  {threadType === "dm" && (p.body ?? "").startsWith("{")
+                    ? "🔒 Encrypted message"
+                    : (p.body ?? "(deleted)")}
+                </div>
+              </div>
+            ))
+          )}
+        </div>
+      )}
       {variant === "overlay" && (
         <header
           style={{
@@ -344,6 +449,7 @@ export function RoomChatPanel({
                   y,
                   body: m.body ?? "",
                   mine: m.authorId === localIdentity && m.deletedAt === null,
+                  pinned: (m.pinnedAt ?? null) !== null,
                 })
               }
             />
@@ -505,6 +611,27 @@ export function RoomChatPanel({
             onClick={() => {
               void navigator.clipboard.writeText(msgMenu.body).catch(() => {});
               setMsgMenu(null);
+            }}
+          />
+          <MenuItem
+            icon="📌"
+            label={msgMenu.pinned ? "Unpin" : "Pin message"}
+            onClick={() => {
+              const { id, pinned } = msgMenu;
+              setMsgMenu(null);
+              const call = pinned
+                ? apiRef.current?.unpinChatMessage(id)
+                : apiRef.current?.pinChatMessage(id);
+              void call
+                ?.then(() => {
+                  setMessages((prev) =>
+                    prev.map((m) =>
+                      m.id === id ? { ...m, pinnedAt: pinned ? null : new Date().toISOString() } : m,
+                    ),
+                  );
+                  setPins(null); // refetch on next open
+                })
+                .catch((e: unknown) => setError(e instanceof Error ? e.message : "failed"));
             }}
           />
           {msgMenu.mine && (
