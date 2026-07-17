@@ -679,6 +679,28 @@ input, select, textarea { font: inherit; color: inherit; }
 .rv-banner[data-tone="warn"]  { background: color-mix(in srgb, var(--rv-amber) 12%, var(--bg-elev)); color: var(--text); }
 .rv-banner[data-tone="error"] { background: color-mix(in srgb, var(--danger) 10%, var(--bg-elev)); color: var(--text); }
 
+/* Segmented control (4.8 privacy picker) */
+.rv-seg {
+  display: inline-flex;
+  border: 1px solid var(--border);
+  border-radius: var(--r-md);
+  background: var(--bg-elev-2);
+  padding: 2px; gap: 2px;
+}
+.rv-seg-btn {
+  appearance: none; border: 0; cursor: pointer;
+  padding: var(--s-1) var(--s-3);
+  border-radius: var(--r-sm);
+  background: transparent; color: var(--text-mid);
+  font-size: var(--t-sm); font-weight: 500;
+}
+.rv-seg-btn[data-active="true"] {
+  background: var(--bg-elev);
+  color: var(--text);
+  box-shadow: var(--shadow-1);
+  font-weight: 600;
+}
+
 /* Error banner (1.1a) — danger-tinted, icon + message */
 .rv-err-banner {
   display: flex; align-items: flex-start; gap: var(--s-2);

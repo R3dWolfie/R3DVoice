@@ -1,10 +1,13 @@
-import { useEffect, useMemo, useState, useSyncExternalStore, type CSSProperties, type FormEvent, type ReactElement } from "react";
+import { useEffect, useMemo, useRef, useState, useSyncExternalStore, type FormEvent, type ReactElement } from "react";
+import type { RoomDTO } from "@redvoice/shared";
 import { ApiClient } from "../lib/api.js";
 import { createRoomsStore, extractInviteCode, type RoomsState } from "../lib/rooms-store.js";
 import { useAuthStore } from "../lib/auth-context.js";
+import { usePrefs, prefsActions } from "../lib/prefs-singleton.js";
 import { I } from "../components/Icons.js";
-import { Spinner } from "../components/Primitives.js";
-import { MOD_KEY } from "../lib/platform.js";
+import { ContextMenu, MenuItem, MenuDivider, MenuSection } from "../components/ContextMenu.js";
+import { CreateRoomModal } from "../components/CreateRoomModal.js";
+import { InviteCreateModal } from "../components/InviteCreateModal.js";
 import { InRoomScreen } from "./InRoomScreen.js";
 import { PreJoinScreen, type PreJoinSelection } from "./PreJoinScreen.js";
 import { InvitePreviewScreen } from "./InvitePreviewScreen.js";
@@ -19,26 +22,45 @@ type Phase =
   | { kind: "prejoin"; roomId: string }
   | { kind: "inroom"; roomId: string; selection: PreJoinSelection };
 
-// Local copy of the designer's kbd inline style. We'll lift this to a shared
-// place once InRoomScreen also needs it.
-const kbdStyle: CSSProperties = {
-  display: "inline-block",
-  padding: "1px 6px",
-  border: "1px solid var(--border-strong)",
-  borderRadius: 4,
-  background: "var(--bg-elev-2)",
-  fontFamily: "var(--font-mono)",
-  fontSize: 10,
-  color: "var(--text)",
-};
-
 function initialsFromName(name: string): string {
   return name.split(" ").map((s) => s[0] ?? "").slice(0, 2).join("").toUpperCase() || "?";
 }
 
-// Stable 1..5 tone bucket from a room id so list avatars get consistent colors.
-function avatarTone(id: string): 1 | 2 | 3 | 4 | 5 {
-  return ((id.charCodeAt(0) % 5) + 1) as 1 | 2 | 3 | 4 | 5;
+function relativeAge(iso: string | null): string {
+  if (!iso) return "new";
+  const ms = Date.now() - new Date(iso).getTime();
+  const m = Math.floor(ms / 60_000);
+  if (m < 1) return "just now";
+  if (m < 60) return `${m}m ago`;
+  const h = Math.floor(m / 60);
+  if (h < 24) return `${h}h ago`;
+  const d = Math.floor(h / 24);
+  return `${d}d ago`;
+}
+
+// Square mono-initials plate per the deck's sidebar .avatar.
+function RoomAvatar({ name, size = 28 }: { name: string; size?: number }): ReactElement {
+  return (
+    <span
+      aria-hidden
+      style={{
+        width: size,
+        height: size,
+        flexShrink: 0,
+        borderRadius: "var(--r-md)",
+        background: "var(--bg-elev-2)",
+        border: "1px solid var(--border)",
+        display: "grid",
+        placeItems: "center",
+        fontFamily: "var(--font-mono)",
+        fontSize: Math.round(size * 0.36),
+        fontWeight: 700,
+        color: "var(--text-mid)",
+      }}
+    >
+      {initialsFromName(name)}
+    </span>
+  );
 }
 
 interface LobbyScreenProps {
@@ -66,9 +88,15 @@ export function LobbyScreen({ pendingInviteCode, pendingJoinRoomId, onInviteCode
   const activeRoomId = useRoomsStore(store, (s) => s.activeRoomId);
 
   const [phase, setPhase] = useState<Phase>({ kind: "lobby" });
-  const [tipDismissed, setTipDismissed] = useState<boolean>(() => {
-    try { return localStorage.getItem("rv:lobby-tip-dismissed") === "1"; } catch { return false; }
-  });
+  const [filter, setFilter] = useState("");
+  const [addMenuOpen, setAddMenuOpen] = useState(false);
+  const [joinOpen, setJoinOpen] = useState(false);
+  const [createOpen, setCreateOpen] = useState(false);
+  const [createBusy, setCreateBusy] = useState(false);
+  const [ctxMenu, setCtxMenu] = useState<{ x: number; y: number; room: RoomDTO } | null>(null);
+  const [inviteFor, setInviteFor] = useState<string | null>(null);
+  const addMenuRef = useRef<HTMLDivElement>(null);
+  const favoriteRoomIds = usePrefs((s) => s.favoriteRoomIds);
   useEffect(() => {
     void store.getState().refresh();
   }, [store]);
@@ -104,7 +132,6 @@ export function LobbyScreen({ pendingInviteCode, pendingJoinRoomId, onInviteCode
     });
   }, [store]);
 
-  const [newRoomName, setNewRoomName] = useState("");
   const [joinInput, setJoinInput] = useState("");
 
   // Periodic health probe — drives the "connected" badge in the top bar.
@@ -133,12 +160,15 @@ export function LobbyScreen({ pendingInviteCode, pendingJoinRoomId, onInviteCode
     };
   }, [serverUrl]);
 
-  async function onCreate(e: FormEvent): Promise<void> {
-    e.preventDefault();
-    if (!newRoomName.trim()) return;
-    await store.getState().create(newRoomName.trim());
-    setNewRoomName("");
-  }
+  // Close the + menu on outside click.
+  useEffect(() => {
+    if (!addMenuOpen) return;
+    function onDown(e: MouseEvent): void {
+      if (addMenuRef.current && !addMenuRef.current.contains(e.target as Node)) setAddMenuOpen(false);
+    }
+    window.addEventListener("mousedown", onDown);
+    return () => window.removeEventListener("mousedown", onDown);
+  }, [addMenuOpen]);
 
   async function onJoin(e: FormEvent): Promise<void> {
     e.preventDefault();
@@ -203,308 +233,460 @@ export function LobbyScreen({ pendingInviteCode, pendingJoinRoomId, onInviteCode
     );
   }
 
-  const quickChips = ["Quick chat", "Stream night", "1:1", "Listening party"];
+  // Sidebar sections per 2.1: Starred (prefs) then My rooms; recent rooms
+  // surface in the activity feed instead of a third sidebar section.
+  const allRooms = new Map<string, RoomDTO>();
+  for (const r of [...owned, ...recent]) allRooms.set(r.id, r);
+  const matches = (r: RoomDTO): boolean => r.name.toLowerCase().includes(filter.trim().toLowerCase());
+  const starred = [...allRooms.values()].filter((r) => favoriteRoomIds.includes(r.id)).filter(matches);
+  const myRooms = owned.filter((r) => !favoriteRoomIds.includes(r.id)).filter(matches);
+
+  type FeedEntry = { key: string; at: number; icon: string; title: ReactElement; meta: string; room: RoomDTO; action: "open" | "copy" };
+  const feed: FeedEntry[] = [
+    ...owned.map((r): FeedEntry => ({
+      key: `created-${r.id}`,
+      at: new Date(r.createdAt).getTime(),
+      icon: "＋",
+      title: (
+        <span>
+          You created <b style={{ fontWeight: 600 }}>{r.name}</b>
+        </span>
+      ),
+      meta: r.isPublic ? "public room" : "unlisted · link-only",
+      room: r,
+      action: "copy",
+    })),
+    ...recent.map((r): FeedEntry => ({
+      key: `recent-${r.id}`,
+      at: r.lastJoined ? new Date(r.lastJoined).getTime() : 0,
+      icon: "⏱",
+      title: (
+        <span>
+          <b style={{ fontWeight: 600 }}>{r.name}</b> · last met {relativeAge(r.lastJoined)}
+        </span>
+      ),
+      meta: r.isPublic ? "public room" : "unlisted",
+      room: r,
+      action: "open",
+    })),
+  ]
+    .sort((a, b) => b.at - a.at)
+    .slice(0, 25);
+
+  const copyRoomLink = (roomId: string): void => {
+    void navigator.clipboard.writeText(`${serverUrl.replace(/\/$/, "")}/join/${roomId}`).catch(() => {});
+  };
+
+  const roomRow = (r: RoomDTO, starredRow: boolean): ReactElement => (
+    <div
+      key={r.id}
+      className="rv-list-item"
+      onClick={() => void store.getState().join(r.id)}
+      onContextMenu={(e) => {
+        e.preventDefault();
+        setCtxMenu({ x: e.clientX, y: e.clientY, room: r });
+      }}
+    >
+      <RoomAvatar name={r.name} />
+      <div style={{ display: "flex", flexDirection: "column", gap: 1, minWidth: 0, flex: 1 }}>
+        <span style={{ fontSize: "var(--t-sm)", whiteSpace: "nowrap", overflow: "hidden", textOverflow: "ellipsis" }}>
+          {r.name}
+        </span>
+        <span className="rv-mono" style={{ fontSize: "var(--t-2xs)", color: "var(--text-faint)" }}>
+          {r.isOwner ? "yours" : "member"} · {relativeAge(r.lastJoined ?? r.createdAt)}
+        </span>
+      </div>
+      {starredRow && <I.StarFilled size={12} style={{ color: "var(--rv-amber)", flexShrink: 0 }} />}
+    </div>
+  );
 
   return (
-    <div style={{ display: "grid", gridTemplateRows: "auto 1fr", height: "100%" }}>
-      <header
+    <div style={{ display: "grid", gridTemplateColumns: "280px 1fr", height: "100%", minHeight: 0 }}>
+      {/* Rooms sidebar (2.1) */}
+      <aside
         style={{
+          borderRight: "1px solid var(--border-soft)",
           display: "flex",
-          alignItems: "center",
-          justifyContent: "flex-end",
-          padding: "var(--s-3) var(--s-6)",
-          borderBottom: "1px solid var(--border-soft)",
+          flexDirection: "column",
+          minHeight: 0,
+          background: "var(--bg)",
         }}
       >
-        <span
-          className="rv-badge"
-          data-tone={online === "ok" ? "live" : online === "down" ? "red" : "amber"}
+        <div
+          style={{
+            height: "3.5rem",
+            padding: "0 var(--s-4)",
+            borderBottom: "1px solid var(--border-soft)",
+            display: "flex",
+            alignItems: "center",
+            gap: "var(--s-2)",
+            flexShrink: 0,
+          }}
         >
-          <span className="pip" />{" "}
-          {online === "checking" ? "connecting…" : online === "ok" ? "connected" : "offline"}
-        </span>
-      </header>
-
-      <div
-        className="rv-scroll"
-        style={{
-          display: "grid",
-          gridTemplateColumns: "minmax(260px, 320px) 1fr",
-          gap: "var(--s-7)",
-          padding: "var(--s-7)",
-          overflow: "auto",
-        }}
-      >
-        <aside style={{ display: "flex", flexDirection: "column", gap: "var(--s-6)" }}>
-          <div>
-            <div className="rv-section-head">
-              <span className="rv-label">My rooms</span>
-              <span
-                className="rv-mono"
-                style={{ fontSize: "var(--t-2xs)", color: "var(--text-faint)" }}
-              >
-                {owned.length}
-              </span>
-            </div>
-            {owned.length === 0 ? (
-              <div
-                style={{
-                  color: "var(--text-dim)",
-                  fontSize: "var(--t-sm)",
-                  padding: "var(--s-3)",
-                }}
-              >
-                None yet.
-              </div>
-            ) : (
-              <div className="rv-list">
-                {owned.map((r) => (
-                  <div
-                    key={r.id}
-                    className="rv-list-item"
-                    onClick={() => void store.getState().join(r.id)}
-                  >
-                    <span
-                      className="rv-avatar"
-                      data-tone={avatarTone(r.id)}
-                      style={{ width: 28, height: 28, fontSize: 11 }}
-                    >
-                      {initialsFromName(r.name)}
-                    </span>
-                    <div style={{ display: "flex", flexDirection: "column", gap: 1, minWidth: 0 }}>
-                      <span style={{ display: "flex", alignItems: "center", gap: 6 }}>
-                        <span style={{ fontWeight: 500, fontSize: "var(--t-sm)" }}>{r.name}</span>
-                      </span>
-                      <span
-                        className="rv-mono"
-                        style={{ fontSize: "var(--t-2xs)", color: "var(--text-faint)" }}
-                      >
-                        {r.id.slice(0, 8)}…
-                      </span>
-                    </div>
-                  </div>
-                ))}
-              </div>
-            )}
-          </div>
-
-          <div>
-            <div className="rv-section-head">
-              <span className="rv-label">Recent</span>
-            </div>
-            {recent.length === 0 ? (
-              <div
-                style={{
-                  color: "var(--text-dim)",
-                  fontSize: "var(--t-sm)",
-                  padding: "var(--s-3)",
-                }}
-              >
-                No recent rooms.
-              </div>
-            ) : (
-              <div className="rv-list">
-                {recent.map((r) => (
-                  <div
-                    key={r.id}
-                    className="rv-list-item"
-                    onClick={() => void store.getState().join(r.id)}
-                  >
-                    <I.Clock size={14} style={{ color: "var(--text-faint)" }} />
-                    <div style={{ display: "flex", flexDirection: "column", gap: 1 }}>
-                      <span style={{ fontSize: "var(--t-sm)" }}>{r.name}</span>
-                      <span
-                        className="rv-mono"
-                        style={{ fontSize: "var(--t-2xs)", color: "var(--text-faint)" }}
-                      >
-                        {r.id.slice(0, 8)}…
-                      </span>
-                    </div>
-                    <I.Chevron size={14} style={{ color: "var(--text-faint)" }} />
-                  </div>
-                ))}
-              </div>
-            )}
-          </div>
-
-          {!tipDismissed && (
-            <div
+          <span style={{ fontSize: "var(--t-sm)", fontWeight: 600, flex: 1 }}>Rooms</span>
+          <div ref={addMenuRef} style={{ position: "relative" }}>
+            <button
+              type="button"
+              aria-label="Join · Create · Browse"
+              title="Join · Create · Browse"
+              onClick={() => setAddMenuOpen((v) => !v)}
               style={{
-                marginTop: "auto",
-                padding: "var(--s-3) var(--s-4)",
-                border: "1px dashed var(--border)",
+                width: "1.75rem",
+                height: "1.75rem",
+                border: 0,
                 borderRadius: "var(--r-md)",
-                color: "var(--text-dim)",
-                fontSize: "var(--t-xs)",
-                lineHeight: 1.55,
-                display: "flex",
-                alignItems: "center",
-                gap: "var(--s-2)",
-              }}
-            >
-              <span style={{ flex: 1 }}>
-                Push-to-talk binds in <kbd style={kbdStyle}>{MOD_KEY}</kbd> <kbd style={kbdStyle}>,</kbd> →&nbsp;Keybinds.
-              </span>
-              <button
-                type="button"
-                aria-label="Dismiss tip"
-                onClick={() => {
-                  try { localStorage.setItem("rv:lobby-tip-dismissed", "1"); } catch { /* */ }
-                  setTipDismissed(true);
-                }}
-                style={{
-                  appearance: "none",
-                  background: "transparent",
-                  border: 0,
-                  color: "var(--text-faint)",
-                  cursor: "pointer",
-                  padding: 4,
-                  fontSize: "var(--t-sm)",
-                  lineHeight: 1,
-                }}
-              >
-                ×
-              </button>
-            </div>
-          )}
-        </aside>
-
-        <main style={{ display: "flex", flexDirection: "column", gap: "var(--s-6)", maxWidth: "44rem" }}>
-          <section className="rv-card" data-glow="true" style={{ padding: "var(--s-7)" }}>
-            <div>
-              <div
-                className="rv-headline"
-                style={{ fontSize: "var(--t-2xl)", marginBottom: "var(--s-2)" }}
-              >
-                Spin up a room.
-              </div>
-              <p style={{ color: "var(--text-mid)", margin: 0, marginBottom: "var(--s-5)" }}>
-                Persistent. Shareable link. Anyone with the URL can join — kick or password-lock from inside.
-              </p>
-
-              <form
-                onSubmit={onCreate}
-                style={{ display: "grid", gridTemplateColumns: "1fr auto", gap: "var(--s-3)" }}
-              >
-                <input
-                  className="rv-input"
-                  placeholder="Room name — e.g. Studio Floor"
-                  value={newRoomName}
-                  onChange={(e) => setNewRoomName(e.target.value)}
-                  style={{ height: "2.75rem" }}
-                />
-                <button
-                  className="rv-btn"
-                  data-variant="primary"
-                  type="submit"
-                  disabled={!newRoomName.trim()}
-                  style={{ height: "2.75rem", padding: "0 var(--s-5)" }}
-                >
-                  <I.Plus size={16} /> Create
-                </button>
-              </form>
-
-              <div
-                style={{
-                  display: "flex",
-                  flexWrap: "wrap",
-                  gap: "var(--s-2)",
-                  marginTop: "var(--s-4)",
-                }}
-              >
-                {quickChips.map((s) => (
-                  <button
-                    key={s}
-                    type="button"
-                    className="rv-btn"
-                    data-variant="ghost"
-                    style={{
-                      height: "1.9rem",
-                      fontSize: "var(--t-xs)",
-                      border: "1px solid var(--border-soft)",
-                      color: "var(--text-mid)",
-                    }}
-                    onClick={() => setNewRoomName(s)}
-                  >
-                    {s}
-                  </button>
-                ))}
-              </div>
-            </div>
-          </section>
-
-          <section className="rv-card" style={{ padding: "var(--s-6)" }}>
-            <div className="rv-section-head" style={{ marginBottom: "var(--s-4)" }}>
-              <I.Link size={14} style={{ color: "var(--text-mid)" }} />
-              <span className="rv-label">Join by link or id</span>
-            </div>
-            <form
-              onSubmit={onJoin}
-              style={{ display: "grid", gridTemplateColumns: "1fr auto", gap: "var(--s-3)" }}
-            >
-              <input
-                className="rv-input"
-                placeholder="paste an invite link, room link, or room id"
-                value={joinInput}
-                onChange={(e) => setJoinInput(e.target.value)}
-              />
-              <button
-                className="rv-btn"
-                type="submit"
-                disabled={!joinInput.trim()}
-                data-variant={joinInput ? "primary" : undefined}
-              >
-                Open room <I.Chevron size={14} />
-              </button>
-            </form>
-            <p
-              style={{
-                marginTop: "var(--s-3)",
-                color: "var(--text-faint)",
-                fontSize: "var(--t-xs)",
-              }}
-            >
-              <span className="rv-mono">redvoice://</span> deep-links also supported.
-            </p>
-          </section>
-
-          {status === "loading" && (
-            <div
-              style={{
+                background: "var(--accent)",
+                color: "var(--on-accent)",
+                fontSize: "var(--t-md)",
+                fontWeight: 600,
+                lineHeight: 1,
                 display: "inline-flex",
                 alignItems: "center",
-                gap: "var(--s-2)",
-                alignSelf: "flex-start",
-                padding: "var(--s-2) var(--s-3)",
-                border: "1px solid var(--border-soft)",
-                borderRadius: "var(--r-pill)",
-                background: "color-mix(in oklch, var(--bg-elev) 60%, transparent)",
-                color: "var(--text-dim)",
-                fontFamily: "var(--font-mono)",
-                fontSize: "var(--t-xs)",
+                justifyContent: "center",
+                cursor: "pointer",
               }}
             >
-              <Spinner /> loading…
+              +
+            </button>
+            {addMenuOpen && (
+              <div
+                className="rv-menu rv-fade-in"
+                style={{ position: "absolute", top: "calc(100% + 6px)", right: 0, width: 250, zIndex: 40 }}
+              >
+                <button
+                  type="button"
+                  className="rv-menu-item"
+                  onClick={() => {
+                    setAddMenuOpen(false);
+                    setCreateOpen(true);
+                  }}
+                >
+                  <span style={{ width: 16, textAlign: "center", color: "var(--text-dim)" }}>+</span>
+                  <span style={{ display: "flex", flexDirection: "column", alignItems: "flex-start" }}>
+                    <span style={{ fontWeight: 600 }}>Create new room</span>
+                    <span style={{ fontSize: "var(--t-2xs)", color: "var(--text-dim)" }}>Set name and privacy.</span>
+                  </span>
+                </button>
+                <button
+                  type="button"
+                  className="rv-menu-item"
+                  onClick={() => {
+                    setAddMenuOpen(false);
+                    setJoinOpen(true);
+                  }}
+                >
+                  <span style={{ width: 16, textAlign: "center", color: "var(--text-dim)" }}>↗</span>
+                  <span style={{ display: "flex", flexDirection: "column", alignItems: "flex-start" }}>
+                    <span style={{ fontWeight: 600 }}>Join by link or ID</span>
+                    <span style={{ fontSize: "var(--t-2xs)", color: "var(--text-dim)" }}>Paste an invite link.</span>
+                  </span>
+                </button>
+                <button
+                  type="button"
+                  className="rv-menu-item"
+                  data-disabled="true"
+                  title="Needs the public room directory — coming with room settings."
+                  style={{ opacity: 0.45, cursor: "default" }}
+                >
+                  <span style={{ width: 16, textAlign: "center", color: "var(--text-dim)" }}>🧭</span>
+                  <span style={{ display: "flex", flexDirection: "column", alignItems: "flex-start" }}>
+                    <span style={{ fontWeight: 600 }}>Browse public rooms</span>
+                    <span style={{ fontSize: "var(--t-2xs)", color: "var(--text-dim)" }}>Find rooms with people in them.</span>
+                  </span>
+                </button>
+              </div>
+            )}
+          </div>
+        </div>
+
+        {joinOpen && (
+          <form
+            onSubmit={(e) => {
+              void onJoin(e);
+              setJoinOpen(false);
+              setJoinInput("");
+            }}
+            style={{ display: "flex", gap: "var(--s-2)", padding: "var(--s-3) var(--s-3) 0" }}
+          >
+            <input
+              autoFocus
+              className="rv-input"
+              placeholder="Invite link, room link, or ID"
+              value={joinInput}
+              onChange={(e) => setJoinInput(e.target.value)}
+              onKeyDown={(e) => {
+                if (e.key === "Escape") setJoinOpen(false);
+              }}
+              style={{ height: "2rem", fontSize: "var(--t-xs)" }}
+            />
+            <button
+              className="rv-btn"
+              data-variant="primary"
+              type="submit"
+              disabled={!joinInput.trim()}
+              style={{ height: "2rem", padding: "0 var(--s-3)", fontSize: "var(--t-xs)" }}
+            >
+              Go
+            </button>
+          </form>
+        )}
+
+        <div
+          style={{
+            margin: "var(--s-3) var(--s-3) var(--s-1)",
+            display: "flex",
+            alignItems: "center",
+            gap: "var(--s-2)",
+          }}
+        >
+          <input
+            className="rv-input"
+            placeholder="Filter rooms…"
+            value={filter}
+            onChange={(e) => setFilter(e.target.value)}
+            style={{ height: "2rem", fontSize: "var(--t-xs)" }}
+          />
+        </div>
+
+        <div className="rv-scroll" style={{ flex: 1, overflow: "auto", padding: "var(--s-2) var(--s-2) var(--s-1)" }}>
+          {status === "loading" && owned.length === 0 && recent.length === 0 ? (
+            <div style={{ display: "flex", flexDirection: "column", gap: "var(--s-2)", padding: "var(--s-2)" }}>
+              <div className="rv-skeleton" style={{ height: "2.5rem" }} />
+              <div className="rv-skeleton" style={{ height: "2.5rem" }} />
+              <div className="rv-skeleton" style={{ height: "2.5rem" }} />
             </div>
+          ) : (
+            <>
+              {starred.length > 0 && (
+                <div style={{ marginBottom: "var(--s-4)" }}>
+                  <div className="rv-label" style={{ padding: "var(--s-1) var(--s-2)", fontSize: "var(--t-2xs)" }}>
+                    ★ Starred · {starred.length}
+                  </div>
+                  <div className="rv-list">{starred.map((r) => roomRow(r, true))}</div>
+                </div>
+              )}
+              <div>
+                <div className="rv-label" style={{ padding: "var(--s-1) var(--s-2)", fontSize: "var(--t-2xs)" }}>
+                  My rooms · {myRooms.length}
+                </div>
+                {myRooms.length === 0 && starred.length === 0 ? (
+                  <div className="rv-empty" style={{ padding: "var(--s-6) var(--s-3)" }}>
+                    <span className="rv-empty-title">No rooms yet</span>
+                    <span className="rv-empty-hint">Hit + to create one or paste an invite.</span>
+                  </div>
+                ) : (
+                  <div className="rv-list">{myRooms.map((r) => roomRow(r, false))}</div>
+                )}
+              </div>
+            </>
           )}
+        </div>
+      </aside>
+
+      {/* Activity feed (2.1 main panel) */}
+      <main style={{ display: "grid", gridTemplateRows: "auto 1fr", minHeight: 0 }}>
+        {online === "down" && (
+          <div className="rv-banner" data-tone="error">
+            Can't reach the server — retrying…
+          </div>
+        )}
+        {online !== "down" && <div />}
+
+        <div className="rv-scroll" style={{ overflow: "auto", paddingTop: "var(--s-4)" }}>
+          <div
+            style={{
+              padding: "var(--s-2) var(--s-8) var(--s-2)",
+              display: "flex",
+              alignItems: "baseline",
+              gap: "var(--s-3)",
+            }}
+          >
+            <span className="rv-label" style={{ fontSize: "var(--t-2xs)" }}>Activity</span>
+            <span className="rv-mono" style={{ fontSize: "var(--t-2xs)", color: "var(--text-faint)" }}>
+              recent
+            </span>
+          </div>
 
           {error && (
-            <div
-              style={{
-                color: "var(--accent-glow)",
-                fontSize: "var(--t-sm)",
-                padding: "var(--s-2) var(--s-3)",
-                border: "1px solid color-mix(in oklch, var(--accent) 40%, transparent)",
-                borderRadius: "var(--r-sm)",
-                background: "color-mix(in oklch, var(--accent) 8%, var(--bg-elev-2))",
-              }}
-            >
-              {error}
+            <div style={{ padding: "0 var(--s-8) var(--s-3)" }}>
+              <div className="rv-err-banner" role="alert">
+                <span className="ic">!</span>
+                <div>{error}</div>
+              </div>
             </div>
           )}
-        </main>
-      </div>
 
+          {feed.length === 0 ? (
+            <div className="rv-empty" style={{ paddingTop: "var(--s-10)" }}>
+              <span className="rv-empty-title">Nothing here yet</span>
+              <span className="rv-empty-hint">Create a room or join one — your activity shows up here.</span>
+            </div>
+          ) : (
+            feed.map((f, i) => (
+              <div
+                key={f.key}
+                style={{
+                  padding: "var(--s-3) var(--s-8)",
+                  display: "grid",
+                  gridTemplateColumns: "2.25rem 1fr auto",
+                  gap: "var(--s-4)",
+                  alignItems: "center",
+                  borderTop: i === 0 ? "none" : "1px solid var(--border-soft)",
+                }}
+              >
+                <div
+                  aria-hidden
+                  style={{
+                    width: "2.25rem",
+                    height: "2.25rem",
+                    borderRadius: "var(--r-md)",
+                    background: "var(--bg-elev-2)",
+                    border: "1px solid var(--border)",
+                    display: "grid",
+                    placeItems: "center",
+                    color: "var(--text-dim)",
+                    fontFamily: "var(--font-mono)",
+                  }}
+                >
+                  {f.icon}
+                </div>
+                <div style={{ display: "flex", flexDirection: "column", gap: 3, minWidth: 0 }}>
+                  <span style={{ fontSize: "var(--t-sm)", lineHeight: 1.4 }}>{f.title}</span>
+                  <span
+                    style={{
+                      display: "flex",
+                      alignItems: "center",
+                      gap: "var(--s-3)",
+                      fontSize: "var(--t-xs)",
+                      color: "var(--text-dim)",
+                    }}
+                  >
+                    <span>{f.meta}</span>
+                    <span className="rv-mono" style={{ marginLeft: "auto", fontSize: "var(--t-2xs)", color: "var(--text-faint)" }}>
+                      {relativeAge(new Date(f.at).toISOString())}
+                    </span>
+                  </span>
+                </div>
+                <div style={{ display: "flex", gap: "var(--s-2)" }}>
+                  {f.action === "open" ? (
+                    <button
+                      className="rv-btn"
+                      data-variant="primary"
+                      onClick={() => void store.getState().join(f.room.id)}
+                      style={{ height: "1.9rem", padding: "0 var(--s-4)", fontSize: "var(--t-xs)" }}
+                    >
+                      Join ›
+                    </button>
+                  ) : (
+                    <button
+                      className="rv-btn"
+                      onClick={() => copyRoomLink(f.room.id)}
+                      style={{ height: "1.9rem", padding: "0 var(--s-4)", fontSize: "var(--t-xs)" }}
+                    >
+                      Copy link
+                    </button>
+                  )}
+                </div>
+              </div>
+            ))
+          )}
+
+          {feed.length > 0 && (
+            <div
+              style={{
+                padding: "var(--s-5) var(--s-8)",
+                display: "flex",
+                justifyContent: "center",
+                borderTop: "1px solid var(--border-soft)",
+              }}
+            >
+              <span className="rv-label" style={{ fontSize: "var(--t-2xs)", color: "var(--text-faint)" }}>
+                · end of recent activity ·
+              </span>
+            </div>
+          )}
+        </div>
+      </main>
+
+      {/* Room right-click menu (2.1b) */}
+      {ctxMenu && (
+        <ContextMenu
+          x={ctxMenu.x}
+          y={ctxMenu.y}
+          onClose={() => setCtxMenu(null)}
+          header={
+            <>
+              <RoomAvatar name={ctxMenu.room.name} size={26} />
+              <div style={{ display: "flex", flexDirection: "column", minWidth: 0 }}>
+                <span style={{ fontSize: "var(--t-xs)", fontWeight: 600 }}>{ctxMenu.room.name}</span>
+                <span style={{ fontSize: "var(--t-2xs)", color: "var(--text-dim)" }}>
+                  {ctxMenu.room.isPublic ? "public" : "unlisted"} · {ctxMenu.room.isOwner ? "yours" : "member"}
+                </span>
+              </div>
+            </>
+          }
+        >
+          <MenuItem
+            icon="⌂"
+            label="Open"
+            kbd="↵"
+            onClick={() => {
+              setCtxMenu(null);
+              void store.getState().join(ctxMenu.room.id);
+            }}
+          />
+          <MenuItem
+            icon="★"
+            label={favoriteRoomIds.includes(ctxMenu.room.id) ? "Unstar" : "Star"}
+            onClick={() => {
+              prefsActions().toggleFavoriteRoom(ctxMenu.room.id);
+              setCtxMenu(null);
+            }}
+          />
+          <MenuDivider />
+          <MenuItem
+            icon="＋"
+            label="Invite to room…"
+            onClick={() => {
+              setInviteFor(ctxMenu.room.id);
+              setCtxMenu(null);
+            }}
+          />
+          <MenuItem
+            icon="🔗"
+            label="Copy room link"
+            onClick={() => {
+              copyRoomLink(ctxMenu.room.id);
+              setCtxMenu(null);
+            }}
+          />
+          <MenuDivider />
+          <MenuSection label="Notifications" />
+          <MenuItem icon="🔕" label="Mute" disabled disabledHint="Coming with the notifications pass." />
+          <MenuDivider />
+          <MenuItem icon="⚙" label="Room Settings" disabled disabledHint="Needs server-side room settings — coming." />
+          <MenuDivider />
+          <MenuItem icon="✕" label="Leave room" tone="danger" disabled disabledHint="Needs server-side membership controls — coming." />
+        </ContextMenu>
+      )}
+
+      <CreateRoomModal
+        open={createOpen}
+        busy={createBusy}
+        onClose={() => setCreateOpen(false)}
+        onCreate={(name, isPublic) => {
+          setCreateBusy(true);
+          void store
+            .getState()
+            .create(name, isPublic)
+            .then(() => setCreateOpen(false))
+            .finally(() => setCreateBusy(false));
+        }}
+      />
+
+      {inviteFor && (
+        <InviteCreateModal open={true} roomId={inviteFor} onClose={() => setInviteFor(null)} />
+      )}
     </div>
   );
 }
