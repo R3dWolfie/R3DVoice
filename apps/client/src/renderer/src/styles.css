@@ -815,6 +815,9 @@ button.rv-match-card:hover { border-color: var(--border-strong); }
   font-size: var(--t-xs); color: var(--text-dim);
   background: var(--bg);
   flex-shrink: 0;
+}
+
+/* ────────────────────────────────────────────────────────── */
 /*  2.4b timed-mute popover · 2.5j connecting steps ·         */
 /*  2.5m emoji picker (deck 2-pages port, 2026-07-17)         */
 /* ────────────────────────────────────────────────────────── */
