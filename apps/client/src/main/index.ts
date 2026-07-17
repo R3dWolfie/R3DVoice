@@ -469,6 +469,13 @@ app.whenReady().then(async () => {
     } else {
       callback({ video: picked });
     }
+  }, {
+    // On Wayland (and macOS 15+) let Electron route getDisplayMedia straight to
+    // the OS portal — one native dialog. Without this, requesting both "screen"
+    // and "window" source types via desktopCapturer.getSources opens the KDE
+    // portal twice (once per type). The handler above still runs as the fallback
+    // on X11/Windows/older macOS where no system picker exists.
+    useSystemPicker: true,
   });
 
   mainWindow = await createWindow(splash);
