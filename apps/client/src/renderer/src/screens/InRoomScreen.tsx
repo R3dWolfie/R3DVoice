@@ -26,6 +26,7 @@ import { usePrefs, prefsActions } from "../lib/prefs-singleton.js";
 import type { LinuxAudioSourceSummary, WindowsAudioSessionInfo } from "../../../shared/bridge-types.js";
 import { Avatar } from "../components/Avatar.js";
 import { CopyLinkButton } from "../components/CopyLinkButton.js";
+import { PeerProfilePopover } from "../components/PeerProfilePopover.js";
 import { RoomInfoPanel } from "../components/RoomInfoPanel.js";
 import { RoomE2EE } from "../lib/room-e2ee.js";
 import { loadKeyPair } from "../lib/key-storage.js";
@@ -44,6 +45,28 @@ export interface InRoomScreenProps {
 interface ConnectionState {
   phase: "connecting" | "connected" | "error";
   message?: string;
+}
+
+// 2.5j connecting overlay — real join phases, deck copy.
+interface ConnStep {
+  label: string;
+  state: "pending" | "active" | "done";
+  ms: number | null;
+}
+
+const CONN_STEP_LABELS = [
+  "Authenticating",
+  "Resolving SFU node",
+  "Negotiating media",
+  "Joining as muted",
+] as const;
+
+function freshConnSteps(): ConnStep[] {
+  return CONN_STEP_LABELS.map((label, i) => ({
+    label,
+    state: i === 0 ? ("active" as const) : ("pending" as const),
+    ms: null,
+  }));
 }
 
 interface ParticipantView {
@@ -1107,15 +1130,21 @@ export function InRoomScreen(props: InRoomScreenProps): ReactElement {
 
   const roomWrapper = useMemo(() => new LiveKitRoom(), []);
   const [conn, setConn] = useState<ConnectionState>({ phase: "connecting" });
+  const [connSteps, setConnSteps] = useState<ConnStep[]>(freshConnSteps);
+  const cancelRequestedRef = useRef(false);
   const [maximizedId, setMaximizedId] = useState<string | null>(null);
   const persistedParticipantVolumes = usePrefs((s) => s.participantVolumes);
   const persistedScreenVolumes = usePrefs((s) => s.participantScreenVolumes);
   const [voiceVolumes, setVoiceVolumes] = useState<Record<string, number>>(persistedParticipantVolumes);
   const [screenVolumes, setScreenVolumes] = useState<Record<string, number>>(persistedScreenVolumes);
+  // 2.5g "Mute for me" — local-only silence per participant (not persisted).
+  const [mutedForMe, setMutedForMe] = useState<Record<string, boolean>>({});
   const [menu, setMenu] = useState<VolumeMenu | null>(null);
   const [settingsOpen, setSettingsOpen] = useState(false);
   const [chatOpen, setChatOpen] = useState(false);
   const [roomName, setRoomName] = useState<string | null>(null);
+  const [roomInCall, setRoomInCall] = useState<number | null>(null);
+  const [profileTarget, setProfileTarget] = useState<{ id: string; handle: string | null; displayName: string } | null>(null);
   const [dmTarget, setDmTarget] = useState<{ id: string; name: string } | null>(null);
   const [elapsed, setElapsed] = useState(0);
   const [netStats, setNetStats] = useState<{
@@ -1173,11 +1202,26 @@ export function InRoomScreen(props: InRoomScreenProps): ReactElement {
 
   useEffect(() => {
     let cancelled = false;
+    // 2.5j step-list: reset, then mark real phases done as they complete.
+    setConnSteps(freshConnSteps());
+    let stepStart = performance.now();
+    const stepDone = (i: number): void => {
+      const now = performance.now();
+      const ms = Math.round(now - stepStart);
+      stepStart = now;
+      if (cancelled) return;
+      setConnSteps((prev) =>
+        prev.map((s, j) =>
+          j === i ? { ...s, state: "done", ms } : j === i + 1 && s.state === "pending" ? { ...s, state: "active" } : s,
+        ),
+      );
+    };
     (async () => {
       try {
         const api = new ApiClient(serverUrl);
         api.setToken(token);
         const { token: lkToken, url } = await api.mintLiveKitToken(props.roomId);
+        stepDone(0); // Authenticating — server minted our LiveKit token
         if (cancelled) return;
         let micStream: MediaStream | undefined;
         if (props.selection.micDeviceId) {
@@ -1190,6 +1234,7 @@ export function InRoomScreen(props: InRoomScreenProps): ReactElement {
           micPipelineRef.current = pipeline;
           micStream = pipeline.stream;
         }
+        stepDone(1); // Resolving SFU node — url in hand, local media prepped
 
         await roomWrapper.join({
           wsUrl: url,
@@ -1199,12 +1244,14 @@ export function InRoomScreen(props: InRoomScreenProps): ReactElement {
           publishScreen: props.selection.publishScreen,
           screenQuality: props.selection.screenQuality,
         });
+        stepDone(2); // Negotiating media — SFU connection is up
 
         // Deck rule (4.5 removed): every join starts muted. Mute right after
         // publish so no audio frames leave before the user opts in.
         if (props.selection.startMuted && !cancelled) {
           await roomWrapper.setMuted(true);
         }
+        stepDone(3); // Joining as muted
 
         // Kick off E2EE key distribution. Owner generates the room key;
         // members request it from peers. Best-effort: if our keypair is
@@ -1237,7 +1284,7 @@ export function InRoomScreen(props: InRoomScreenProps): ReactElement {
 
         if (!cancelled) setConn({ phase: "connected" });
       } catch (err) {
-        if (cancelled) return;
+        if (cancelled || cancelRequestedRef.current) return;
         setConn({
           phase: "error",
           message: err instanceof Error ? err.message : "failed to connect",
@@ -1284,7 +1331,10 @@ export function InRoomScreen(props: InRoomScreenProps): ReactElement {
     api
       .getRoom(props.roomId)
       .then((r) => {
-        if (!cancelled) setRoomName(r.name);
+        if (!cancelled) {
+          setRoomName(r.name);
+          setRoomInCall(r.inCall ?? null);
+        }
       })
       .catch(() => {});
     return () => {
@@ -1434,6 +1484,8 @@ export function InRoomScreen(props: InRoomScreenProps): ReactElement {
 
   function setVoiceVolume(id: string, volume: number): void {
     const v = clampVol(volume);
+    // Dragging a slider implicitly lifts a local "Mute for me".
+    setMutedForMe((prev) => (prev[id] ? { ...prev, [id]: false } : prev));
     setVoiceVolumes((prev) => ({ ...prev, [id]: v }));
     prefsActions().setParticipantVolume(id, v);
     const participant = snapshot.remotes.find((r) => r.identity === id);
@@ -1443,19 +1495,22 @@ export function InRoomScreen(props: InRoomScreenProps): ReactElement {
   }
 
   // Apply saved per-participant volumes whenever a remote subscribes — keeps
-  // user-set volumes sticky across rejoins / new sessions.
+  // user-set volumes sticky across rejoins / new sessions. Participants the
+  // user muted-for-me stay at 0 until they unmute them.
   useEffect(() => {
     for (const remote of snapshot.remotes) {
+      if (mutedForMe[remote.identity]) continue;
       const raw = persistedParticipantVolumes[remote.identity];
       if (raw === undefined) continue;
       const v = clampVol(raw);
       if (v === 1) continue;
       remote.setVolume(v, Track.Source.Microphone);
     }
-  }, [snapshot.remotes, persistedParticipantVolumes]);
+  }, [snapshot.remotes, persistedParticipantVolumes, mutedForMe]);
 
   function setScreenVolume(id: string, volume: number): void {
     const v = clampVol(volume);
+    setMutedForMe((prev) => (prev[id] ? { ...prev, [id]: false } : prev));
     setScreenVolumes((prev) => ({ ...prev, [id]: v }));
     prefsActions().setParticipantScreenVolume(id, v);
     const participant = snapshot.remotes.find((r) => r.identity === id);
@@ -1467,13 +1522,30 @@ export function InRoomScreen(props: InRoomScreenProps): ReactElement {
   // Apply saved screen-audio volumes whenever a remote subscribes.
   useEffect(() => {
     for (const remote of snapshot.remotes) {
+      if (mutedForMe[remote.identity]) continue;
       const raw = persistedScreenVolumes[remote.identity];
       if (raw === undefined) continue;
       const v = clampVol(raw);
       if (v === 1) continue;
       remote.setVolume(v, Track.Source.ScreenShareAudio);
     }
-  }, [snapshot.remotes, persistedScreenVolumes]);
+  }, [snapshot.remotes, persistedScreenVolumes, mutedForMe]);
+
+  // 2.5g "Mute for me": local-only — zero this participant's audio on our
+  // end via RemoteParticipant.setVolume; nothing changes for anyone else.
+  // Restores the previously saved per-source volumes on unmute.
+  function setMuteForMe(id: string, mute: boolean): void {
+    setMutedForMe((prev) => ({ ...prev, [id]: mute }));
+    const participant = snapshot.remotes.find((r) => r.identity === id);
+    if (!participant) return;
+    if (mute) {
+      participant.setVolume(0, Track.Source.Microphone);
+      participant.setVolume(0, Track.Source.ScreenShareAudio);
+    } else {
+      participant.setVolume(clampVol(voiceVolumes[id] ?? 1), Track.Source.Microphone);
+      participant.setVolume(clampVol(screenVolumes[id] ?? 1), Track.Source.ScreenShareAudio);
+    }
+  }
 
   const tileCallbacks: TileCallbacks = {
     onClick: (id) => {
@@ -1646,7 +1718,7 @@ export function InRoomScreen(props: InRoomScreenProps): ReactElement {
 
   return (
     <div
-      style={{ display: "grid", gridTemplateRows: "auto 1fr auto", height: "100%" }}
+      style={{ display: "grid", gridTemplateRows: "auto 1fr auto", height: "100%", position: "relative" }}
       onClick={() => setMenu(null)}
     >
       {/* Top bar (2.5): room title ▾ opens the room panel; live + E2EE pills */}
@@ -2023,6 +2095,11 @@ export function InRoomScreen(props: InRoomScreenProps): ReactElement {
             onClose={() => setDmTarget(null)}
           />
         )}
+
+        {/* 2.5g "View profile" → 2.4a peer profile popover */}
+        {profileTarget && (
+          <PeerProfilePopover peer={profileTarget} onClose={() => setProfileTarget(null)} />
+        )}
       </div>
 
       {/* Room info popover */}
@@ -2224,6 +2301,7 @@ export function InRoomScreen(props: InRoomScreenProps): ReactElement {
             </>
           )}
 
+          {/* 2.5g: Open DM · Mute for me · View profile */}
           {!menuIsLocal && menuParticipant && (
             <>
               <hr className="rv-rule" />
@@ -2233,7 +2311,31 @@ export function InRoomScreen(props: InRoomScreenProps): ReactElement {
                   setMenu(null);
                 }}
               >
-                Send a DM
+                <span style={{ display: "flex", justifyContent: "space-between", alignItems: "center" }}>
+                  Open DM <span style={{ color: "var(--text-dim)" }}>✉</span>
+                </span>
+              </CtxItem>
+              <CtxItem
+                title="Silence this person just for you — nobody else is affected"
+                onClick={() => {
+                  setMuteForMe(menuParticipant.id, !mutedForMe[menuParticipant.id]);
+                  setMenu(null);
+                }}
+              >
+                <span style={{ display: "flex", justifyContent: "space-between", alignItems: "center" }}>
+                  {mutedForMe[menuParticipant.id] ? "Unmute for me" : "Mute for me"}
+                  <span style={{ color: "var(--text-dim)" }}>🔇</span>
+                </span>
+              </CtxItem>
+              <CtxItem
+                onClick={() => {
+                  setProfileTarget({ id: menuParticipant.id, handle: null, displayName: menuParticipant.name });
+                  setMenu(null);
+                }}
+              >
+                <span style={{ display: "flex", justifyContent: "space-between", alignItems: "center" }}>
+                  View profile <span style={{ color: "var(--text-dim)" }}>👤</span>
+                </span>
               </CtxItem>
             </>
           )}
@@ -2242,6 +2344,42 @@ export function InRoomScreen(props: InRoomScreenProps): ReactElement {
 
       {/* Hidden audio mount */}
       <div ref={audioMountRef} style={{ display: "none" }} aria-hidden="true" />
+
+      {/* 2.5j connecting overlay: step list over the room while we negotiate */}
+      {conn.phase === "connecting" && (
+        <div className="rv-conn-mask">
+          <div className="rv-conn-card">
+            <div className="rv-conn-spinner" />
+            <span className="rv-conn-title">Connecting to room…</span>
+            <span className="rv-conn-room">
+              {roomName ?? "…"}
+              {roomInCall !== null && roomInCall > 0 ? ` · ${roomInCall} in call` : ""}
+            </span>
+            <div className="rv-conn-steps">
+              {connSteps.map((s) => (
+                <div key={s.label} className="rv-conn-step" data-state={s.state}>
+                  <span className="ic">{s.state === "done" ? "✓" : s.state === "active" ? "" : "·"}</span>
+                  <span className="label">{s.label}</span>
+                  <span className="t">
+                    {s.state === "done" && s.ms !== null ? `${s.ms} ms` : s.state === "active" ? "…" : ""}
+                  </span>
+                </div>
+              ))}
+            </div>
+            <button
+              type="button"
+              className="rv-btn"
+              onClick={() => {
+                cancelRequestedRef.current = true;
+                void handleLeave();
+              }}
+              style={{ marginTop: "var(--s-2)", minWidth: "6rem" }}
+            >
+              Cancel
+            </button>
+          </div>
+        </div>
+      )}
 
       {settingsOpen && <SettingsModal onClose={() => setSettingsOpen(false)} />}
     </div>

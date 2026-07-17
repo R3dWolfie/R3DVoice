@@ -1,8 +1,8 @@
-import { useCallback, useEffect, useState, type ReactElement, type ReactNode } from "react";
+import { useEffect, useState, type ReactElement, type ReactNode } from "react";
 import type { MuteLevel } from "@r3dvoice/shared";
 import { useAuthStore } from "../lib/auth-context.js";
 import { ApiClient } from "../lib/api.js";
-import { getTransport } from "../lib/chat-transport.js";
+import { MutePopover } from "./MutePopover.js";
 
 type Props = {
   threadType: "room" | "dm";
@@ -23,10 +23,9 @@ export function ThreadHeader({ threadType, threadId, title, subtitle, actions, o
   const serverUrl = useAuthStore((s) => s.serverUrl);
   const token = useAuthStore((s) => s.token);
   const [level, setLevel] = useState<MuteLevel>("all");
-  const [busy, setBusy] = useState(false);
   const [muteMenuOpen, setMuteMenuOpen] = useState(false);
 
-  // Pull the persisted mute level so the dropdown reflects reality on open.
+  // Pull the persisted mute level so the bell reflects reality on open.
   // Without this it always defaults to "all" — confusing if the user
   // already muted the thread previously.
   useEffect(() => {
@@ -37,16 +36,6 @@ export function ThreadHeader({ threadType, threadId, title, subtitle, actions, o
       if (!cancelled) setLevel(r.level);
     }).catch(() => { /* default "all" if fetch fails */ });
     return () => { cancelled = true; };
-  }, [serverUrl, token, threadType, threadId]);
-
-  const setMute = useCallback(async (next: MuteLevel) => {
-    setBusy(true);
-    const api = new ApiClient(serverUrl); api.setToken(token);
-    try {
-      await api.setMute(threadType, threadId, next);
-      getTransport()?.invalidateMute(threadType, threadId);
-      setLevel(next);
-    } finally { setBusy(false); }
   }, [serverUrl, token, threadType, threadId]);
 
   return (
@@ -81,8 +70,8 @@ export function ThreadHeader({ threadType, threadId, title, subtitle, actions, o
         )}
         {subtitle && <div style={{ color: "var(--text-faint)", fontSize: "var(--t-sm)" }}>{subtitle}</div>}
       </div>
-      {/* 2.4b — compact mute icon; levels live in a small popover, not a
-          full-width native select. */}
+      {/* 2.4b — compact mute icon; levels + duration live in the timed-mute
+          popover (1h/3h/8h/24h/∞), not a full-width native select. */}
       <div style={{ position: "relative" }}>
         <button
           type="button"
@@ -91,38 +80,18 @@ export function ThreadHeader({ threadType, threadId, title, subtitle, actions, o
           data-active={level !== "all" || muteMenuOpen}
           title={level === "all" ? "Notifications: all" : level === "mentions" ? "Notifications: @mentions only" : "Muted"}
           onClick={() => setMuteMenuOpen((v) => !v)}
-          disabled={busy}
           style={{ height: "1.8rem", width: "1.8rem", fontSize: 14, color: level === "none" ? "var(--rv-amber)" : undefined }}
         >
           {level === "none" ? "🔕" : level === "mentions" ? "＠" : "🔔"}
         </button>
         {muteMenuOpen && (
-          <>
-            <div onClick={() => setMuteMenuOpen(false)} style={{ position: "fixed", inset: 0, zIndex: 60 }} />
-            <div className="rv-menu rv-fade-in" style={{ position: "absolute", top: "calc(100% + 4px)", right: 0, zIndex: 61, width: 190 }}>
-              {(
-                [
-                  ["all", "All notifications"],
-                  ["mentions", "@mentions only"],
-                  ["none", "Muted"],
-                ] as Array<[MuteLevel, string]>
-              ).map(([value, label]) => (
-                <button
-                  key={value}
-                  type="button"
-                  className="rv-menu-item"
-                  style={{ fontWeight: level === value ? 600 : 500 }}
-                  onClick={() => {
-                    setMuteMenuOpen(false);
-                    void setMute(value);
-                  }}
-                >
-                  <span style={{ width: 16, textAlign: "center" }}>{level === value ? "✓" : ""}</span>
-                  {label}
-                </button>
-              ))}
-            </div>
-          </>
+          <MutePopover
+            threadType={threadType}
+            threadId={threadId}
+            targetLabel={subtitle?.startsWith("@") ? subtitle : title}
+            onClose={() => setMuteMenuOpen(false)}
+            onChanged={(next) => setLevel(next)}
+          />
         )}
       </div>
       {actions}

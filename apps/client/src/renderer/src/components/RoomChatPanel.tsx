@@ -1031,50 +1031,212 @@ function ChatBubble({
   );
 }
 
-const EMOJI_SET = [
-  "👍", "❤️", "😂", "🔥", "😎", "🎉", "🤔", "👀",
-  "🙌", "💯", "✅", "❌", "🚀", "🎯", "👋", "😅",
-  "😭", "🥺", "😈", "💀", "🤝", "💪", "🙏", "✨",
+// 2.5m emoji picker — search, category tabs (deck: 🕒😀🐱🍔⚽🚗💡🎵🚩),
+// stacked sections, and a preview foot (emoji + name + :shortcode:).
+// Static curated set; [emoji, name] pairs drive search + the preview.
+type EmojiEntry = readonly [string, string];
+
+const EMOJI_CATEGORIES: ReadonlyArray<{ id: string; icon: string; label: string; emojis: readonly EmojiEntry[] }> = [
+  {
+    id: "recent", icon: "🕒", label: "Frequently used",
+    emojis: [
+      ["👍", "Thumbs up"], ["❤️", "Red heart"], ["😂", "Tears of joy"], ["🔥", "Fire"],
+      ["✨", "Sparkles"], ["👀", "Eyes"], ["🙏", "Folded hands"], ["💯", "Hundred"],
+      ["😅", "Sweat smile"], ["🤔", "Thinking"], ["😎", "Cool"], ["🚀", "Rocket"],
+      ["👻", "Ghost"], ["🫡", "Salute"], ["🥲", "Tearful smile"], ["😭", "Loudly crying"],
+    ],
+  },
+  {
+    id: "smileys", icon: "😀", label: "Smileys & people",
+    emojis: [
+      ["😀", "Grinning"], ["😃", "Big smile"], ["😄", "Smiling eyes"], ["😁", "Beaming"],
+      ["😆", "Laughing"], ["🥹", "Holding back tears"], ["😉", "Wink"], ["😊", "Blush"],
+      ["🙂", "Slight smile"], ["😇", "Halo"], ["🥰", "Hearts face"], ["😍", "Heart eyes"],
+      ["🤩", "Star struck"], ["😘", "Blowing kiss"], ["😜", "Winking tongue"], ["🤪", "Zany"],
+      ["🤗", "Hugging"], ["🤭", "Hand over mouth"], ["🤫", "Shushing"], ["😐", "Neutral"],
+      ["😴", "Sleeping"], ["🥱", "Yawning"], ["😷", "Mask"], ["🥵", "Hot face"],
+      ["🥶", "Cold face"], ["😱", "Screaming"], ["😤", "Steam nose"], ["😡", "Angry"],
+      ["🤬", "Cursing"], ["🥺", "Pleading"], ["💀", "Skull"], ["🤡", "Clown"],
+    ],
+  },
+  {
+    id: "gestures", icon: "👋", label: "Gestures",
+    emojis: [
+      ["👋", "Waving hand"], ["🤚", "Raised back of hand"], ["✋", "Raised hand"], ["🖖", "Vulcan salute"],
+      ["👌", "OK hand"], ["🤌", "Pinched fingers"], ["✌️", "Victory"], ["🤞", "Crossed fingers"],
+      ["🤟", "Love you"], ["🤘", "Rock on"], ["👈", "Point left"], ["👉", "Point right"],
+      ["👆", "Point up"], ["👇", "Point down"], ["👎", "Thumbs down"], ["✊", "Raised fist"],
+      ["🤛", "Left fist"], ["🤜", "Right fist"], ["👏", "Clapping"], ["🙌", "Raised hands"],
+      ["🤝", "Handshake"], ["💪", "Flexed biceps"], ["🖐️", "Splayed hand"], ["🫶", "Heart hands"],
+    ],
+  },
+  {
+    id: "animals", icon: "🐱", label: "Animals & nature",
+    emojis: [
+      ["🐶", "Dog"], ["🐱", "Cat"], ["🐭", "Mouse"], ["🐹", "Hamster"],
+      ["🐰", "Rabbit"], ["🦊", "Fox"], ["🐻", "Bear"], ["🐼", "Panda"],
+      ["🐨", "Koala"], ["🐯", "Tiger"], ["🦁", "Lion"], ["🐸", "Frog"],
+      ["🐵", "Monkey"], ["🐧", "Penguin"], ["🦉", "Owl"], ["🦄", "Unicorn"],
+      ["🐝", "Bee"], ["🦋", "Butterfly"], ["🐢", "Turtle"], ["🐙", "Octopus"],
+      ["🌸", "Cherry blossom"], ["🌵", "Cactus"], ["🌲", "Evergreen"], ["🌈", "Rainbow"],
+    ],
+  },
+  {
+    id: "food", icon: "🍔", label: "Food & drink",
+    emojis: [
+      ["🍎", "Apple"], ["🍌", "Banana"], ["🍉", "Watermelon"], ["🍓", "Strawberry"],
+      ["🍒", "Cherries"], ["🥑", "Avocado"], ["🌽", "Corn"], ["🍕", "Pizza"],
+      ["🍔", "Burger"], ["🍟", "Fries"], ["🌭", "Hot dog"], ["🌮", "Taco"],
+      ["🍣", "Sushi"], ["🍜", "Ramen"], ["🍩", "Doughnut"], ["🍪", "Cookie"],
+      ["🎂", "Birthday cake"], ["🍿", "Popcorn"], ["🥨", "Pretzel"], ["🧀", "Cheese"],
+      ["☕", "Coffee"], ["🧋", "Bubble tea"], ["🍺", "Beer"], ["🥂", "Clinking glasses"],
+    ],
+  },
+  {
+    id: "activities", icon: "⚽", label: "Activities",
+    emojis: [
+      ["⚽", "Soccer ball"], ["🏀", "Basketball"], ["🏈", "Football"], ["⚾", "Baseball"],
+      ["🎾", "Tennis"], ["🏐", "Volleyball"], ["🎱", "8 ball"], ["🏓", "Ping pong"],
+      ["🥊", "Boxing glove"], ["⛳", "Golf"], ["🎣", "Fishing"], ["🛹", "Skateboard"],
+      ["🎮", "Video game"], ["🕹️", "Joystick"], ["🎲", "Die"], ["🎯", "Bullseye"],
+      ["🎳", "Bowling"], ["🎤", "Microphone"], ["🎧", "Headphones"], ["🎸", "Guitar"],
+      ["🥁", "Drum"], ["🎹", "Keyboard"], ["🏆", "Trophy"], ["🎉", "Party popper"],
+    ],
+  },
+  {
+    id: "travel", icon: "🚗", label: "Travel & places",
+    emojis: [
+      ["🚗", "Car"], ["🚕", "Taxi"], ["🚌", "Bus"], ["🏎️", "Race car"],
+      ["🚓", "Police car"], ["🚑", "Ambulance"], ["🚒", "Fire engine"], ["🛵", "Scooter"],
+      ["🚲", "Bicycle"], ["🚂", "Locomotive"], ["✈️", "Airplane"], ["🛸", "UFO"],
+      ["🚁", "Helicopter"], ["⛵", "Sailboat"], ["🗽", "Statue of Liberty"], ["🗼", "Tokyo tower"],
+      ["🏰", "Castle"], ["🏝️", "Desert island"], ["🏔️", "Snowy mountain"], ["🌋", "Volcano"],
+      ["🏟️", "Stadium"], ["🌃", "Night city"], ["🗺️", "World map"], ["🧭", "Compass"],
+    ],
+  },
+  {
+    id: "objects", icon: "💡", label: "Objects",
+    emojis: [
+      ["💡", "Light bulb"], ["🔦", "Flashlight"], ["🕯️", "Candle"], ["💻", "Laptop"],
+      ["🖥️", "Desktop"], ["🖱️", "Mouse"], ["⌨️", "Keyboard"], ["📱", "Phone"],
+      ["📷", "Camera"], ["🎥", "Movie camera"], ["📺", "Television"], ["📻", "Radio"],
+      ["⏰", "Alarm clock"], ["⌚", "Watch"], ["🔋", "Battery"], ["🔌", "Plug"],
+      ["🔧", "Wrench"], ["🔨", "Hammer"], ["🛠️", "Hammer and wrench"], ["🔑", "Key"],
+      ["🔒", "Lock"], ["📌", "Pushpin"], ["📎", "Paperclip"], ["✂️", "Scissors"],
+    ],
+  },
+  {
+    id: "symbols", icon: "🎵", label: "Symbols & hearts",
+    emojis: [
+      ["❤️", "Red heart"], ["🧡", "Orange heart"], ["💛", "Yellow heart"], ["💚", "Green heart"],
+      ["💙", "Blue heart"], ["💜", "Purple heart"], ["🖤", "Black heart"], ["🤍", "White heart"],
+      ["💔", "Broken heart"], ["❣️", "Heart exclamation"], ["💕", "Two hearts"], ["💖", "Sparkling heart"],
+      ["💘", "Heart with arrow"], ["💝", "Heart with ribbon"], ["🎵", "Music note"], ["🎶", "Music notes"],
+      ["💤", "Zzz"], ["💢", "Anger"], ["💬", "Speech bubble"], ["✅", "Check mark"],
+      ["❌", "Cross mark"], ["⚠️", "Warning"], ["♻️", "Recycle"], ["⭐", "Star"],
+    ],
+  },
+  {
+    id: "flags", icon: "🚩", label: "Flags",
+    emojis: [
+      ["🚩", "Triangular flag"], ["🏁", "Chequered flag"], ["🏳️", "White flag"], ["🏴", "Black flag"],
+      ["🏳️‍🌈", "Rainbow flag"], ["🏴‍☠️", "Pirate flag"], ["🇺🇸", "USA"], ["🇬🇧", "UK"],
+      ["🇨🇦", "Canada"], ["🇩🇪", "Germany"], ["🇫🇷", "France"], ["🇯🇵", "Japan"],
+      ["🇰🇷", "South Korea"], ["🇧🇷", "Brazil"], ["🇦🇺", "Australia"], ["🇸🇪", "Sweden"],
+    ],
+  },
 ];
 
+function shortcodeOf(name: string): string {
+  return `:${name.toLowerCase().replace(/[^a-z0-9]+/g, "_").replace(/^_|_$/g, "")}:`;
+}
+
 function EmojiPicker({ onPick }: { onPick: (e: string) => void }): ReactElement {
-  return (
-    <div
-      style={{
-        position: "absolute",
-        bottom: "calc(100% - var(--s-2))",
-        left: "var(--s-3)",
-        right: "var(--s-3)",
-        background: "var(--bg-elev-2)",
-        border: "1px solid var(--border)",
-        borderRadius: "var(--r-md)",
-        padding: "var(--s-2)",
-        display: "grid",
-        gridTemplateColumns: "repeat(8, 1fr)",
-        gap: 2,
-        boxShadow: "var(--shadow-2)",
-      }}
+  const [query, setQuery] = useState("");
+  const [activeTab, setActiveTab] = useState("recent");
+  const [preview, setPreview] = useState<EmojiEntry>(["🎉", "Party popper"]);
+  const sectionRefs = useRef<Record<string, HTMLDivElement | null>>({});
+
+  const q = query.trim().toLowerCase();
+  const matches = q
+    ? EMOJI_CATEGORIES.flatMap((c) => c.emojis.filter(([ch, name]) => name.toLowerCase().includes(q) || ch === q))
+    : [];
+
+  const cell = ([ch, name]: EmojiEntry): ReactElement => (
+    <button
+      key={`${ch}-${name}`}
+      type="button"
+      className="rv-ep-cell"
+      title={name}
+      onMouseEnter={() => setPreview([ch, name])}
+      onClick={() => onPick(ch)}
     >
-      {EMOJI_SET.map((e) => (
-        <button
-          key={e}
-          type="button"
-          onClick={() => onPick(e)}
-          style={{
-            appearance: "none",
-            background: "transparent",
-            border: 0,
-            padding: 4,
-            fontSize: 18,
-            cursor: "pointer",
-            borderRadius: "var(--r-sm)",
-          }}
-          onMouseEnter={(ev) => (ev.currentTarget.style.background = "var(--bg-elev-3)")}
-          onMouseLeave={(ev) => (ev.currentTarget.style.background = "transparent")}
-        >
-          {e}
-        </button>
-      ))}
+      {ch}
+    </button>
+  );
+
+  return (
+    <div className="rv-ep">
+      <div className="rv-ep-search">
+        <input
+          className="rv-input"
+          placeholder="Search emoji…"
+          value={query}
+          onChange={(e) => setQuery(e.target.value)}
+          style={{ height: "1.9rem", fontSize: "var(--t-xs)" }}
+        />
+      </div>
+      <div className="rv-ep-tabs">
+        {EMOJI_CATEGORIES.map((c) => (
+          <button
+            key={c.id}
+            type="button"
+            className="rv-ep-tab"
+            data-active={activeTab === c.id && !q}
+            title={c.label}
+            onClick={() => {
+              setQuery("");
+              setActiveTab(c.id);
+              sectionRefs.current[c.id]?.scrollIntoView({ block: "start" });
+            }}
+          >
+            {c.icon}
+          </button>
+        ))}
+      </div>
+      <div className="rv-ep-body rv-scroll">
+        {q ? (
+          <>
+            <div className="rv-ep-section">Search · &quot;{query.trim()}&quot;</div>
+            {matches.length === 0 ? (
+              <div style={{ fontSize: "var(--t-xs)", color: "var(--text-dim)", padding: "var(--s-2)" }}>
+                No emoji match.
+              </div>
+            ) : (
+              <div className="rv-ep-grid">{matches.map(cell)}</div>
+            )}
+          </>
+        ) : (
+          EMOJI_CATEGORIES.map((c) => (
+            <div
+              key={c.id}
+              ref={(el) => {
+                sectionRefs.current[c.id] = el;
+              }}
+            >
+              <div className="rv-ep-section">{c.label}</div>
+              <div className="rv-ep-grid">{c.emojis.map(cell)}</div>
+            </div>
+          ))
+        )}
+      </div>
+      <div className="rv-ep-foot">
+        <span className="preview">{preview[0]}</span>
+        <div style={{ display: "flex", flexDirection: "column", minWidth: 0 }}>
+          <span className="name">{preview[1]}</span>
+          <span className="colon">{shortcodeOf(preview[1])}</span>
+        </div>
+      </div>
     </div>
   );
 }
