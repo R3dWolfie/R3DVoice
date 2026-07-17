@@ -143,6 +143,13 @@ export function LobbyScreen({ pendingInviteCode, pendingJoinRoomId, onInviteCode
     }
   }, [activeRoomId, phase.kind, joinMicDeviceId, joinSpeakerDeviceId, joinResolution, joinFrameRate]);
 
+  // Membership and ownership change while a room screen is up (join, delete,
+  // transfer) — refetch the sidebar on every phase flip so deleted rooms
+  // don't linger with phantom occupancy (live QA finding).
+  useEffect(() => {
+    void store.getState().refresh();
+  }, [phase.kind, store]);
+
   // Deep-link consumer: r3dvoice://join/<uuid> → auto-open the prejoin flow.
   // Preload replays any queued event on subscribe, so cold-start with a
   // restored session also works.

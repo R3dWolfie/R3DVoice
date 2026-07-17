@@ -37,6 +37,8 @@ export function CreateRoomModal({
             className="rv-btn"
             data-variant="primary"
             data-disabled={!canCreate || undefined}
+            disabled={!canCreate}
+            title={canCreate ? undefined : "Give the room a name first"}
             onClick={() => {
               if (canCreate) onCreate(name.trim(), isPublic, description.trim() || undefined);
             }}

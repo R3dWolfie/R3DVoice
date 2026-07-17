@@ -38,6 +38,13 @@ const useInviteQueue = create<InviteQueueState>((set) => ({
 let wiredTo: unknown = null;
 
 /** Idempotent per transport instance — mirrors wireNotificationsToTransport. */
+// Accepting/declining from the BELL must also kill the corner card: drop any
+// queued entry whose invite left the notifications store (live QA finding).
+useNotificationsStore.subscribe((state, prev) => {
+  const gone = prev.invites.filter((i) => !state.invites.some((n) => n.id === i.id));
+  for (const inv of gone) useInviteQueue.getState().remove(inv.id);
+});
+
 function wireInviteQueue(): void {
   const t = getTransport();
   if (!t || t === wiredTo) return;

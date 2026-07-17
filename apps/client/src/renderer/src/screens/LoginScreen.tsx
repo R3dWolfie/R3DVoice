@@ -286,7 +286,7 @@ export function LoginScreen(): ReactElement {
                 }}
               >
                 <span style={{ flex: 1, height: 1, background: "var(--border-soft)" }} />
-                session restored from os keychain
+                sessions live in the os keychain
                 <span style={{ flex: 1, height: 1, background: "var(--border-soft)" }} />
               </div>
 

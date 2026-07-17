@@ -64,7 +64,14 @@ function Router({ topPage, setTopPage }: { topPage: TopPage; setTopPage: (p: Top
     return off;
   }, []);
 
-  if (status === "loading") {
+  // Full-screen loader ONLY for the initial hydrate. Later "loading" states
+  // (login attempts) must keep LoginScreen mounted or its fields are wiped
+  // on failure (live QA finding).
+  const [settledOnce, setSettledOnce] = useState(false);
+  useEffect(() => {
+    if (status !== "loading") setSettledOnce(true);
+  }, [status]);
+  if (status === "loading" && !settledOnce) {
     return (
       <div style={{ display: "grid", placeItems: "center", height: "100%", gap: "var(--s-3)" }}>
         <Spinner />

@@ -49,7 +49,7 @@ export function Modal({
       style={{
         position: "fixed",
         inset: 0,
-        zIndex: 50,
+        zIndex: 80,
         background: "rgba(20,20,20,0.55)",
         display: "grid",
         placeItems: "center",

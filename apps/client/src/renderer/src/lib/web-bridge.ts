@@ -81,7 +81,7 @@ function makeWebBridge(): R3DVoiceBridge {
     openCrashDumps: () => Promise.resolve(),
     logError: (line) => {
       // eslint-disable-next-line no-console
-      console.error("[r3dvoice]", line);
+      console.info("[r3dvoice]", line);
       return Promise.resolve();
     },
     startSystemAudioCapture: () => Promise.resolve("unsupported" as const),

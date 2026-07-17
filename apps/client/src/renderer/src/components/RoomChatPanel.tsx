@@ -7,6 +7,34 @@ import { decryptDM, encryptDM, type EncryptedDMPayload } from "../lib/crypto.js"
 import { loadKeyPair } from "../lib/key-storage.js";
 import { Avatar } from "./Avatar.js";
 import { useDismiss } from "../lib/use-dismiss.js";
+
+/** Render @handle tokens as tinted pills when the message mentions people. */
+function bodyWithMentions(body: string, hasMentions: boolean): ReactElement | string {
+  if (!hasMentions) return body;
+  const parts = body.split(/(@[A-Za-z0-9_]{3,24})/g);
+  if (parts.length === 1) return body;
+  return (
+    <>
+      {parts.map((part, i) =>
+        /^@[A-Za-z0-9_]{3,24}$/.test(part) ? (
+          <span
+            key={i}
+            style={{
+              background: "color-mix(in srgb, currentColor 14%, transparent)",
+              borderRadius: 4,
+              padding: "0 3px",
+              fontWeight: 600,
+            }}
+          >
+            {part}
+          </span>
+        ) : (
+          part
+        ),
+      )}
+    </>
+  );
+}
 import { ContextMenu, MenuItem, MenuDivider } from "./ContextMenu.js";
 import { I } from "./Icons.js";
 import { MentionAutocomplete } from "./MentionAutocomplete.js";
@@ -53,12 +81,14 @@ export function RoomChatPanel({
   const [error, setError] = useState<string | null>(null);
   // 2.5k message context menu + edit-in-composer state.
   const [msgMenu, setMsgMenu] = useState<{ id: string; x: number; y: number; body: string; mine: boolean; pinned: boolean } | null>(null);
+  const [deleteArmed, setDeleteArmed] = useState(false);
   const [pinsOpen, setPinsOpen] = useState(false);
   const [pins, setPins] = useState<ChatMessageDTO[] | null>(null);
   const [editingId, setEditingId] = useState<string | null>(null);
   // 2.5l typing indicator: peers' typing pings extend the deadline; a ticker
   // clears it. Own sends are throttled via lastTypingSentRef.
   const [typingUntil, setTypingUntil] = useState<number>(0);
+  const [typingUserId, setTypingUserId] = useState<string | null>(null);
   const [now, setNow] = useState<number>(() => Date.now());
   const lastTypingSentRef = useRef<number>(0);
   useEffect(() => {
@@ -146,6 +176,7 @@ export function RoomChatPanel({
       } else if (event.type === "chat.typing") {
         if (event.threadType === threadType && event.threadId === threadId) {
           setTypingUntil(Date.now() + 4000);
+          setTypingUserId(event.userId);
         }
       } else if (event.type === "pinned") {
         if (event.message.threadType === threadType && event.message.threadId === threadId) {
@@ -551,7 +582,8 @@ export function RoomChatPanel({
                   me={m.authorId === localIdentity}
                   followup={!dayChanged && prev !== null && prev.authorId === m.authorId}
                   onToggleReaction={(emoji, mine) => toggleReaction(m.id, emoji, mine)}
-                  onContextMenu={(x, y) =>
+                  onContextMenu={(x, y) => {
+                    setDeleteArmed(false);
                     setMsgMenu({
                       id: m.id,
                       x,
@@ -559,8 +591,8 @@ export function RoomChatPanel({
                       body: m.body ?? "",
                       mine: m.authorId === localIdentity && m.deletedAt === null,
                       pinned: (m.pinnedAt ?? null) !== null,
-                    })
-                  }
+                    });
+                  }}
                 />
               </div>
             );
@@ -605,7 +637,10 @@ export function RoomChatPanel({
             }}
           >
             <span className="rv-skeleton" style={{ width: 18, height: 6, borderRadius: 3 }} />
-            typing…
+            {(() => {
+              const name = messages.find((m) => m.authorId === typingUserId)?.authorName;
+              return name ? `${name} is typing…` : "typing…";
+            })()}
           </div>
         )}
         {draft.startsWith("/") && !draft.includes(" ") && draft.length > 1 &&
@@ -795,11 +830,16 @@ export function RoomChatPanel({
               />
               <MenuItem
                 icon="🗑"
-                label="Delete message"
+                label={deleteArmed ? "Sure? This deletes it for everyone" : "Delete message"}
                 tone="danger"
                 onClick={() => {
+                  if (!deleteArmed) {
+                    setDeleteArmed(true);
+                    return;
+                  }
                   const id = msgMenu.id;
                   setMsgMenu(null);
+                  setDeleteArmed(false);
                   void apiRef.current
                     ?.deleteChatMessage(id)
                     .then(() =>
@@ -1002,7 +1042,7 @@ function ChatBubble({
             fontStyle: deleted ? "italic" : "normal",
           }}
         >
-          {deleted ? "(deleted)" : msg.body}
+          {deleted ? "(deleted)" : bodyWithMentions(msg.body ?? "", (msg.mentions?.length ?? 0) > 0)}
         </div>
         {/* Reaction chips — click to toggle; mine = Cherry-tinted */}
         {(msg.reactions?.length ?? 0) > 0 && (

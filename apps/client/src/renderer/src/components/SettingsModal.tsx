@@ -2398,7 +2398,11 @@ function DeleteAccountSection({ onDeleted }: { onDeleted: () => void }): ReactEl
   const [error, setError] = useState<string | null>(null);
 
   const expected = user?.handle ?? user?.displayName ?? "";
-  const matches = confirmText === expected && password.length > 0;
+  // Case-insensitive: the field label renders uppercased by rv-label styling,
+  // so a literal compare traps users into typing what they see and silently
+  // failing (live QA finding).
+  const nameOk = confirmText.trim().toLowerCase() === expected.toLowerCase();
+  const matches = nameOk && password.length > 0;
 
   if (!open) {
     return (
@@ -2428,6 +2432,11 @@ function DeleteAccountSection({ onDeleted }: { onDeleted: () => void }): ReactEl
       </div>
       <Field label={`Type ${expected} to confirm`}>
         <input className="rv-input" value={confirmText} spellCheck={false} onChange={(e) => setConfirmText(e.target.value)} />
+        {confirmText.length > 0 && !nameOk && (
+          <div className="rv-field-help" style={{ color: "var(--danger)" }}>
+            That doesn't match — type "{expected}" (case doesn't matter).
+          </div>
+        )}
       </Field>
       <Field label="Your password">
         <input className="rv-input" type="password" value={password} onChange={(e) => setPassword(e.target.value)} />
