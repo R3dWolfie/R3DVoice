@@ -427,6 +427,28 @@ function DmPane({
         leading={
           <Avatar src={null} fallbackInitials={peer.displayName} fallbackColorSeed={peer.id} size={34} />
         }
+        badge={
+          <span
+            title="Direct messages are end-to-end encrypted — the server can't read them."
+            style={{
+              marginLeft: 6,
+              height: "1.15rem",
+              padding: "0 7px",
+              borderRadius: 999,
+              background: "color-mix(in srgb, var(--ok) 8%, transparent)",
+              border: "1px solid color-mix(in srgb, var(--ok) 40%, transparent)",
+              color: "var(--ok)",
+              fontFamily: "var(--font-mono)",
+              fontSize: 9,
+              letterSpacing: ".12em",
+              display: "inline-flex",
+              alignItems: "center",
+              gap: 3,
+            }}
+          >
+            🔒 E2EE
+          </span>
+        }
       />
       {profileOpen && (
         <PeerProfilePopover

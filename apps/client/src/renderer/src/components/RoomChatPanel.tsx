@@ -64,6 +64,10 @@ export function RoomChatPanel({
   }, [typingUntil]);
   const listRef = useRef<HTMLDivElement | null>(null);
   const inputRef = useRef<HTMLInputElement | null>(null);
+  // Scroll-up pagination: history loads 50 at a time; reaching the top
+  // fetches the previous page and preserves the scroll position.
+  const [hasMore, setHasMore] = useState(true);
+  const loadingOlderRef = useRef(false);
   const apiRef = useRef<ApiClient | null>(null);
   const transportRef = useRef<ChatTransport | null>(null);
 
@@ -96,7 +100,10 @@ export function RoomChatPanel({
     void api
       .chatHistory(threadType, threadId, { limit: 50 })
       .then((res) => {
-        if (!cancelled) setMessages(res.messages);
+        if (!cancelled) {
+          setMessages(res.messages);
+          setHasMore(res.messages.length >= 50);
+        }
       })
       .catch((e: Error) => {
         if (!cancelled) setError(e.message);
@@ -244,6 +251,10 @@ export function RoomChatPanel({
       return { ...m, body: plain };
     });
   }, [messages, threadType, myKeyPair, peerPublicKey]);
+
+  // Deleted messages vanish from the stream (Discord semantics) instead of
+  // leaving tombstone rows that read as blank gaps.
+  const visible = useMemo(() => decrypted.filter((m) => m.deletedAt === null), [decrypted]);
 
   const insertEmoji = (e: string): void => {
     setDraft((d) => d + e);
@@ -424,6 +435,29 @@ export function RoomChatPanel({
       <div
         ref={listRef}
         className="rv-scroll"
+        onScroll={(e) => {
+          const el = e.currentTarget;
+          if (el.scrollTop > 40 || !hasMore || loadingOlderRef.current) return;
+          const oldest = messages[0];
+          if (!oldest || !apiRef.current) return;
+          loadingOlderRef.current = true;
+          const prevHeight = el.scrollHeight;
+          void apiRef.current
+            .chatHistory(threadType, threadId, { before: oldest.createdAt, limit: 50 })
+            .then((res) => {
+              setHasMore(res.messages.length >= 50);
+              if (res.messages.length > 0) {
+                setMessages((prev) => [...res.messages, ...prev]);
+                // Keep the viewport anchored on the previously-visible message.
+                requestAnimationFrame(() => {
+                  el.scrollTop += el.scrollHeight - prevHeight;
+                });
+              }
+            })
+            .finally(() => {
+              loadingOlderRef.current = false;
+            });
+        }}
         style={{
           padding: "var(--s-4)",
           overflowY: "auto",
@@ -432,7 +466,7 @@ export function RoomChatPanel({
           gap: "var(--s-3)",
         }}
       >
-        {decrypted.length === 0 ? (
+        {visible.length === 0 ? (
           <div
             style={{
               color: "var(--text-faint)",
@@ -445,8 +479,8 @@ export function RoomChatPanel({
             No messages yet.
           </div>
         ) : (
-          decrypted.map((m, i) => {
-            const prev = i > 0 ? decrypted[i - 1]! : null;
+          visible.map((m, i) => {
+            const prev = i > 0 ? visible[i - 1]! : null;
             const dayChanged =
               prev === null ||
               new Date(prev.createdAt).toDateString() !== new Date(m.createdAt).toDateString();

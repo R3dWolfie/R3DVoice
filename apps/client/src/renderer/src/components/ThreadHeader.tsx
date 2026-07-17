@@ -15,9 +15,11 @@ type Props = {
   onTitleClick?: () => void;
   /** Leading node — the peer avatar in DM headers (2.4). */
   leading?: ReactNode;
+  /** Inline badge next to the title (deck: the 🔒 E2EE pill). */
+  badge?: ReactNode;
 };
 
-export function ThreadHeader({ threadType, threadId, title, subtitle, actions, onTitleClick, leading }: Props): ReactElement {
+export function ThreadHeader({ threadType, threadId, title, subtitle, actions, onTitleClick, leading, badge }: Props): ReactElement {
   const serverUrl = useAuthStore((s) => s.serverUrl);
   const token = useAuthStore((s) => s.token);
   const [level, setLevel] = useState<MuteLevel>("all");
@@ -72,6 +74,7 @@ export function ThreadHeader({ threadType, threadId, title, subtitle, actions, o
           >
             {title}
             <span style={{ fontSize: 9, color: "var(--text-dim)" }}>▾</span>
+            {badge}
           </button>
         ) : (
           <div style={{ fontWeight: 600 }}>{title}</div>
