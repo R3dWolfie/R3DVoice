@@ -20,7 +20,23 @@ describe("prefs store", () => {
     const store = createPrefsStore(storage);
     expect(store.getState().resolution).toBe("1080p");
     expect(store.getState().frameRate).toBe(30);
+    // Deck 3.2 keybind defaults ship populated (ghost/leave stay unbound).
+    expect(store.getState().pttKeybind).toBe("Control+Space");
+    expect(store.getState().deafenKeybind).toBeNull();
+  });
+
+  it("keeps a persisted null keybind (user cleared it) over the default", () => {
+    storage.write(JSON.stringify({ pttKeybind: null }));
+    const store = createPrefsStore(storage);
     expect(store.getState().pttKeybind).toBeNull();
+  });
+
+  it("sanitizes theme overrides on load", () => {
+    storage.write(
+      JSON.stringify({ themeOverrides: { "--bg": "#123456", "bad": "#fff", "--n": 3 } }),
+    );
+    const store = createPrefsStore(storage);
+    expect(store.getState().themeOverrides).toEqual({ "--bg": "#123456" });
   });
 
   it("persists changes to storage", () => {

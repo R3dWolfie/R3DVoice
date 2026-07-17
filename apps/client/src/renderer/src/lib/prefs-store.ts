@@ -9,12 +9,35 @@ export type Resolution = "720p" | "1080p" | "1440p" | "4K";
 export type FrameRate = 30 | 60;
 export type NoiseSuppressionLevel = "off" | "low" | "high";
 
-export type ThemePreset = "light" | "dark" | "system";
+/** Deck 3.6 presets: Light · Dark · Grey · Match OS. */
+export type ThemePreset = "light" | "dark" | "grey" | "system";
+/** Camera preview/capture resolution (Settings › Devices › Video, 3.1). */
+export type CameraResolution = "480p" | "720p" | "1080p";
+/** Default room-notification behavior (Settings › Notifications, 3.7). */
+export type RoomNotifDefault = "all" | "mentions" | "none";
 
 export interface PrefsState {
   theme: ThemePreset;
+  /**
+   * Per-token theme overrides (3.6 token editor): CSS custom property name
+   * ("--bg") → color value ("#fafafa"). Applied as inline styles on <html>
+   * so they win over any preset block; reapplied on boot by App.
+   */
+  themeOverrides: Record<string, string>;
   dmBanners: boolean;
   dmPreviews: boolean;
+  /** 3.7 — default notification behavior for rooms without an explicit override. */
+  roomNotifDefault: RoomNotifDefault;
+  /** 3.7 — quiet hours suppress all banners + sounds (bell panel still fills). */
+  quietHoursEnabled: boolean;
+  /** "HH:MM" local time, 24h. */
+  quietHoursStart: string;
+  /** "HH:MM" local time, 24h. */
+  quietHoursEnd: string;
+  /** 3.1 Video — camera preview/capture resolution. */
+  cameraResolution: CameraResolution;
+  /** 3.1 Video — mirror the local preview horizontally (never what others see). */
+  cameraMirror: boolean;
   /** Mono input: force-mono capture + downmix (left-only interfaces). */
   monoInput: boolean;
   /** Mono output: both ears get the same downmixed signal. */
@@ -46,8 +69,16 @@ export interface PrefsState {
   participantScreenVolumes: Record<string, number>;
 
   setTheme(theme: ThemePreset): void;
+  /** Replace the whole override map (empty object = reset to preset). */
+  setThemeOverrides(overrides: Record<string, string>): void;
   setDmBanners(v: boolean): void;
   setDmPreviews(v: boolean): void;
+  setRoomNotifDefault(v: RoomNotifDefault): void;
+  setQuietHoursEnabled(v: boolean): void;
+  setQuietHoursStart(v: string): void;
+  setQuietHoursEnd(v: string): void;
+  setCameraResolution(v: CameraResolution): void;
+  setCameraMirror(v: boolean): void;
   setMonoInput(v: boolean): void;
   setMonoOutput(v: boolean): void;
   setMicDeviceId(id: string | null): void;
@@ -76,8 +107,15 @@ export interface PrefsState {
 
 const DEFAULTS = {
   theme: "light" as ThemePreset,
+  themeOverrides: {} as Record<string, string>,
   dmBanners: true,
   dmPreviews: true,
+  roomNotifDefault: "all" as RoomNotifDefault,
+  quietHoursEnabled: false,
+  quietHoursStart: "22:00",
+  quietHoursEnd: "08:00",
+  cameraResolution: "720p" as CameraResolution,
+  cameraMirror: false,
   monoInput: false,
   monoOutput: false,
   micDeviceId: null as string | null,
@@ -86,11 +124,12 @@ const DEFAULTS = {
   resolution: "1080p" as Resolution,
   frameRate: 30 as FrameRate,
   shareAudio: true,
-  pttKeybind: null as string | null,
-  muteKeybind: null as string | null,
+  // Deck 3.2 defaults (⌘ ≈ Control cross-platform). Ghost + Leave ship unbound.
+  pttKeybind: "Control+Space" as string | null,
+  muteKeybind: "Control+Shift+M" as string | null,
   deafenKeybind: null as string | null,
-  shareScreenKeybind: null as string | null,
-  openSettingsKeybind: null as string | null,
+  shareScreenKeybind: "Control+Shift+E" as string | null,
+  openSettingsKeybind: "Control+," as string | null,
   leaveRoomKeybind: null as string | null,
   compatibilityMode: false,
   crashReporting: false,
@@ -135,6 +174,16 @@ function clampVolumeMap(raw: unknown): Record<string, number> {
   return out;
 }
 
+/** Keep only string→string entries whose key looks like a CSS custom property. */
+function sanitizeThemeOverrides(raw: unknown): Record<string, string> {
+  if (!raw || typeof raw !== "object") return {};
+  const out: Record<string, string> = {};
+  for (const [k, v] of Object.entries(raw as Record<string, unknown>)) {
+    if (typeof v === "string" && k.startsWith("--")) out[k] = v;
+  }
+  return out;
+}
+
 function load(storage: PrefsStorage): typeof DEFAULTS {
   const raw = storage.read();
   if (!raw) return { ...DEFAULTS };
@@ -143,6 +192,7 @@ function load(storage: PrefsStorage): typeof DEFAULTS {
     const merged = { ...DEFAULTS, ...parsed };
     merged.participantVolumes = clampVolumeMap(parsed.participantVolumes);
     merged.participantScreenVolumes = clampVolumeMap(parsed.participantScreenVolumes);
+    merged.themeOverrides = sanitizeThemeOverrides(parsed.themeOverrides);
     return merged;
   } catch {
     return { ...DEFAULTS };
@@ -174,8 +224,15 @@ export function createPrefsStore(storage: PrefsStorage): StoreApi<PrefsState> {
       micGain: state.micGain,
       serverUrl: state.serverUrl,
       theme: state.theme,
+      themeOverrides: state.themeOverrides,
       dmBanners: state.dmBanners,
       dmPreviews: state.dmPreviews,
+      roomNotifDefault: state.roomNotifDefault,
+      quietHoursEnabled: state.quietHoursEnabled,
+      quietHoursStart: state.quietHoursStart,
+      quietHoursEnd: state.quietHoursEnd,
+      cameraResolution: state.cameraResolution,
+      cameraMirror: state.cameraMirror,
       monoInput: state.monoInput,
       monoOutput: state.monoOutput,
       favoriteRoomIds: state.favoriteRoomIds,
@@ -188,8 +245,15 @@ export function createPrefsStore(storage: PrefsStorage): StoreApi<PrefsState> {
   return createStore<PrefsState>((set, get) => ({
     ...initial,
     setTheme: (v) => { set({ theme: v }); persistFromState(get()); },
+    setThemeOverrides: (v) => { set({ themeOverrides: { ...v } }); persistFromState(get()); },
     setDmBanners: (v) => { set({ dmBanners: v }); persistFromState(get()); },
     setDmPreviews: (v) => { set({ dmPreviews: v }); persistFromState(get()); },
+    setRoomNotifDefault: (v) => { set({ roomNotifDefault: v }); persistFromState(get()); },
+    setQuietHoursEnabled: (v) => { set({ quietHoursEnabled: v }); persistFromState(get()); },
+    setQuietHoursStart: (v) => { set({ quietHoursStart: v }); persistFromState(get()); },
+    setQuietHoursEnd: (v) => { set({ quietHoursEnd: v }); persistFromState(get()); },
+    setCameraResolution: (v) => { set({ cameraResolution: v }); persistFromState(get()); },
+    setCameraMirror: (v) => { set({ cameraMirror: v }); persistFromState(get()); },
     setMonoInput: (v) => { set({ monoInput: v }); persistFromState(get()); },
     setMonoOutput: (v) => { set({ monoOutput: v }); persistFromState(get()); },
     setMicDeviceId: (v) => { set({ micDeviceId: v }); persistFromState(get()); },

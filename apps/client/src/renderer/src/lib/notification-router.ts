@@ -11,6 +11,13 @@ type RouteContext = {
     dmBanners: boolean;
     /** Include message text in DM banners. Off = generic text (screenshare-safe). */
     dmPreviews: boolean;
+    /**
+     * Quiet hours window ("HH:MM" local, 24h) — present only when enabled.
+     * Deck 3.7: "Suppress all banners + sounds during quiet hours" — so this
+     * silences EVERYTHING, including friend requests (unlike DND). Mentions
+     * still land in the bell panel; only the popup is suppressed.
+     */
+    quietHours?: { start: string; end: string } | undefined;
   };
   /** Mute lookup for any (threadType, threadId). Returns "all" when no row. */
   getMuteLevel(threadType: "room" | "dm", threadId: string): Promise<MuteLevel>;
@@ -19,9 +26,34 @@ type RouteContext = {
 };
 
 /**
+ * True when `now` falls inside the [start, end) local-time window.
+ * Handles overnight wraps (22:00 → 08:00). start === end ⇒ never active
+ * (a zero-length window, not a 24h one — matches the time inputs' intent).
+ */
+export function isInQuietHours(now: Date, start: string, end: string): boolean {
+  const parse = (s: string): number | null => {
+    const m = /^(\d{1,2}):(\d{2})$/.exec(s.trim());
+    if (!m) return null;
+    const h = Number(m[1]);
+    const min = Number(m[2]);
+    if (h > 23 || min > 59) return null;
+    return h * 60 + min;
+  };
+  const a = parse(start);
+  const b = parse(end);
+  if (a === null || b === null || a === b) return false;
+  const t = now.getHours() * 60 + now.getMinutes();
+  return a < b ? t >= a && t < b : t >= a || t < b;
+}
+
+/**
  * Decide whether a WS event should fire an OS notification, and fire it.
  */
 export async function routeNotification(event: ChatWsEvent, ctx: RouteContext): Promise<void> {
+  // Quiet hours gate — ahead of everything, friend requests included (3.7).
+  const qh = ctx.prefs.quietHours;
+  if (qh && isInQuietHours(new Date(), qh.start, qh.end)) return;
+
   const dndActive = ctx.dndUntil !== null && ctx.dndUntil.getTime() > Date.now();
 
   switch (event.type) {
