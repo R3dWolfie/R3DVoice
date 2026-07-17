@@ -1,14 +1,18 @@
 import { useEffect, type ReactElement, type ReactNode } from "react";
 import { I } from "./Icons.js";
 
-// Generic modal shell — port of designer screen-modals.jsx lines 4-44.
-// Backdrop click and ESC both close. Inner card stops propagation so clicks
-// inside don't bubble up to the backdrop.
+// Generic modal shell, deck anatomy (WireFrames/4-modals): flat dim backdrop,
+// header with optional icon plate + title + subtitle, scrollable body, and an
+// optional footer band. Backdrop click and ESC close unless dismissible=false
+// (gates like handle-pick must not be escapable).
 export function Modal({
   open,
   onClose,
   title,
   subtitle,
+  icon,
+  footer,
+  dismissible = true,
   width = "min(94vw, 720px)",
   children,
 }: {
@@ -16,29 +20,33 @@ export function Modal({
   onClose: () => void;
   title: string;
   subtitle?: string;
+  /** Small glyph rendered in a bordered square plate left of the title. */
+  icon?: ReactNode;
+  /** Footer band content (deck: hint left, actions right). */
+  footer?: ReactNode;
+  dismissible?: boolean;
   width?: string;
   children: ReactNode;
 }): ReactElement | null {
   useEffect(() => {
-    if (!open) return;
+    if (!open || !dismissible) return;
     function onKey(e: KeyboardEvent): void {
       if (e.key === "Escape") onClose();
     }
     window.addEventListener("keydown", onKey);
     return () => window.removeEventListener("keydown", onKey);
-  }, [open, onClose]);
+  }, [open, dismissible, onClose]);
 
   if (!open) return null;
 
   return (
     <div
-      onClick={onClose}
+      onClick={dismissible ? onClose : undefined}
       style={{
         position: "fixed",
         inset: 0,
         zIndex: 50,
-        background: "color-mix(in oklch, var(--rv-ink-0) 70%, transparent)",
-        backdropFilter: "blur(6px)",
+        background: "rgba(20,20,20,0.55)",
         display: "grid",
         placeItems: "center",
         animation: "rv-fade var(--d-mid) var(--ease-out) both",
@@ -54,51 +62,79 @@ export function Modal({
           borderRadius: "var(--r-xl)",
           boxShadow: "var(--shadow-3)",
           display: "grid",
-          gridTemplateRows: "auto 1fr",
+          gridTemplateRows: footer ? "auto 1fr auto" : "auto 1fr",
           overflow: "hidden",
           animation: "rv-modal-in var(--d-mid) var(--ease-out) both",
         }}
       >
         <header
           style={{
-            padding: "var(--s-5) var(--s-6)",
+            padding: "var(--s-5) var(--s-6) var(--s-4)",
             borderBottom: "1px solid var(--border-soft)",
             display: "flex",
-            alignItems: "center",
-            justifyContent: "space-between",
+            alignItems: "flex-start",
+            gap: "var(--s-3)",
           }}
         >
-          <div>
+          {icon && (
+            <div
+              aria-hidden
+              style={{
+                width: "2.25rem",
+                height: "2.25rem",
+                borderRadius: "var(--r-md)",
+                background: "var(--bg-elev-2)",
+                border: "1px solid var(--border-soft)",
+                display: "grid",
+                placeItems: "center",
+                fontFamily: "var(--font-mono)",
+                fontSize: "var(--t-lg)",
+                fontWeight: 700,
+                flexShrink: 0,
+              }}
+            >
+              {icon}
+            </div>
+          )}
+          <div style={{ minWidth: 0, flex: 1 }}>
             <div style={{ fontSize: "var(--t-lg)", fontWeight: 600, letterSpacing: "-0.01em" }}>
               {title}
             </div>
             {subtitle && (
-              <div
-                className="rv-mono"
-                style={{
-                  fontSize: "var(--t-2xs)",
-                  color: "var(--text-faint)",
-                  letterSpacing: ".1em",
-                  textTransform: "uppercase",
-                  marginTop: 4,
-                }}
-              >
+              <div style={{ fontSize: "var(--t-xs)", color: "var(--text-dim)", marginTop: 3 }}>
                 {subtitle}
               </div>
             )}
           </div>
-          <button
-            className="rv-btn rv-btn-icon"
-            data-variant="ghost"
-            onClick={onClose}
-            aria-label="Close"
-          >
-            <I.X size={16} />
-          </button>
+          {dismissible && (
+            <button
+              className="rv-btn rv-btn-icon"
+              data-variant="ghost"
+              onClick={onClose}
+              aria-label="Close"
+            >
+              <I.X size={16} />
+            </button>
+          )}
         </header>
         <div style={{ overflow: "auto", minHeight: 0 }} className="rv-scroll">
           {children}
         </div>
+        {footer && (
+          <div
+            style={{
+              padding: "var(--s-4) var(--s-6)",
+              borderTop: "1px solid var(--border-soft)",
+              background: "var(--bg-elev-2)",
+              display: "flex",
+              justifyContent: "space-between",
+              alignItems: "center",
+              gap: "var(--s-3)",
+            }}
+          >
+            {footer}
+          </div>
+        )}
       </div>
     </div>
   );

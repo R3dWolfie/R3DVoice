@@ -679,6 +679,22 @@ input, select, textarea { font: inherit; color: inherit; }
 .rv-banner[data-tone="warn"]  { background: color-mix(in srgb, var(--rv-amber) 12%, var(--bg-elev)); color: var(--text); }
 .rv-banner[data-tone="error"] { background: color-mix(in srgb, var(--danger) 10%, var(--bg-elev)); color: var(--text); }
 
+/* Error banner (1.1a) — danger-tinted, icon + message */
+.rv-err-banner {
+  display: flex; align-items: flex-start; gap: var(--s-2);
+  padding: var(--s-3) var(--s-3);
+  background: color-mix(in srgb, var(--danger) 8%, transparent);
+  border: 1px solid color-mix(in srgb, var(--danger) 40%, transparent);
+  border-radius: var(--r-md);
+  font-size: var(--t-sm); line-height: 1.4; color: var(--text);
+}
+.rv-err-banner .ic { color: var(--danger); font-weight: 700; flex-shrink: 0; }
+.rv-err-banner .meta {
+  margin-top: 4px;
+  font-family: var(--font-mono);
+  font-size: var(--t-2xs); color: var(--text-dim);
+}
+
 /* Empty state (system/empty-states.html) */
 .rv-empty {
   display: flex; flex-direction: column; align-items: center; justify-content: center;

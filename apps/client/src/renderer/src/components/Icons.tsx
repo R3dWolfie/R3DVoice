@@ -292,9 +292,9 @@ export function Logo({ size = 22, style, className }: IconProps): ReactElement {
     <svg viewBox="0 0 28 28" width={size} height={size} fill="none" style={style} className={className}>
       <defs>
         <radialGradient id={`${id}-bg`} cx="32%" cy="22%" r="90%">
-          <stop offset="0" stopColor="oklch(0.72 0.19 22)" />
-          <stop offset=".55" stopColor="oklch(0.58 0.18 22)" />
-          <stop offset="1" stopColor="oklch(0.38 0.14 22)" />
+          <stop offset="0" stopColor="oklch(0.72 0.21 16)" />
+          <stop offset=".55" stopColor="oklch(0.59 0.22 13)" />
+          <stop offset="1" stopColor="oklch(0.40 0.16 13)" />
         </radialGradient>
         <linearGradient id={`${id}-r`} x1="0" y1="0" x2="0" y2="1">
           <stop offset="0" stopColor="oklch(0.97 0.012 25)" />
@@ -318,7 +318,7 @@ export function Logo({ size = 22, style, className }: IconProps): ReactElement {
            l-3.9 -5.95 h-2.35 v5.95 h-3.75 z
            M11.85 9.3 v3.45 h4.4 a1.72 1.72 0 0 0 0 -3.45 z"
       />
-      <circle cx="16.25" cy="11.05" r=".62" fill="oklch(0.58 0.18 22)" />
+      <circle cx="16.25" cy="11.05" r=".62" fill="oklch(0.59 0.22 13)" />
     </svg>
   );
 }

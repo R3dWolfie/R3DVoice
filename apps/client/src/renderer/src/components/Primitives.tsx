@@ -2,7 +2,7 @@ import type { CSSProperties, ReactElement, ReactNode } from "react";
 
 // Vite-injected at build time from apps/client/package.json.
 declare const __APP_VERSION__: string;
-const APP_VERSION = typeof __APP_VERSION__ === "string" ? __APP_VERSION__ : "dev";
+export const APP_VERSION = typeof __APP_VERSION__ === "string" ? __APP_VERSION__ : "dev";
 
 export function WindowChrome({
   title,
@@ -73,18 +73,3 @@ export function Spinner(): ReactElement {
   );
 }
 
-export function CrosshairCorner({ pos }: { pos: "tl" | "tr" | "bl" | "br" }): ReactElement {
-  const map: Record<"tl" | "tr" | "bl" | "br", CSSProperties> = {
-    tl: { top: 24, left: 24 },
-    tr: { top: 24, right: 24 },
-    bl: { bottom: 24, left: 24 },
-    br: { bottom: 24, right: 24 },
-  };
-  return (
-    <div style={{ position: "absolute", width: 14, height: 14, color: "var(--rv-red-700)", opacity: 0.55, ...map[pos] }}>
-      <svg viewBox="0 0 14 14" width="14" height="14" fill="none" stroke="currentColor" strokeWidth="1">
-        <path d="M0 1 H6 M1 0 V6" />
-      </svg>
-    </div>
-  );
-}
