@@ -370,10 +370,10 @@ export function LobbyScreen({ pendingInviteCode, pendingJoinRoomId, onInviteCode
                     setCreateOpen(true);
                   }}
                 >
-                  <span style={{ width: 16, textAlign: "center", color: "var(--text-dim)" }}>+</span>
+                  <span style={{ width: 28, height: 28, borderRadius: "var(--r-md)", background: "var(--text)", color: "var(--bg)", display: "grid", placeItems: "center", fontWeight: 700, flexShrink: 0 }}>+</span>
                   <span style={{ display: "flex", flexDirection: "column", alignItems: "flex-start" }}>
                     <span style={{ fontWeight: 600 }}>Create new room</span>
-                    <span style={{ fontSize: "var(--t-2xs)", color: "var(--text-dim)" }}>Set name and privacy.</span>
+                    <span style={{ fontSize: "var(--t-2xs)", color: "var(--text-dim)" }}>Set name, privacy, description.</span>
                   </span>
                 </button>
                 <button
@@ -384,7 +384,7 @@ export function LobbyScreen({ pendingInviteCode, pendingJoinRoomId, onInviteCode
                     setJoinOpen(true);
                   }}
                 >
-                  <span style={{ width: 16, textAlign: "center", color: "var(--text-dim)" }}>↗</span>
+                  <span style={{ width: 28, height: 28, borderRadius: "var(--r-md)", background: "var(--bg-elev-2)", border: "1px solid var(--border)", color: "var(--text-mid)", display: "grid", placeItems: "center", fontWeight: 700, flexShrink: 0 }}>↗</span>
                   <span style={{ display: "flex", flexDirection: "column", alignItems: "flex-start" }}>
                     <span style={{ fontWeight: 600 }}>Join by link or ID</span>
                     <span style={{ fontSize: "var(--t-2xs)", color: "var(--text-dim)" }}>Paste an invite link.</span>
@@ -398,7 +398,7 @@ export function LobbyScreen({ pendingInviteCode, pendingJoinRoomId, onInviteCode
                     setBrowseOpen(true);
                   }}
                 >
-                  <span style={{ width: 16, textAlign: "center", color: "var(--text-dim)" }}>🧭</span>
+                  <span style={{ width: 28, height: 28, borderRadius: "var(--r-md)", background: "var(--bg-elev-2)", border: "1px solid var(--border)", color: "var(--text-mid)", display: "grid", placeItems: "center", fontWeight: 700, flexShrink: 0 }}>◎</span>
                   <span style={{ display: "flex", flexDirection: "column", alignItems: "flex-start" }}>
                     <span style={{ fontWeight: 600 }}>Browse public rooms</span>
                     <span style={{ fontSize: "var(--t-2xs)", color: "var(--text-dim)" }}>Find rooms with people in them.</span>

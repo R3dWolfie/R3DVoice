@@ -36,7 +36,9 @@ export function SettingsModal({ onClose }: { onClose: () => void }): ReactElemen
 
   return (
     <Modal open={true} onClose={onClose} title="Settings">
-      <div style={{ display: "grid", gridTemplateColumns: "200px 1fr", height: 540 }}>
+      {/* Clamp to the viewport so the modal never clips off-screen and only
+          the tab pane scrolls (single scrollbar). */}
+      <div style={{ display: "grid", gridTemplateColumns: "200px 1fr", height: "min(540px, calc(82vh - 6rem))" }}>
         {/* Side nav */}
         <nav
           style={{
@@ -444,7 +446,7 @@ interface KeybindRowSpec {
 const KEYBIND_ROWS: KeybindRowSpec[] = [
   { label: "Push to talk", key: "pttKeybind", global: true },
   { label: "Toggle mute", key: "muteKeybind", global: false },
-  { label: "Toggle deafen", key: "deafenKeybind", global: false },
+  { label: "Toggle ghost", key: "deafenKeybind", global: false },
   { label: "Toggle screen-share", key: "shareScreenKeybind", global: false },
   { label: "Open settings", key: "openSettingsKeybind", global: false },
   { label: "Leave room", key: "leaveRoomKeybind", global: false },
@@ -602,7 +604,15 @@ function KeybindRow({ spec }: { spec: KeybindRowSpec }): ReactElement {
         flexWrap: "wrap",
       }}
     >
-      <span style={{ fontSize: "var(--t-sm)" }}>{spec.label}</span>
+      <span style={{ fontSize: "var(--t-sm)", display: "inline-flex", alignItems: "baseline", gap: 6 }}>
+        {spec.label}
+        <span
+          className="rv-mono"
+          style={{ fontSize: "var(--t-2xs)", color: spec.global ? "var(--rv-amber)" : "var(--text-faint)", letterSpacing: ".08em", textTransform: "uppercase" }}
+        >
+          {spec.global ? "Global" : "Window"}
+        </span>
+      </span>
       <span style={{ display: "flex", gap: 6, alignItems: "center" }}>
         <kbd style={kbdStyle}>{display}</kbd>
         <button

@@ -13,13 +13,16 @@ type Props = {
   actions?: ReactNode;
   /** Makes the title clickable (2.4a peer profile popover). */
   onTitleClick?: () => void;
+  /** Leading node — the peer avatar in DM headers (2.4). */
+  leading?: ReactNode;
 };
 
-export function ThreadHeader({ threadType, threadId, title, subtitle, actions, onTitleClick }: Props): ReactElement {
+export function ThreadHeader({ threadType, threadId, title, subtitle, actions, onTitleClick, leading }: Props): ReactElement {
   const serverUrl = useAuthStore((s) => s.serverUrl);
   const token = useAuthStore((s) => s.token);
   const [level, setLevel] = useState<MuteLevel>("all");
   const [busy, setBusy] = useState(false);
+  const [muteMenuOpen, setMuteMenuOpen] = useState(false);
 
   // Pull the persisted mute level so the dropdown reflects reality on open.
   // Without this it always defaults to "all" — confusing if the user
@@ -46,6 +49,7 @@ export function ThreadHeader({ threadType, threadId, title, subtitle, actions, o
 
   return (
     <header style={{ padding: "var(--s-3) var(--s-5)", borderBottom: "1px solid var(--border-soft)", display: "flex", alignItems: "center", gap: "var(--s-3)" }}>
+      {leading}
       <div style={{ flex: 1 }}>
         {onTitleClick ? (
           <button
@@ -74,17 +78,50 @@ export function ThreadHeader({ threadType, threadId, title, subtitle, actions, o
         )}
         {subtitle && <div style={{ color: "var(--text-faint)", fontSize: "var(--t-sm)" }}>{subtitle}</div>}
       </div>
-      <select
-        className="rv-input"
-        value={level}
-        onChange={(e) => void setMute(e.target.value as MuteLevel)}
-        disabled={busy}
-        style={{ height: "1.8rem", fontSize: "var(--t-xs)", padding: "0 var(--s-2)" }}
-      >
-        <option value="all">All notifications</option>
-        <option value="mentions">@mentions only</option>
-        <option value="none">Muted</option>
-      </select>
+      {/* 2.4b — compact mute icon; levels live in a small popover, not a
+          full-width native select. */}
+      <div style={{ position: "relative" }}>
+        <button
+          type="button"
+          className="rv-btn rv-btn-icon"
+          data-variant="ghost"
+          data-active={level !== "all" || muteMenuOpen}
+          title={level === "all" ? "Notifications: all" : level === "mentions" ? "Notifications: @mentions only" : "Muted"}
+          onClick={() => setMuteMenuOpen((v) => !v)}
+          disabled={busy}
+          style={{ height: "1.8rem", width: "1.8rem", fontSize: 14, color: level === "none" ? "var(--rv-amber)" : undefined }}
+        >
+          {level === "none" ? "🔕" : level === "mentions" ? "＠" : "🔔"}
+        </button>
+        {muteMenuOpen && (
+          <>
+            <div onClick={() => setMuteMenuOpen(false)} style={{ position: "fixed", inset: 0, zIndex: 60 }} />
+            <div className="rv-menu rv-fade-in" style={{ position: "absolute", top: "calc(100% + 4px)", right: 0, zIndex: 61, width: 190 }}>
+              {(
+                [
+                  ["all", "All notifications"],
+                  ["mentions", "@mentions only"],
+                  ["none", "Muted"],
+                ] as Array<[MuteLevel, string]>
+              ).map(([value, label]) => (
+                <button
+                  key={value}
+                  type="button"
+                  className="rv-menu-item"
+                  style={{ fontWeight: level === value ? 600 : 500 }}
+                  onClick={() => {
+                    setMuteMenuOpen(false);
+                    void setMute(value);
+                  }}
+                >
+                  <span style={{ width: 16, textAlign: "center" }}>{level === value ? "✓" : ""}</span>
+                  {label}
+                </button>
+              ))}
+            </div>
+          </>
+        )}
+      </div>
       {actions}
     </header>
   );

@@ -3,6 +3,7 @@ import type { DmThreadEntry } from "@r3dvoice/shared";
 import { useAuthStore } from "../lib/auth-context.js";
 import { ApiClient } from "../lib/api.js";
 import { getTransport } from "../lib/chat-transport.js";
+import { Avatar } from "../components/Avatar.js";
 import { ContextMenu, MenuItem, MenuDivider } from "../components/ContextMenu.js";
 import { DmThreadList } from "../components/DmThreadList.js";
 import { FriendsPane } from "../components/FriendsPane.js";
@@ -419,10 +420,13 @@ function DmPane({
       <ThreadHeader
         threadType="dm"
         threadId={threadId}
-        title={peer.handle ? `@${peer.handle}` : peer.displayName}
-        subtitle={peer.handle ? peer.displayName : undefined}
+        title={peer.displayName}
+        subtitle={peer.handle ? `@${peer.handle}` : undefined}
         actions={actions}
         onTitleClick={() => setProfileOpen((v) => !v)}
+        leading={
+          <Avatar src={null} fallbackInitials={peer.displayName} fallbackColorSeed={peer.id} size={34} />
+        }
       />
       {profileOpen && (
         <PeerProfilePopover

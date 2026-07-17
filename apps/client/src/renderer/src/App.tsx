@@ -14,7 +14,7 @@ import { DmsScreen } from "./screens/DmsScreen.js";
 import { SettingsModal } from "./components/SettingsModal.js";
 import { UpdateToast } from "./components/UpdateToast.js";
 
-function Router(): ReactElement {
+function Router({ topPage, setTopPage }: { topPage: TopPage; setTopPage: (p: TopPage) => void }): ReactElement {
   const status = useAuthStore((s) => s.status);
   const needsHandle = useNeedsHandle();
   const user = useAuthStore((s) => s.user);
@@ -52,7 +52,6 @@ function Router(): ReactElement {
     }
   });
   const [pendingJoinRoomId, setPendingJoinRoomId] = useState<string | null>(null);
-  const [topPage, setTopPage] = useState<TopPage>("lobby");
   const [settingsOpen, setSettingsOpen] = useState(false);
 
   // Listen for invite deep links from the main process.
@@ -137,9 +136,10 @@ function Router(): ReactElement {
 function Chrome(): ReactElement {
   const status = useAuthStore((s) => s.status);
   const serverUrl = useAuthStore((s) => s.serverUrl);
+  const [topPage, setTopPage] = useState<TopPage>("lobby");
   const chromeTitle =
     status === "authenticated"
-      ? "R3DVOICE · LOBBY"
+      ? `R3DVOICE · ${topPage === "dms" ? "DMS" : topPage === "friends" ? "FRIENDS" : "LOBBY"}`
       : status === "loading"
         ? "R3DVOICE · LOADING"
         : status === "totp-required"
@@ -155,7 +155,7 @@ function Chrome(): ReactElement {
   return (
     <WindowChrome title={chromeTitle} serverLabel={serverLabel}>
       <div key={status} className="rv-fade-in" style={{ minHeight: 0, height: "100%" }}>
-        <Router />
+        <Router topPage={topPage} setTopPage={setTopPage} />
       </div>
     </WindowChrome>
   );

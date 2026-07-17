@@ -118,12 +118,19 @@ export function LeftIconColumn({ active, onNavigate, onOpenSettings }: Props): R
               display: "grid", placeItems: "center",
             }}
           >
-            <Avatar
-              src={me.avatarUrl ?? null}
-              fallbackInitials={me.displayName ?? ""}
-              fallbackColorSeed={me.id}
-              size={36}
-            />
+            <span style={{ position: "relative", display: "inline-flex" }}>
+              <Avatar
+                src={me.avatarUrl ?? null}
+                fallbackInitials={me.displayName ?? ""}
+                fallbackColorSeed={me.id}
+                size={36}
+              />
+              {/* deck icon-col: presence dot on the me-avatar */}
+              <span
+                className="rv-status"
+                style={{ position: "absolute", bottom: -1, right: -1, border: "2px solid var(--bg)" }}
+              />
+            </span>
           </button>
           <UserPanelPopover
             open={userPanelOpen}

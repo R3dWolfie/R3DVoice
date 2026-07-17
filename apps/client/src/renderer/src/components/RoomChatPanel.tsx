@@ -563,16 +563,6 @@ export function RoomChatPanel({
           >
             📎
           </button>
-          <button
-            type="button"
-            className="rv-btn rv-btn-icon"
-            data-variant="ghost"
-            onClick={() => setEmojiOpen((o) => !o)}
-            aria-label="Emoji"
-            data-active={emojiOpen}
-          >
-            <I.Smile size={16} />
-          </button>
           <div style={{ position: "relative", flex: 1 }}>
             <input
               ref={inputRef}
@@ -617,6 +607,16 @@ export function RoomChatPanel({
               />
             )}
           </div>
+          <button
+            type="button"
+            className="rv-btn rv-btn-icon"
+            data-variant="ghost"
+            onClick={() => setEmojiOpen((o) => !o)}
+            aria-label="Emoji"
+            data-active={emojiOpen}
+          >
+            <I.Smile size={16} />
+          </button>
           <button
             type="button"
             className="rv-btn rv-btn-icon"

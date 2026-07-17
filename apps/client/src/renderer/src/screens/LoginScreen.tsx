@@ -189,6 +189,30 @@ export function LoginScreen(): ReactElement {
             </Field>
           )}
 
+          {!totpStep && mode === "login" && (
+            <button
+              type="button"
+              title="Password reset needs the email flows — coming once SMTP is wired."
+              style={{
+                alignSelf: "flex-end",
+                appearance: "none",
+                background: "transparent",
+                border: 0,
+                padding: 0,
+                marginTop: "calc(var(--s-3) * -1)",
+                font: "inherit",
+                fontSize: "var(--t-xs)",
+                color: "var(--text-dim)",
+                textDecoration: "underline",
+                textUnderlineOffset: 2,
+                cursor: "default",
+                opacity: 0.7,
+              }}
+            >
+              Forgot password?
+            </button>
+          )}
+
           {totpStep && (
             <Field label="Two-factor code" hint="6 digits from your authenticator app">
               <input
