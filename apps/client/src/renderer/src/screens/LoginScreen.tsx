@@ -214,18 +214,16 @@ export function LoginScreen(): ReactElement {
           )}
 
           {totpStep && (
-            <Field label="Two-factor code" hint="6 digits from your authenticator app">
+            <Field label="Two-factor code" hint="6 digits from your authenticator — or a backup code (XXXX-XXXX)">
               <input
                 className="rv-input"
                 type="text"
-                inputMode="numeric"
                 autoComplete="one-time-code"
-                pattern="\d{6}"
-                maxLength={6}
+                maxLength={9}
                 required
                 autoFocus
                 value={totpCode}
-                onChange={(e) => setTotpCode(e.target.value.replace(/[^\d]/g, ""))}
+                onChange={(e) => setTotpCode(e.target.value.toUpperCase().replace(/[^A-Z0-9-]/g, ""))}
                 placeholder="123456"
                 style={{
                   fontFamily: "var(--font-mono)",
@@ -242,7 +240,7 @@ export function LoginScreen(): ReactElement {
             className="rv-btn"
             data-variant="primary"
             type="submit"
-            disabled={busy || (totpStep && totpCode.length !== 6)}
+            disabled={busy || (totpStep && !/^\d{6}$/.test(totpCode) && !/^[A-Z0-9]{4}-?[A-Z0-9]{4}$/.test(totpCode))}
             style={{ height: "2.75rem", marginTop: "var(--s-1)" }}
           >
             {busy ? (

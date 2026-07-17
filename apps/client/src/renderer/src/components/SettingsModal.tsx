@@ -1687,7 +1687,8 @@ function E2eeKeySection(): ReactElement {
           <I.Copy size={14} /> Download key backup
         </button>
       </div>
-    </div>
+    
+      </div>
   );
 }
 
@@ -1700,6 +1701,8 @@ function TwoFactorSection({ enabled }: { enabled: boolean }): ReactElement {
   const [phase, setPhase] = useState<"idle" | "enrolling" | "disabling">("idle");
   const [qrDataUrl, setQrDataUrl] = useState<string | null>(null);
   const [secret, setSecret] = useState<string | null>(null);
+  const [backupCodes, setBackupCodes] = useState<string[] | null>(null);
+  const [regenPw, setRegenPw] = useState<string | null>(null); // null = closed
   const [code, setCode] = useState("");
   const [password, setPassword] = useState("");
   const [error, setError] = useState<string | null>(null);
@@ -1730,12 +1733,13 @@ function TwoFactorSection({ enabled }: { enabled: boolean }): ReactElement {
     setBusy(true);
     setError(null);
     try {
-      await apiFor().twoFAEnrollVerify(code);
+      const res = await apiFor().twoFAEnrollVerify(code);
       await refreshUser();
       setPhase("idle");
       setQrDataUrl(null);
       setSecret(null);
       setCode("");
+      if (res.backupCodes) setBackupCodes(res.backupCodes);
     } catch (err) {
       setError(err instanceof Error ? err.message : "verification failed");
     } finally {
@@ -1931,7 +1935,101 @@ function TwoFactorSection({ enabled }: { enabled: boolean }): ReactElement {
           {error}
         </div>
       )}
-    </div>
+          {backupCodes && (
+        <div
+          style={{
+            padding: "var(--s-3)",
+            background: "color-mix(in srgb, var(--rv-amber) 8%, transparent)",
+            border: "1px solid color-mix(in srgb, var(--rv-amber) 40%, transparent)",
+            borderRadius: "var(--r-sm)",
+            display: "flex",
+            flexDirection: "column",
+            gap: "var(--s-2)",
+          }}
+        >
+          <div style={{ fontSize: "var(--t-sm)", fontWeight: 600 }}>
+            Backup codes — shown once, save them now
+          </div>
+          <div style={{ fontSize: "var(--t-xs)", color: "var(--text-mid)", lineHeight: 1.5 }}>
+            Each signs you in exactly once if you lose your authenticator.
+          </div>
+          <div
+            className="rv-mono"
+            style={{ display: "grid", gridTemplateColumns: "1fr 1fr", gap: 4, fontSize: "var(--t-xs)" }}
+          >
+            {backupCodes.map((c) => (
+              <span key={c}>{c}</span>
+            ))}
+          </div>
+          <div style={{ display: "flex", gap: "var(--s-2)" }}>
+            <button
+              className="rv-btn"
+              style={{ height: "1.7rem", fontSize: "var(--t-2xs)" }}
+              onClick={() => void navigator.clipboard.writeText(backupCodes.join("\n")).catch(() => {})}
+            >
+              Copy all
+            </button>
+            <button
+              className="rv-btn"
+              data-variant="ghost"
+              style={{ height: "1.7rem", fontSize: "var(--t-2xs)" }}
+              onClick={() => setBackupCodes(null)}
+            >
+              I saved them
+            </button>
+          </div>
+        </div>
+      )}
+      {enabled && !backupCodes && (
+        <div>
+          {regenPw === null ? (
+            <button
+              className="rv-btn"
+              style={{ height: "1.7rem", fontSize: "var(--t-2xs)" }}
+              onClick={() => setRegenPw("")}
+            >
+              Regenerate backup codes
+            </button>
+          ) : (
+            <div style={{ display: "flex", gap: "var(--s-2)" }}>
+              <input
+                className="rv-input"
+                type="password"
+                placeholder="Password"
+                value={regenPw}
+                onChange={(e) => setRegenPw(e.target.value)}
+                style={{ height: "1.7rem", fontSize: "var(--t-xs)" }}
+              />
+              <button
+                className="rv-btn"
+                data-variant="primary"
+                style={{ height: "1.7rem", fontSize: "var(--t-2xs)" }}
+                disabled={!regenPw}
+                onClick={() => {
+                  void apiFor()
+                    .regenerateBackupCodes(regenPw)
+                    .then((r) => {
+                      setBackupCodes(r.backupCodes);
+                      setRegenPw(null);
+                    })
+                    .catch((e: unknown) => setError(e instanceof Error ? e.message : "failed"));
+                }}
+              >
+                Generate
+              </button>
+              <button
+                className="rv-btn"
+                data-variant="ghost"
+                style={{ height: "1.7rem", fontSize: "var(--t-2xs)" }}
+                onClick={() => setRegenPw(null)}
+              >
+                Cancel
+              </button>
+            </div>
+          )}
+        </div>
+      )}
+      </div>
   );
 }
 

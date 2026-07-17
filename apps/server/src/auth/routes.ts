@@ -1,5 +1,6 @@
 import type { FastifyInstance } from "fastify";
 import { z } from "zod";
+import { createHash, randomBytes as cryptoRandomBytes } from "node:crypto";
 import { Prisma } from "@prisma/client";
 import { prisma } from "../db.js";
 import { getConfig } from "../config.js";
@@ -129,8 +130,11 @@ export async function authRoutes(app: FastifyInstance): Promise<void> {
       }
       const user = await prisma.user.findUnique({ where: { id: claims.userId } });
       if (!user || !user.totpSecret) throw new AuthError("invalid credentials");
-      if (!verifyTotpCode(unwrapAtRest(user.totpSecret), code)) {
-        throw new AuthError("invalid two-factor code");
+      // Accept either a live TOTP code or an unused backup code (3.3b).
+      const totpOk = verifyTotpCode(unwrapAtRest(user.totpSecret), code);
+      if (!totpOk) {
+        const burned = await consumeBackupCode(user.id, code);
+        if (!burned) throw new AuthError("invalid two-factor code");
       }
 
       const session = await prisma.session.create({ data: { userId: user.id } });
@@ -272,9 +276,23 @@ export async function authRoutes(app: FastifyInstance): Promise<void> {
         where: { id: user.id },
         data: { totpEnabledAt: new Date() },
       });
-      return { enabled: true };
+      // 3.3b — one-time backup codes, returned exactly once here.
+      const backupCodes = await issueBackupCodes(user.id);
+      return { enabled: true, backupCodes };
     },
   );
+
+  // Regenerate backup codes (invalidates all previous ones). Password-gated.
+  app.post("/auth/2fa/backup-codes", { preHandler: requireAuth }, async (request) => {
+    const parsed = totpDisableBodySchema.safeParse(request.body);
+    if (!parsed.success) throw new ValidationError("invalid input");
+    const user = await prisma.user.findUnique({ where: { id: request.auth!.userId } });
+    if (!user || user.totpEnabledAt === null) throw new AuthError("2FA is not enabled");
+    const ok = await verifyPassword(parsed.data.password, user.passwordHash);
+    if (!ok) throw new AuthError("invalid password");
+    const backupCodes = await issueBackupCodes(user.id);
+    return { backupCodes };
+  });
 
   app.post(
     "/auth/2fa/disable",
@@ -307,3 +325,45 @@ const totpEnrollVerifyBodySchema = z.object({
 const totpDisableBodySchema = z.object({
   password: z.string().min(1),
 });
+
+// ── 2FA backup codes (3.3b) ─────────────────────────────────────────────
+// Format XXXX-XXXX from an unambiguous alphabet; only sha256 hashes at
+// rest; consuming marks usedAt so each code works exactly once.
+const BACKUP_ALPHABET = "ABCDEFGHJKMNPQRSTUVWXYZ23456789";
+
+function makeBackupCode(): string {
+  const bytes = cryptoRandomBytes(8);
+  let out = "";
+  for (let i = 0; i < 8; i++) {
+    out += BACKUP_ALPHABET[bytes[i]! % BACKUP_ALPHABET.length];
+    if (i === 3) out += "-";
+  }
+  return out;
+}
+
+function hashBackupCode(code: string): string {
+  return createHash("sha256").update(code.toUpperCase().replace(/[^A-Z0-9]/g, "")).digest("hex");
+}
+
+async function issueBackupCodes(userId: string): Promise<string[]> {
+  const codes = Array.from({ length: 10 }, makeBackupCode);
+  await prisma.$transaction([
+    prisma.totpBackupCode.deleteMany({ where: { userId } }),
+    prisma.totpBackupCode.createMany({
+      data: codes.map((c) => ({ userId, codeHash: hashBackupCode(c) })),
+    }),
+  ]);
+  return codes;
+}
+
+async function consumeBackupCode(userId: string, code: string): Promise<boolean> {
+  const cleaned = code.toUpperCase().replace(/[^A-Z0-9]/g, "");
+  if (cleaned.length !== 8) return false;
+  const hash = hashBackupCode(cleaned);
+  const row = await prisma.totpBackupCode.findFirst({
+    where: { userId, codeHash: hash, usedAt: null },
+  });
+  if (!row) return false;
+  await prisma.totpBackupCode.update({ where: { id: row.id }, data: { usedAt: new Date() } });
+  return true;
+}

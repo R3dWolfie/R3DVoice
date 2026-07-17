@@ -124,8 +124,11 @@ export class ApiClient {
   twoFAEnrollStart(): Promise<TotpEnrollStartResponse> {
     return this.request("POST", "/auth/2fa/enroll-start");
   }
-  twoFAEnrollVerify(code: string): Promise<{ enabled: true }> {
+  twoFAEnrollVerify(code: string): Promise<{ enabled: true; backupCodes?: string[] }> {
     return this.request("POST", "/auth/2fa/enroll-verify", { code });
+  }
+  regenerateBackupCodes(password: string): Promise<{ backupCodes: string[] }> {
+    return this.request("POST", "/auth/2fa/backup-codes", { password });
   }
   twoFADisable(password: string): Promise<{ enabled: false }> {
     return this.request("POST", "/auth/2fa/disable", { password });
