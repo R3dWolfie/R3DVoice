@@ -5,6 +5,7 @@ import { ensureTransport, setCurrentlyViewingThread, type ChatTransport } from "
 import { useAuthStore } from "../lib/auth-context.js";
 import { decryptDM, encryptDM, type EncryptedDMPayload } from "../lib/crypto.js";
 import { loadKeyPair } from "../lib/key-storage.js";
+import { Avatar } from "./Avatar.js";
 import { ContextMenu, MenuItem, MenuDivider } from "./ContextMenu.js";
 import { I } from "./Icons.js";
 import { MentionAutocomplete } from "./MentionAutocomplete.js";
@@ -444,24 +445,32 @@ export function RoomChatPanel({
             No messages yet.
           </div>
         ) : (
-          decrypted.map((m, i) => (
-            <ChatBubble
-              key={m.id}
-              msg={m}
-              me={m.authorId === localIdentity}
-              followup={i > 0 && decrypted[i - 1]!.authorId === m.authorId}
-              onContextMenu={(x, y) =>
-                setMsgMenu({
-                  id: m.id,
-                  x,
-                  y,
-                  body: m.body ?? "",
-                  mine: m.authorId === localIdentity && m.deletedAt === null,
-                  pinned: (m.pinnedAt ?? null) !== null,
-                })
-              }
-            />
-          ))
+          decrypted.map((m, i) => {
+            const prev = i > 0 ? decrypted[i - 1]! : null;
+            const dayChanged =
+              prev === null ||
+              new Date(prev.createdAt).toDateString() !== new Date(m.createdAt).toDateString();
+            return (
+              <div key={m.id} style={{ display: "contents" }}>
+                {dayChanged && <DayDivider iso={m.createdAt} />}
+                <ChatBubble
+                  msg={m}
+                  me={m.authorId === localIdentity}
+                  followup={!dayChanged && prev !== null && prev.authorId === m.authorId}
+                  onContextMenu={(x, y) =>
+                    setMsgMenu({
+                      id: m.id,
+                      x,
+                      y,
+                      body: m.body ?? "",
+                      mine: m.authorId === localIdentity && m.deletedAt === null,
+                      pinned: (m.pinnedAt ?? null) !== null,
+                    })
+                  }
+                />
+              </div>
+            );
+          })
         )}
         {error && (
           <div
@@ -543,6 +552,17 @@ export function RoomChatPanel({
         )}
         {emojiOpen && <EmojiPicker onPick={insertEmoji} />}
         <div style={{ display: "flex", gap: "var(--s-2)", alignItems: "center" }}>
+          <button
+            type="button"
+            className="rv-btn rv-btn-icon"
+            data-variant="ghost"
+            data-disabled="true"
+            title="Attachments are coming — not in this build yet."
+            aria-label="Attach"
+            style={{ opacity: 0.45, cursor: "default" }}
+          >
+            📎
+          </button>
           <button
             type="button"
             className="rv-btn rv-btn-icon"
@@ -684,9 +704,41 @@ export function RoomChatPanel({
   );
 }
 
-// Deck 2.4 message row: avatar-side stack, mine reversed with the ink
-// bubble, theirs white with a hairline; follow-ups from the same author
-// drop the name/time and tighten up.
+// Day divider between messages from different days (deck 2.4 thread body).
+function DayDivider({ iso }: { iso: string }): ReactElement {
+  const d = new Date(iso);
+  const today = new Date();
+  const yesterday = new Date(today.getTime() - 86_400_000);
+  const label =
+    d.toDateString() === today.toDateString()
+      ? "Today"
+      : d.toDateString() === yesterday.toDateString()
+        ? "Yesterday"
+        : d.toLocaleDateString(undefined, { month: "short", day: "numeric" });
+  return (
+    <div
+      style={{
+        display: "flex",
+        alignItems: "center",
+        gap: "var(--s-3)",
+        margin: "var(--s-2) 0",
+        fontFamily: "var(--font-mono)",
+        fontSize: "var(--t-2xs)",
+        letterSpacing: ".14em",
+        textTransform: "uppercase",
+        color: "var(--text-faint)",
+      }}
+    >
+      <span style={{ flex: 1, height: 1, background: "var(--border-soft)" }} />
+      {label}
+      <span style={{ flex: 1, height: 1, background: "var(--border-soft)" }} />
+    </div>
+  );
+}
+
+// Deck 2.4 message row: 32px avatar beside the stack, mine reversed with
+// the ink bubble, theirs white with a hairline; follow-ups from the same
+// author drop the name/time + avatar and tighten up.
 function ChatBubble({
   msg,
   me,
@@ -713,10 +765,14 @@ function ChatBubble({
       style={{
         display: "flex",
         flexDirection: me ? "row-reverse" : "row",
+        alignItems: "flex-end",
         gap: "var(--s-2)",
         marginTop: followup ? -6 : 0,
       }}
     >
+      <div style={{ flexShrink: 0, visibility: followup ? "hidden" : "visible", marginBottom: 2 }}>
+        <Avatar src={null} fallbackInitials={msg.authorName} fallbackColorSeed={msg.authorId} size={30} />
+      </div>
       <div
         style={{
           display: "flex",
