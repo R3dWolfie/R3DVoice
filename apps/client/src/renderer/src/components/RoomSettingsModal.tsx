@@ -1,5 +1,5 @@
 import { useCallback, useEffect, useState, type ReactElement } from "react";
-import type { InviteDTO, RoomDTO, RoomMemberDTO } from "@r3dvoice/shared";
+import type { FriendDTO, InviteDTO, RoomDTO, RoomMemberDTO } from "@r3dvoice/shared";
 import { useAuthStore } from "../lib/auth-context.js";
 import { ApiClient } from "../lib/api.js";
 import { Modal } from "./Modal.js";
@@ -348,6 +348,79 @@ function MembersTab({
           <span className="rv-empty-hint">Share an invite link to get people in.</span>
         </div>
       )}
+
+      {isOwner && (
+        <InviteFriendsSection roomId={room.id} memberIds={members.map((m) => m.userId)} api={api} onInvited={refresh} />
+      )}
+    </div>
+  );
+}
+
+// 4.16 — invite friends straight into the room (no link needed).
+function InviteFriendsSection({
+  roomId,
+  memberIds,
+  api,
+  onInvited,
+}: {
+  roomId: string;
+  memberIds: string[];
+  api: () => ApiClient;
+  onInvited: () => Promise<void>;
+}): ReactElement | null {
+  const [friends, setFriends] = useState<FriendDTO[]>([]);
+  const [busyId, setBusyId] = useState<string | null>(null);
+
+  useEffect(() => {
+    let cancelled = false;
+    api()
+      .friends()
+      .then((r) => {
+        if (!cancelled) setFriends(r.friends.filter((f) => f.status === "accepted"));
+      })
+      .catch(() => {});
+    return () => {
+      cancelled = true;
+    };
+  }, [api]);
+
+  const candidates = friends.filter((f) => !memberIds.includes(f.user.id));
+  if (candidates.length === 0) return null;
+
+  return (
+    <div style={{ marginTop: "var(--s-5)" }}>
+      <div className="rv-label" style={{ marginBottom: "var(--s-2)", fontSize: "var(--t-2xs)" }}>
+        Invite friends
+      </div>
+      {candidates.map((f) => (
+        <div
+          key={f.user.id}
+          style={{ display: "flex", alignItems: "center", gap: "var(--s-3)", padding: "var(--s-2) var(--s-2)" }}
+        >
+          <Avatar src={f.user.avatarUrl ?? null} fallbackInitials={f.user.displayName} fallbackColorSeed={f.user.id} size={26} />
+          <span style={{ flex: 1, minWidth: 0, fontSize: "var(--t-sm)" }}>
+            {f.user.displayName}
+            {f.user.handle && (
+              <span className="rv-mono" style={{ fontSize: "var(--t-2xs)", color: "var(--text-dim)" }}> @{f.user.handle}</span>
+            )}
+          </span>
+          <button
+            className="rv-btn"
+            data-variant="primary"
+            style={{ height: "1.7rem", fontSize: "var(--t-2xs)" }}
+            disabled={busyId !== null}
+            onClick={() => {
+              setBusyId(f.user.id);
+              void api()
+                .inviteRoomMember(roomId, f.user.id)
+                .then(() => onInvited())
+                .finally(() => setBusyId(null));
+            }}
+          >
+            {busyId === f.user.id ? "…" : "Add"}
+          </button>
+        </div>
+      ))}
     </div>
   );
 }

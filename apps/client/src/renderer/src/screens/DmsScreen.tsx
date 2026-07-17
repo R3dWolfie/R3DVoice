@@ -7,6 +7,7 @@ import { ContextMenu, MenuItem, MenuDivider } from "../components/ContextMenu.js
 import { DmThreadList } from "../components/DmThreadList.js";
 import { FriendsPane } from "../components/FriendsPane.js";
 import { NewDmPicker } from "../components/NewDmPicker.js";
+import { PeerProfilePopover } from "../components/PeerProfilePopover.js";
 import { RoomChatPanel } from "../components/RoomChatPanel.js";
 import { ThreadHeader } from "../components/ThreadHeader.js";
 import { I } from "../components/Icons.js";
@@ -222,6 +223,7 @@ export function DmsScreen({ onJoinRoom }: DmsScreenProps = {}): ReactElement {
               meId={me.id}
               meName={me.displayName}
               borderRight={split !== null}
+              onJoinRoom={handleJoinRoom}
               onClose={() => setActive(null)}
               actions={
                 <button
@@ -243,6 +245,7 @@ export function DmsScreen({ onJoinRoom }: DmsScreenProps = {}): ReactElement {
                 peer={splitPeer}
                 meId={me.id}
                 meName={me.displayName}
+                onJoinRoom={handleJoinRoom}
                 onClose={() => setSplit(null)}
                 actions={
                   <button
@@ -370,6 +373,7 @@ function DmPane({
   meName,
   borderRight,
   onClose,
+  onJoinRoom,
   actions,
 }: {
   threadId: string;
@@ -378,8 +382,10 @@ function DmPane({
   meName: string;
   borderRight?: boolean;
   onClose: () => void;
+  onJoinRoom?: (roomId: string) => void;
   actions?: ReactElement;
 }): ReactElement {
+  const [profileOpen, setProfileOpen] = useState(false);
   return (
     <div
       style={{
@@ -387,6 +393,7 @@ function DmPane({
         flexDirection: "column",
         minHeight: 0,
         minWidth: 0,
+        position: "relative",
         borderRight: borderRight ? "1px solid var(--border-soft)" : undefined,
       }}
     >
@@ -396,7 +403,15 @@ function DmPane({
         title={peer.handle ? `@${peer.handle}` : peer.displayName}
         subtitle={peer.handle ? peer.displayName : undefined}
         actions={actions}
+        onTitleClick={() => setProfileOpen((v) => !v)}
       />
+      {profileOpen && (
+        <PeerProfilePopover
+          peer={peer}
+          onClose={() => setProfileOpen(false)}
+          {...(onJoinRoom ? { onJoinRoom } : {})}
+        />
+      )}
       <div style={{ flex: 1, minHeight: 0 }}>
         <RoomChatPanel
           threadType="dm"
