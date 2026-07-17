@@ -1,4 +1,4 @@
-import { useEffect, useMemo, useRef, useState, type ReactElement } from "react";
+import { useEffect, useMemo, useRef, useState, type CSSProperties, type ReactElement, type ReactNode } from "react";
 import type { ChatMessageDTO } from "@r3dvoice/shared";
 import { ApiClient } from "../lib/api.js";
 import { ensureTransport, setCurrentlyViewingThread, type ChatTransport } from "../lib/chat-transport.js";
@@ -9,32 +9,114 @@ import { Avatar } from "./Avatar.js";
 import { useDismiss } from "../lib/use-dismiss.js";
 import { pushToast } from "../lib/toast-store.js";
 
-/** Render @handle tokens as tinted pills when the message mentions people. */
-function bodyWithMentions(body: string, hasMentions: boolean): ReactElement | string {
-  if (!hasMentions) return body;
-  const parts = body.split(/(@[A-Za-z0-9_]{3,24})/g);
-  if (parts.length === 1) return body;
-  return (
-    <>
-      {parts.map((part, i) =>
-        /^@[A-Za-z0-9_]{3,24}$/.test(part) ? (
-          <span
-            key={i}
-            style={{
-              background: "color-mix(in srgb, currentColor 14%, transparent)",
-              borderRadius: 4,
-              padding: "0 3px",
-              fontWeight: 600,
-            }}
-          >
-            {part}
-          </span>
-        ) : (
-          part
-        ),
-      )}
-    </>
-  );
+/** A message the local user is sending — shown optimistically before the
+ *  server echoes it back. `text` is the plaintext (used for display + retry;
+ *  for DMs the wire body is re-encrypted per attempt). */
+type PendingMessage = {
+  clientId: string;
+  text: string;
+  createdAt: string;
+  status: "sending" | "failed";
+};
+
+/** Inline emphasis: **bold**, *italic* / _italic_. Input is plain text —
+ *  everything is emitted as React text/element nodes, which React escapes,
+ *  so there's no HTML-injection surface. */
+function emphasize(text: string, keyBase: string): ReactNode[] {
+  const out: ReactNode[] = [];
+  const re = /(\*\*[^*\n]+\*\*|\*[^*\n]+\*|_[^_\n]+_)/g;
+  let last = 0;
+  let m: RegExpExecArray | null;
+  let i = 0;
+  while ((m = re.exec(text)) !== null) {
+    if (m.index > last) out.push(text.slice(last, m.index));
+    const tok = m[0];
+    if (tok.startsWith("**")) {
+      out.push(
+        <strong key={`${keyBase}-b${i}`} style={{ fontWeight: 700 }}>
+          {tok.slice(2, -2)}
+        </strong>,
+      );
+    } else {
+      out.push(<em key={`${keyBase}-i${i}`}>{tok.slice(1, -1)}</em>);
+    }
+    last = m.index + tok.length;
+    i++;
+  }
+  if (last < text.length) out.push(text.slice(last));
+  return out;
+}
+
+/**
+ * Render a message body with markdown basics (bold/italic/inline code),
+ * URL linkification, and @mention pills. XSS-safe: user content only ever
+ * lands in React text nodes (auto-escaped) and links are restricted to
+ * http(s) schemes, so no `javascript:` href can slip through.
+ */
+function renderRichBody(body: string, hasMentions: boolean, onDark: boolean): ReactNode {
+  if (!body) return body;
+  const master = hasMentions
+    ? /(`[^`\n]+`|https?:\/\/[^\s<>()]+|@[A-Za-z0-9_]{3,24})/g
+    : /(`[^`\n]+`|https?:\/\/[^\s<>()]+)/g;
+  const parts = body.split(master);
+  const nodes: ReactNode[] = [];
+  parts.forEach((part, i) => {
+    if (!part) return;
+    if (/^`[^`\n]+`$/.test(part)) {
+      nodes.push(
+        <code
+          key={`c${i}`}
+          style={{
+            fontFamily: "var(--font-mono)",
+            fontSize: "0.92em",
+            background: "color-mix(in srgb, currentColor 12%, transparent)",
+            padding: "1px 5px",
+            borderRadius: 4,
+          }}
+        >
+          {part.slice(1, -1)}
+        </code>,
+      );
+    } else if (/^https?:\/\//.test(part)) {
+      // Trailing punctuation usually belongs to the sentence, not the URL.
+      const trail = part.match(/[.,!?;:'")\]]+$/);
+      const tail = trail ? trail[0] : "";
+      const url = tail ? part.slice(0, -tail.length) : part;
+      nodes.push(
+        <a
+          key={`u${i}`}
+          href={url}
+          target="_blank"
+          rel="noreferrer noopener"
+          style={{
+            color: onDark ? "#fff" : "var(--accent)",
+            textDecoration: "underline",
+            wordBreak: "break-all",
+          }}
+        >
+          {url}
+        </a>,
+      );
+      if (tail) nodes.push(tail);
+    } else if (hasMentions && /^@[A-Za-z0-9_]{3,24}$/.test(part)) {
+      nodes.push(
+        <span
+          key={`m${i}`}
+          style={{
+            background: "color-mix(in srgb, currentColor 14%, transparent)",
+            borderRadius: 4,
+            padding: "0 3px",
+            fontWeight: 600,
+          }}
+        >
+          {part}
+        </span>,
+      );
+    } else {
+      nodes.push(...emphasize(part, `t${i}`));
+    }
+  });
+  return <>{nodes}</>;
 }
 import { ContextMenu, MenuItem, MenuDivider } from "./ContextMenu.js";
 import { I } from "./Icons.js";
@@ -72,6 +154,19 @@ export function RoomChatPanel({
   const token = useAuthStore((s) => s.token);
 
   const [messages, setMessages] = useState<ChatMessageDTO[]>([]);
+  // Distinguish "still loading history" from "loaded, but empty" so we don't
+  // flash "No messages yet." over a thread that's mid-fetch.
+  const [historyLoading, setHistoryLoading] = useState(true);
+  // Optimistic outbound messages — rendered greyed as "sending…" until the
+  // server accepts them, then flipped to "failed · retry" on error.
+  const [pending, setPending] = useState<PendingMessage[]>([]);
+  // Unread affordances: the id of the first message that arrived while the
+  // user was scrolled up (the "new messages" divider) + a running count that
+  // drives the "N new ↓" jump pill.
+  const [unreadDividerId, setUnreadDividerId] = useState<string | null>(null);
+  const [newBelow, setNewBelow] = useState(0);
+  const hydratedRef = useRef(false);
+  const prevLastIdRef = useRef<string | null>(null);
   const [draft, setDraft] = useState("");
   const [emojiOpen, setEmojiOpen] = useState(false);
   const emojiWrapRef = useRef<HTMLDivElement>(null);
@@ -131,6 +226,14 @@ export function RoomChatPanel({
     transportRef.current = transport;
     setCurrentlyViewingThread({ threadType, threadId });
 
+    // Reset per-thread transient state so nothing bleeds across a switch.
+    setHistoryLoading(true);
+    setPending([]);
+    setNewBelow(0);
+    setUnreadDividerId(null);
+    hydratedRef.current = false;
+    prevLastIdRef.current = null;
+
     let cancelled = false;
     void api
       .chatHistory(threadType, threadId, { limit: 50 })
@@ -138,10 +241,14 @@ export function RoomChatPanel({
         if (!cancelled) {
           setMessages(res.messages);
           setHasMore(res.messages.length >= 50);
+          setHistoryLoading(false);
         }
       })
       .catch((e: Error) => {
-        if (!cancelled) setError(e.message);
+        if (!cancelled) {
+          setError(e.message);
+          setHistoryLoading(false);
+        }
       });
 
     // For DMs, also fetch the peer's public key so we can encrypt outgoing
@@ -162,7 +269,11 @@ export function RoomChatPanel({
     const off = transport.on((event) => {
       if (event.type === "message") {
         if (event.message.threadType === threadType && event.message.threadId === threadId) {
-          setMessages((prev) => [...prev, event.message]);
+          // Dedup: our own optimistic send also inserts the accepted message
+          // when chatSend() resolves, so the WS echo can be a duplicate.
+          setMessages((prev) =>
+            prev.some((m) => m.id === event.message.id) ? prev : [...prev, event.message],
+          );
         }
       } else if (event.type === "edited") {
         if (event.message.threadType === threadType && event.message.threadId === threadId) {
@@ -243,13 +354,13 @@ export function RoomChatPanel({
     };
   }, [serverUrl, token, threadType, threadId]);
 
-  // Auto-scroll on new message (only if user is near the bottom).
-  useEffect(() => {
+  // Jump-to-bottom + reset unread affordances.
+  const jumpToBottom = (): void => {
     const el = listRef.current;
-    if (!el) return;
-    const nearBottom = el.scrollHeight - el.scrollTop - el.clientHeight < 80;
-    if (nearBottom) el.scrollTop = el.scrollHeight;
-  }, [messages]);
+    if (el) el.scrollTop = el.scrollHeight;
+    setNewBelow(0);
+    setUnreadDividerId(null);
+  };
 
   const send = async (): Promise<void> => {
     const text = applySlashCommand(draft.trim());
@@ -293,15 +404,53 @@ export function RoomChatPanel({
     setEmojiOpen(false);
     setError(null);
     inputRef.current?.focus();
+
+    // Optimistic echo: show a greyed "sending…" bubble immediately so a slow
+    // link doesn't read as a dropped message. It reconciles to the real
+    // message on accept, or flips to a retryable "failed" state on error.
+    const clientId = `pending-${Date.now()}-${Math.random().toString(36).slice(2, 8)}`;
+    setPending((p) => [...p, { clientId, text, createdAt: new Date().toISOString(), status: "sending" }]);
+    requestAnimationFrame(() => {
+      const el = listRef.current;
+      if (el) el.scrollTop = el.scrollHeight;
+    });
     try {
-      // The server broadcasts back over WS so we'll see our own message arrive
-      // there. No local echo needed.
-      await apiRef.current.chatSend({ threadType, threadId, body });
+      const res = await apiRef.current.chatSend({ threadType, threadId, body });
+      setPending((p) => p.filter((x) => x.clientId !== clientId));
+      // Insert the accepted message directly; the WS echo is deduped by id.
+      setMessages((prev) => (prev.some((m) => m.id === res.message.id) ? prev : [...prev, res.message]));
     } catch (e) {
       setError(e instanceof Error ? e.message : "send failed");
-      // Restore draft so the user doesn't lose their text on a network blip.
-      setDraft(text);
+      setPending((p) => p.map((x) => (x.clientId === clientId ? { ...x, status: "failed" } : x)));
     }
+  };
+
+  // Retry a failed optimistic message (re-encrypts per attempt for DMs).
+  const retryPending = async (clientId: string): Promise<void> => {
+    const item = pending.find((x) => x.clientId === clientId);
+    if (!item || !apiRef.current) return;
+    let body = item.text;
+    if (threadType === "dm") {
+      if (!myKeyPair || !peerPublicKey) {
+        setError("Can't retry — an encryption key is unavailable on this device.");
+        return;
+      }
+      body = JSON.stringify(encryptDM(item.text, peerPublicKey, myKeyPair));
+    }
+    setError(null);
+    setPending((p) => p.map((x) => (x.clientId === clientId ? { ...x, status: "sending" } : x)));
+    try {
+      const res = await apiRef.current.chatSend({ threadType, threadId, body });
+      setPending((p) => p.filter((x) => x.clientId !== clientId));
+      setMessages((prev) => (prev.some((m) => m.id === res.message.id) ? prev : [...prev, res.message]));
+    } catch (e) {
+      setError(e instanceof Error ? e.message : "send failed");
+      setPending((p) => p.map((x) => (x.clientId === clientId ? { ...x, status: "failed" } : x)));
+    }
+  };
+
+  const discardPending = (clientId: string): void => {
+    setPending((p) => p.filter((x) => x.clientId !== clientId));
   };
 
   // Display-side decryption: walks every DM message and replaces its body
@@ -328,6 +477,37 @@ export function RoomChatPanel({
   // Deleted messages vanish from the stream (Discord semantics) instead of
   // leaving tombstone rows that read as blank gaps.
   const visible = useMemo(() => decrypted.filter((m) => m.deletedAt === null), [decrypted]);
+
+  // Autoscroll + unread bookkeeping. On the first paint we jump to the bottom.
+  // After that: my own sends and arrivals-while-near-bottom keep the view
+  // pinned; arrivals while scrolled up raise the "N new ↓" pill and drop an
+  // unread divider before the first unseen message.
+  useEffect(() => {
+    const el = listRef.current;
+    if (!el) return;
+    const last = visible[visible.length - 1];
+    const lastId = last?.id ?? null;
+    const appended = lastId !== null && lastId !== prevLastIdRef.current;
+    const nearBottom = el.scrollHeight - el.scrollTop - el.clientHeight < 80;
+    const mine = last?.authorId === localIdentity;
+    if (!hydratedRef.current) {
+      el.scrollTop = el.scrollHeight;
+      if (lastId !== null) hydratedRef.current = true;
+    } else if (appended) {
+      if (nearBottom || mine) {
+        el.scrollTop = el.scrollHeight;
+        setNewBelow(0);
+        setUnreadDividerId(null);
+      } else {
+        setNewBelow((n) => n + 1);
+        setUnreadDividerId((cur) => cur ?? lastId);
+      }
+    } else if (nearBottom) {
+      // Non-append change (e.g. a reaction) while pinned — stay pinned.
+      el.scrollTop = el.scrollHeight;
+    }
+    prevLastIdRef.current = lastId;
+  }, [visible, localIdentity]);
 
   const insertEmoji = (e: string): void => {
     setDraft((d) => d + e);
@@ -566,7 +746,9 @@ export function RoomChatPanel({
           gap: "var(--s-3)",
         }}
       >
-        {visible.length === 0 ? (
+        {historyLoading ? (
+          <ChatHistorySkeleton />
+        ) : visible.length === 0 && pending.length === 0 ? (
           <div
             style={{
               color: "var(--text-faint)",
@@ -579,34 +761,72 @@ export function RoomChatPanel({
             No messages yet.
           </div>
         ) : (
-          visible.map((m, i) => {
-            const prev = i > 0 ? visible[i - 1]! : null;
-            const dayChanged =
-              prev === null ||
-              new Date(prev.createdAt).toDateString() !== new Date(m.createdAt).toDateString();
-            return (
-              <div key={m.id} style={{ display: "contents" }}>
-                {dayChanged && <DayDivider iso={m.createdAt} />}
-                <ChatBubble
-                  msg={m}
-                  me={m.authorId === localIdentity}
-                  followup={!dayChanged && prev !== null && prev.authorId === m.authorId}
-                  onToggleReaction={(emoji, mine) => toggleReaction(m.id, emoji, mine)}
-                  onContextMenu={(x, y) => {
-                    setDeleteArmed(false);
-                    setMsgMenu({
-                      id: m.id,
-                      x,
-                      y,
-                      body: m.body ?? "",
-                      mine: m.authorId === localIdentity && m.deletedAt === null,
-                      pinned: (m.pinnedAt ?? null) !== null,
-                    });
-                  }}
-                />
-              </div>
-            );
-          })
+          <>
+            {visible.map((m, i) => {
+              const prev = i > 0 ? visible[i - 1]! : null;
+              const dayChanged =
+                prev === null ||
+                new Date(prev.createdAt).toDateString() !== new Date(m.createdAt).toDateString();
+              const showUnread = unreadDividerId !== null && m.id === unreadDividerId;
+              return (
+                <div key={m.id} style={{ display: "contents" }}>
+                  {showUnread && <NewMessagesDivider count={newBelow} />}
+                  {dayChanged && <DayDivider iso={m.createdAt} />}
+                  <ChatBubble
+                    msg={m}
+                    me={m.authorId === localIdentity}
+                    followup={!dayChanged && !showUnread && prev !== null && prev.authorId === m.authorId}
+                    onToggleReaction={(emoji, mine) => toggleReaction(m.id, emoji, mine)}
+                    onContextMenu={(x, y) => {
+                      setDeleteArmed(false);
+                      setMsgMenu({
+                        id: m.id,
+                        x,
+                        y,
+                        body: m.body ?? "",
+                        mine: m.authorId === localIdentity && m.deletedAt === null,
+                        pinned: (m.pinnedAt ?? null) !== null,
+                      });
+                    }}
+                  />
+                </div>
+              );
+            })}
+            {pending.map((p) => (
+              <PendingBubble
+                key={p.clientId}
+                item={p}
+                onRetry={() => void retryPending(p.clientId)}
+                onDiscard={() => discardPending(p.clientId)}
+              />
+            ))}
+          </>
+        )}
+        {newBelow > 0 && (
+          <div style={{ position: "sticky", bottom: 4, display: "flex", justifyContent: "center", pointerEvents: "none", zIndex: 6 }}>
+            <button
+              type="button"
+              onClick={jumpToBottom}
+              style={{
+                pointerEvents: "auto",
+                appearance: "none",
+                cursor: "pointer",
+                display: "inline-flex",
+                alignItems: "center",
+                gap: 6,
+                padding: "4px 12px",
+                borderRadius: 999,
+                border: "1px solid color-mix(in srgb, var(--accent) 45%, var(--border))",
+                background: "var(--accent)",
+                color: "var(--on-accent)",
+                fontSize: "var(--t-2xs)",
+                fontWeight: 600,
+                boxShadow: "var(--shadow-1)",
+              }}
+            >
+              {newBelow} new message{newBelow === 1 ? "" : "s"} ↓
+            </button>
+          </div>
         )}
         {error && (
           <div
@@ -905,6 +1125,116 @@ function DayDivider({ iso }: { iso: string }): ReactElement {
   );
 }
 
+// Accent "new messages" marker — distinct from the neutral DayDivider so an
+// unread boundary reads at a glance.
+function NewMessagesDivider({ count }: { count: number }): ReactElement {
+  return (
+    <div
+      style={{
+        display: "flex",
+        alignItems: "center",
+        gap: "var(--s-3)",
+        margin: "var(--s-2) 0",
+        fontFamily: "var(--font-mono)",
+        fontSize: "var(--t-2xs)",
+        letterSpacing: ".14em",
+        textTransform: "uppercase",
+        color: "var(--accent)",
+      }}
+    >
+      <span style={{ flex: 1, height: 1, background: "color-mix(in srgb, var(--accent) 45%, transparent)" }} />
+      {count > 0 ? `${count} new` : "new"}
+      <span style={{ flex: 1, height: 1, background: "color-mix(in srgb, var(--accent) 45%, transparent)" }} />
+    </div>
+  );
+}
+
+// Loading placeholder — three shimmering rows so an in-flight history fetch
+// never masquerades as an empty thread.
+function ChatHistorySkeleton(): ReactElement {
+  return (
+    <div style={{ display: "flex", flexDirection: "column", gap: "var(--s-4)", padding: "var(--s-2) 0" }} aria-hidden>
+      {[0, 1, 2].map((i) => (
+        <div key={i} style={{ display: "flex", flexDirection: i === 1 ? "row-reverse" : "row", gap: "var(--s-2)", alignItems: "flex-end" }}>
+          <div className="rv-skeleton" style={{ width: 30, height: 30, borderRadius: "50%", flexShrink: 0 }} />
+          <div className="rv-skeleton" style={{ width: `${55 - i * 8}%`, height: "2.2rem", borderRadius: 14 }} />
+        </div>
+      ))}
+    </div>
+  );
+}
+
+// Optimistic outbound bubble — greyed while sending, retryable on failure.
+function PendingBubble({
+  item,
+  onRetry,
+  onDiscard,
+}: {
+  item: PendingMessage;
+  onRetry: () => void;
+  onDiscard: () => void;
+}): ReactElement {
+  const failed = item.status === "failed";
+  return (
+    <div style={{ display: "flex", flexDirection: "row-reverse", alignItems: "flex-end", gap: "var(--s-2)" }}>
+      <div style={{ width: 30, flexShrink: 0 }} />
+      <div style={{ display: "flex", flexDirection: "column", gap: 3, maxWidth: "78%", alignItems: "flex-end" }}>
+        <div
+          style={{
+            padding: "8px 13px",
+            borderRadius: 14,
+            fontSize: "var(--t-sm)",
+            lineHeight: 1.5,
+            wordBreak: "break-word",
+            background: "var(--bubble-me)",
+            color: "#fff",
+            border: failed ? "1px solid var(--danger)" : "1px solid var(--bubble-me)",
+            opacity: failed ? 0.7 : 0.55,
+          }}
+        >
+          {item.text}
+        </div>
+        <div
+          style={{
+            display: "flex",
+            alignItems: "center",
+            gap: 6,
+            fontFamily: "var(--font-mono)",
+            fontSize: "var(--t-2xs)",
+            color: failed ? "var(--danger)" : "var(--text-faint)",
+          }}
+        >
+          {failed ? (
+            <>
+              <span>failed to send</span>
+              <button type="button" onClick={onRetry} style={pendingActionStyle}>
+                retry
+              </button>
+              <button type="button" onClick={onDiscard} style={pendingActionStyle} aria-label="Discard message">
+                ✕
+              </button>
+            </>
+          ) : (
+            "sending…"
+          )}
+        </div>
+      </div>
+    </div>
+  );
+}
+
+const pendingActionStyle: CSSProperties = {
+  appearance: "none",
+  background: "transparent",
+  border: 0,
+  padding: 0,
+  font: "inherit",
+  color: "inherit",
+  cursor: "pointer",
+  textDecoration: "underline",
+  textUnderlineOffset: 2,
+};
+
 // Deck 2.4 message row: 32px avatar beside the stack, mine reversed with
 // the ink bubble, theirs white with a hairline; follow-ups from the same
 // author drop the name/time + avatar and tighten up.
@@ -941,6 +1271,13 @@ function ChatBubble({
   onToggleReaction?: (emoji: string, mine: boolean) => void;
 }): ReactElement {
   const [hovered, setHovered] = useState(false);
+  // Arbitrary-emoji reaction picker, opened from the hover menu's "＋".
+  // Fixed-positioned (anchored to the button rect) so the emoji panel never
+  // gets clipped by the scroll container.
+  const [reactPos, setReactPos] = useState<{ x: number; y: number } | null>(null);
+  const reactWrapRef = useRef<HTMLDivElement>(null);
+  const reactBtnRef = useRef<HTMLButtonElement>(null);
+  useDismiss(reactPos !== null, () => setReactPos(null), [reactWrapRef, reactBtnRef]);
   const time = new Date(msg.createdAt).toLocaleTimeString(undefined, {
     hour: "2-digit",
     minute: "2-digit",
@@ -964,8 +1301,8 @@ function ChatBubble({
         position: "relative",
       }}
     >
-      {/* 2.5k hover quick-reactions */}
-      {hovered && !deleted && onToggleReaction && (
+      {/* 2.5k hover reactions: quick set + arbitrary-emoji picker */}
+      {(hovered || reactPos !== null) && !deleted && onToggleReaction && (
         <div
           style={{
             position: "absolute",
@@ -1003,6 +1340,50 @@ function ChatBubble({
               </button>
             );
           })}
+          <button
+            ref={reactBtnRef}
+            type="button"
+            title="More reactions"
+            aria-label="More reactions"
+            onClick={() => {
+              if (reactPos) {
+                setReactPos(null);
+                return;
+              }
+              const r = reactBtnRef.current?.getBoundingClientRect();
+              if (r) {
+                setReactPos({
+                  x: Math.max(8, Math.min(r.left, window.innerWidth - 312)),
+                  y: Math.min(r.bottom + 4, window.innerHeight - 380),
+                });
+              }
+            }}
+            style={{
+              appearance: "none",
+              background: reactPos ? "var(--accent-tint)" : "transparent",
+              border: 0,
+              borderRadius: 999,
+              padding: "1px 4px",
+              fontSize: 13,
+              cursor: "pointer",
+              lineHeight: 1.2,
+              color: "var(--text-mid)",
+            }}
+          >
+            ＋
+          </button>
+        </div>
+      )}
+      {reactPos !== null && !deleted && onToggleReaction && (
+        <div ref={reactWrapRef} className="rv-reaction-pop" style={{ left: reactPos.x, top: reactPos.y }}>
+          <EmojiPicker
+            embedded
+            onPick={(emoji) => {
+              const mine = msg.reactions?.find((r) => r.emoji === emoji)?.mine ?? false;
+              onToggleReaction(emoji, mine);
+              setReactPos(null);
+            }}
+          />
         </div>
       )}
       <div style={{ flexShrink: 0, visibility: followup ? "hidden" : "visible", marginBottom: 2 }}>
@@ -1053,7 +1434,7 @@ function ChatBubble({
             fontStyle: deleted ? "italic" : "normal",
           }}
         >
-          {deleted ? "(deleted)" : bodyWithMentions(msg.body ?? "", (msg.mentions?.length ?? 0) > 0)}
+          {deleted ? "(deleted)" : renderRichBody(msg.body ?? "", (msg.mentions?.length ?? 0) > 0, me)}
         </div>
         {/* Reaction chips — click to toggle; mine = Cherry-tinted */}
         {(msg.reactions?.length ?? 0) > 0 && (
@@ -1211,7 +1592,7 @@ function shortcodeOf(name: string): string {
   return `:${name.toLowerCase().replace(/[^a-z0-9]+/g, "_").replace(/^_|_$/g, "")}:`;
 }
 
-function EmojiPicker({ onPick }: { onPick: (e: string) => void }): ReactElement {
+function EmojiPicker({ onPick, embedded = false }: { onPick: (e: string) => void; embedded?: boolean }): ReactElement {
   const [query, setQuery] = useState("");
   const [activeTab, setActiveTab] = useState("recent");
   const [preview, setPreview] = useState<EmojiEntry>(["🎉", "Party popper"]);
@@ -1236,7 +1617,7 @@ function EmojiPicker({ onPick }: { onPick: (e: string) => void }): ReactElement 
   );
 
   return (
-    <div className="rv-ep">
+    <div className="rv-ep" data-embed={embedded ? "true" : undefined}>
       <div className="rv-ep-search">
         <input
           className="rv-input"

@@ -428,7 +428,7 @@ export function FriendsScreen({ onJoinRoom, onOpenDms }: Props = {}): ReactEleme
                     className="rv-btn rv-btn-icon"
                     title="Send a DM"
                     style={{ height: "1.8rem", width: "1.8rem" }}
-                    onClick={() => onOpenDms?.()}
+                    onClick={() => onOpenDms?.(f.user.id)}
                   >
                     <I.Chat size={13} />
                   </button>
@@ -536,8 +536,9 @@ export function FriendsScreen({ onJoinRoom, onOpenDms }: Props = {}): ReactEleme
             icon="✉"
             label="Send DM"
             onClick={() => {
+              const id = rowMenu.friend.user.id;
               setRowMenu(null);
-              onOpenDms?.();
+              onOpenDms?.(id);
             }}
           />
           <MenuItem

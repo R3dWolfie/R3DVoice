@@ -1120,3 +1120,37 @@ button.rv-match-card:hover { border-color: var(--border-strong); }
   --chrome:       #d9d9d9;
   --disabled:     #b4b4b4;
 }
+
+/* ===================================================================== *
+ * agent(chat) — appended by the chat UX pass (Fable).                   *
+ * Reaction picker reuse of the composer EmojiPicker + supporting bits.  *
+ * ===================================================================== */
+
+/* Embedded EmojiPicker: drop the composer's absolute anchoring so it can
+ * be reused inside a message's fixed-position reaction popover. */
+.rv-ep[data-embed="true"] {
+  position: static;
+  bottom: auto; left: auto; right: auto;
+  width: 100%;
+}
+
+/* Message reaction popover — fixed to the viewport (coords set inline from
+ * the trigger button's rect) so the emoji panel is never clipped by the
+ * chat scroll container. */
+.rv-reaction-pop {
+  position: fixed;
+  z-index: 200;
+  width: 300px;
+  max-width: 92vw;
+}
+
+/* Small inline spinner for in-flight buttons/rows (join, "Go"). */
+.rv-inline-spinner {
+  display: inline-block;
+  width: 14px; height: 14px;
+  border-radius: 50%;
+  border: 2px solid color-mix(in srgb, currentColor 35%, transparent);
+  border-top-color: currentColor;
+  animation: rv-spin .8s linear infinite;
+  vertical-align: middle;
+}
