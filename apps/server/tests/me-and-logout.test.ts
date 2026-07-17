@@ -39,6 +39,7 @@ describe("GET /me and POST /auth/logout", () => {
       handle: null,
       avatarUrl: null,
       dndUntil: null,
+      emailVerified: true,
       totpEnabled: false,
       hasE2eeKey: false,
     });

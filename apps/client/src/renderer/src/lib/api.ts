@@ -117,6 +117,17 @@ export class ApiClient {
   logout(): Promise<void> {
     return this.request("POST", "/auth/logout");
   }
+  // Email verification (1.5) + password reset (1.6/1.7). All no-op-safe when
+  // the server has no SMTP configured.
+  resendVerificationEmail(): Promise<void> {
+    return this.request("POST", "/auth/verify-email/resend");
+  }
+  requestPasswordReset(email: string): Promise<void> {
+    return this.request("POST", "/auth/password-reset/request", { email });
+  }
+  confirmPasswordReset(token: string, password: string): Promise<void> {
+    return this.request("POST", "/auth/password-reset/confirm", { token, password });
+  }
   me(): Promise<UserDTO> {
     return this.request("GET", "/me");
   }

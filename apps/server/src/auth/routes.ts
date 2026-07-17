@@ -11,6 +11,9 @@ import { AuthError, ConflictError, ValidationError } from "../errors.js";
 import { buildOtpAuthUrl, buildQrDataUrl, generateTotpSecret, verifyTotpCode } from "./totp.js";
 import { wrapAtRest, unwrapAtRest } from "../crypto-at-rest.js";
 import { generateUniqueHandle } from "./handle-generator.js";
+import { emailEnabled, sendMail } from "../email/mailer.js";
+import { verifyEmail, passwordResetEmail, verifyResultPage } from "../email/templates.js";
+import { issueEmailToken, consumeEmailToken } from "../email/tokens.js";
 
 const registerBodySchema = z.object({
   email: z.string().email(),
@@ -26,6 +29,38 @@ const loginBodySchema = z.object({
   email: z.string().email(),
   password: z.string().min(1),
 });
+
+interface AuthUserRow {
+  id: string;
+  email: string;
+  displayName: string;
+  handle: string | null;
+  avatarUrl: string | null;
+  dndUntil: Date | null;
+  emailVerifiedAt: Date | null;
+}
+
+function toAuthUser(u: AuthUserRow): Record<string, unknown> {
+  return {
+    id: u.id,
+    email: u.email,
+    displayName: u.displayName,
+    handle: u.handle ?? null,
+    avatarUrl: u.avatarUrl ?? null,
+    dndUntil: u.dndUntil?.toISOString() ?? null,
+    // When email is off, everyone is implicitly verified (no gate to satisfy).
+    emailVerified: !emailEnabled() || u.emailVerifiedAt !== null,
+  };
+}
+
+/** Fire-and-forget verify email so registration latency isn't mail-bound. */
+async function sendVerification(user: { id: string; email: string; displayName: string }): Promise<void> {
+  if (!emailEnabled()) return;
+  const raw = await issueEmailToken(user.id, "verify");
+  const link = `${getConfig().APP_URL}/auth/verify-email?token=${encodeURIComponent(raw)}`;
+  const mail = verifyEmail(user.displayName, link);
+  await sendMail({ to: user.email, ...mail });
+}
 
 export async function authRoutes(app: FastifyInstance): Promise<void> {
   app.post(
@@ -53,6 +88,8 @@ export async function authRoutes(app: FastifyInstance): Promise<void> {
             passwordHash,
             handle,
             handleLower,
+            // Email off → auto-verified; on → null until the link is clicked.
+            emailVerifiedAt: emailEnabled() ? null : new Date(),
             ...(e2eePublicKey && { e2eePublicKey }),
           },
         });
@@ -63,15 +100,20 @@ export async function authRoutes(app: FastifyInstance): Promise<void> {
         }
         throw err;
       }
+      // Best-effort: a mail hiccup must not fail registration (the user can
+      // resend from the gate). Awaited so token creation is ordered, but errors
+      // are swallowed.
+      try {
+        await sendVerification(user);
+      } catch (err) {
+        app.log.error({ err }, "verification email send failed");
+      }
       const session = await prisma.session.create({ data: { userId: user.id } });
       const token = signSessionToken(
         { userId: user.id, sessionId: session.id },
         getConfig().JWT_SECRET,
       );
-      reply.status(201).send({
-        token,
-        user: { id: user.id, email: user.email, displayName: user.displayName, handle: user.handle ?? null, avatarUrl: user.avatarUrl ?? null, dndUntil: user.dndUntil?.toISOString() ?? null },
-      });
+      reply.status(201).send({ token, user: toAuthUser(user) });
     },
   );
 
@@ -106,10 +148,7 @@ export async function authRoutes(app: FastifyInstance): Promise<void> {
       { userId: user.id, sessionId: session.id },
       getConfig().JWT_SECRET,
     );
-    reply.status(200).send({
-      token,
-      user: { id: user.id, email: user.email, displayName: user.displayName, handle: user.handle ?? null, avatarUrl: user.avatarUrl ?? null, dndUntil: user.dndUntil?.toISOString() ?? null },
-    });
+    reply.status(200).send({ token, user: toAuthUser(user) });
   });
 
   app.post(
@@ -142,10 +181,7 @@ export async function authRoutes(app: FastifyInstance): Promise<void> {
         { userId: user.id, sessionId: session.id },
         getConfig().JWT_SECRET,
       );
-      reply.status(200).send({
-        token,
-        user: { id: user.id, email: user.email, displayName: user.displayName, handle: user.handle ?? null, avatarUrl: user.avatarUrl ?? null, dndUntil: user.dndUntil?.toISOString() ?? null },
-      });
+      reply.status(200).send({ token, user: toAuthUser(user) });
     },
   );
 
@@ -153,12 +189,7 @@ export async function authRoutes(app: FastifyInstance): Promise<void> {
     const user = await prisma.user.findUnique({ where: { id: request.auth!.userId } });
     if (!user) throw new AuthError("user not found");
     return {
-      id: user.id,
-      email: user.email,
-      displayName: user.displayName,
-      handle: user.handle ?? null,
-      avatarUrl: user.avatarUrl ?? null,
-      dndUntil: user.dndUntil?.toISOString() ?? null,
+      ...toAuthUser(user),
       totpEnabled: user.totpEnabledAt !== null,
       hasE2eeKey: user.e2eePublicKey !== null,
     };
@@ -309,6 +340,95 @@ export async function authRoutes(app: FastifyInstance): Promise<void> {
         data: { totpSecret: null, totpEnabledAt: null },
       });
       return { enabled: false };
+    },
+  );
+
+  // ---------------------------------------------------------------------
+  // Email verification (WireFrames 1.5)
+  // ---------------------------------------------------------------------
+
+  // Clicked from the emailed link — returns an HTML page, not JSON. Always
+  // 200 so the browser renders our result page (success or expired) rather
+  // than a bare error.
+  app.get<{ Querystring: { token?: string } }>("/auth/verify-email", async (request, reply) => {
+    const raw = request.query.token;
+    const userId = raw ? await consumeEmailToken(raw, "verify") : null;
+    if (userId) {
+      await prisma.user.update({ where: { id: userId }, data: { emailVerifiedAt: new Date() } });
+    }
+    reply.type("text/html").send(verifyResultPage(Boolean(userId)));
+  });
+
+  // Resend the verification email to the signed-in user (rate-limited).
+  app.post(
+    "/auth/verify-email/resend",
+    { preHandler: requireAuth, config: { rateLimit: { max: 3, timeWindow: "10 minutes" } } },
+    async (request, reply) => {
+      const user = await prisma.user.findUnique({ where: { id: request.auth!.userId } });
+      if (!user) throw new AuthError("user not found");
+      if (!emailEnabled() || user.emailVerifiedAt) {
+        // Nothing to do — idempotent success.
+        reply.status(204).send();
+        return;
+      }
+      try {
+        await sendVerification(user);
+      } catch (err) {
+        app.log.error({ err }, "verification resend failed");
+      }
+      reply.status(204).send();
+    },
+  );
+
+  // ---------------------------------------------------------------------
+  // Password reset (WireFrames 1.6 request → 1.7 form)
+  // ---------------------------------------------------------------------
+
+  // Request a reset link. ALWAYS 204 regardless of whether the email exists —
+  // no account enumeration. Only fires mail when email is configured.
+  app.post(
+    "/auth/password-reset/request",
+    { config: { rateLimit: { max: 5, timeWindow: "15 minutes" } } },
+    async (request, reply) => {
+      const parsed = z.object({ email: z.string().email() }).safeParse(request.body);
+      if (!parsed.success) throw new ValidationError("invalid email");
+      if (emailEnabled()) {
+        const user = await prisma.user.findUnique({ where: { email: parsed.data.email } });
+        if (user) {
+          try {
+            const raw = await issueEmailToken(user.id, "reset");
+            const link = `${getConfig().APP_URL}/reset?token=${encodeURIComponent(raw)}`;
+            const mail = passwordResetEmail(user.displayName, link);
+            await sendMail({ to: user.email, ...mail });
+          } catch (err) {
+            app.log.error({ err }, "password reset email failed");
+          }
+        }
+      }
+      reply.status(204).send();
+    },
+  );
+
+  // Confirm a reset: validate the token, set the new password, burn every
+  // session (a reset implies the account may be compromised).
+  app.post(
+    "/auth/password-reset/confirm",
+    { config: { rateLimit: { max: 10, timeWindow: "15 minutes" } } },
+    async (request, reply) => {
+      const parsed = z
+        .object({ token: z.string().min(1), password: z.string().min(12, "password must be at least 12 characters") })
+        .safeParse(request.body);
+      if (!parsed.success) throw new ValidationError(parsed.error.issues[0]?.message ?? "invalid input");
+      const userId = await consumeEmailToken(parsed.data.token, "reset");
+      if (!userId) throw new ValidationError("this reset link is invalid or has expired");
+      const passwordHash = await hashPassword(parsed.data.password);
+      await prisma.$transaction([
+        prisma.user.update({ where: { id: userId }, data: { passwordHash } }),
+        // Resetting the password also confirms control of the inbox.
+        prisma.user.update({ where: { id: userId }, data: { emailVerifiedAt: new Date() } }),
+        prisma.session.deleteMany({ where: { userId } }),
+      ]);
+      reply.status(204).send();
     },
   );
 }

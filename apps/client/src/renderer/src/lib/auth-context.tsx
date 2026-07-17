@@ -39,3 +39,10 @@ export function useAuthStore<T>(selector: (s: AuthState) => T): T {
 export function useNeedsHandle(): boolean {
   return useAuthStore((s) => s.user !== null && (s.user.handle === null || s.user.handle === undefined));
 }
+
+// True only when the server flagged this account as unverified (email
+// configured + link unclicked). Absent/true field = no gate — self-hosters
+// without SMTP are never gated.
+export function useNeedsEmailVerify(): boolean {
+  return useAuthStore((s) => s.user !== null && s.user.emailVerified === false);
+}

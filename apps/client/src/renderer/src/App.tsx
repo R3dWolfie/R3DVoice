@@ -1,5 +1,5 @@
 import { useEffect, useState, type ReactElement } from "react";
-import { AuthProvider, useAuthStore, useNeedsHandle } from "./lib/auth-context.js";
+import { AuthProvider, useAuthStore, useNeedsHandle, useNeedsEmailVerify } from "./lib/auth-context.js";
 import { usePrefs } from "./lib/prefs-singleton.js";
 import { applyThemeOverrides } from "./lib/theme-tokens.js";
 import { disconnectTransport, ensureTransport, setCurrentUserForNotifications } from "./lib/chat-transport.js";
@@ -17,10 +17,13 @@ import { UpdateToast } from "./components/UpdateToast.js";
 import { ToastHost } from "./components/ToastHost.js";
 import { ConnectionBanner } from "./components/ConnectionBanner.js";
 import { InviteQueue } from "./components/InviteQueue.js";
+import { PasswordResetScreen } from "./screens/PasswordResetScreen.js";
+import { VerifyEmailGate } from "./components/VerifyEmailGate.js";
 
 function Router({ topPage, setTopPage }: { topPage: TopPage; setTopPage: (p: TopPage) => void }): ReactElement {
   const status = useAuthStore((s) => s.status);
   const needsHandle = useNeedsHandle();
+  const needsEmailVerify = useNeedsEmailVerify();
   const user = useAuthStore((s) => s.user);
   const token = useAuthStore((s) => s.token);
   const serverUrl = useAuthStore((s) => s.serverUrl);
@@ -59,11 +62,38 @@ function Router({ topPage, setTopPage }: { topPage: TopPage; setTopPage: (p: Top
   const [pendingDmUserId, setPendingDmUserId] = useState<string | null>(null);
   const [settingsOpen, setSettingsOpen] = useState(false);
 
+  // Password-reset deep link (1.7): emailed as APP_URL/reset?token=… and
+  // opened in the web client. Takes over the whole shell until dismissed.
+  const [resetToken, setResetToken] = useState<string | null>(() => {
+    try {
+      const u = new URL(window.location.href);
+      return u.pathname.replace(/\/$/, "") === "/reset" ? u.searchParams.get("token") : null;
+    } catch {
+      return null;
+    }
+  });
+
   // Listen for invite deep links from the main process.
   useEffect(() => {
     const off = window.r3dvoice.onInviteCode((code: string) => setPendingInviteCode(code));
     return off;
   }, []);
+
+  if (resetToken) {
+    return (
+      <PasswordResetScreen
+        token={resetToken}
+        onDone={() => {
+          setResetToken(null);
+          try {
+            window.history.replaceState({}, "", "/");
+          } catch {
+            /* ignore (desktop) */
+          }
+        }}
+      />
+    );
+  }
 
   // Full-screen loader ONLY for the initial hydrate. Later "loading" states
   // (login attempts) must keep LoginScreen mounted or its fields are wiped
@@ -91,6 +121,9 @@ function Router({ topPage, setTopPage }: { topPage: TopPage; setTopPage: (p: Top
     );
   }
   if (status === "authenticated") {
+    if (needsEmailVerify) {
+      return <VerifyEmailGate />;
+    }
     if (needsHandle) {
       return <HandlePickGate />;
     }

@@ -42,6 +42,9 @@ export interface UserDTO {
   avatarUrl?: string | null;
   totpEnabled?: boolean;
   dndUntil?: string | null;
+  /** False only when email is configured server-side and the link is unclicked
+   *  (drives the 1.5 verify gate). True/undefined = no gate. */
+  emailVerified?: boolean;
 }
 
 // Room DTOs

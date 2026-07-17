@@ -14,6 +14,11 @@ model User {
   passwordHash String
   createdAt    DateTime @default(now())
 
+  // Null until the user clicks the verification link. Backfilled to createdAt
+  // for pre-existing accounts so nobody is retroactively locked out. Only
+  // gates the client when email is configured (SMTP_HOST set).
+  emailVerifiedAt DateTime?
+
   totpSecret    String?
   totpEnabledAt DateTime?
 
@@ -41,6 +46,7 @@ model User {
   invites       Invite[]
   reactions     Reaction[]
   backupCodes   TotpBackupCode[]
+  emailTokens   EmailToken[]
   threadReads     ThreadReadState[]
   threadMutes     ThreadMuteState[]
   directInvitesSent     DirectInvite[] @relation("DirectInviteFrom")
@@ -239,4 +245,21 @@ model DirectInvite {
 
   @@index([toUserId, status, createdAt])
   @@index([roomId, status])
+}
+
+// Single-use email tokens for verify-address and password-reset flows. Only
+// the sha256 hash of the raw token is stored; the raw value lives only in the
+// emailed link. kind = "verify" | "reset".
+model EmailToken {
+  id        String    @id @default(uuid())
+  userId    String
+  kind      String
+  tokenHash String    @unique
+  expiresAt DateTime
+  usedAt    DateTime?
+  createdAt DateTime  @default(now())
+
+  user User @relation(fields: [userId], references: [id], onDelete: Cascade)
+
+  @@index([userId, kind])
 }

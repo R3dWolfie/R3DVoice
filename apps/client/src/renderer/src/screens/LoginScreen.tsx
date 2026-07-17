@@ -4,6 +4,7 @@ import { usePrefs, prefsActions } from "../lib/prefs-singleton.js";
 import { Field, Spinner, APP_VERSION } from "../components/Primitives.js";
 import { I } from "../components/Icons.js";
 import { parseKeyBackup, saveKeyPair, loadKeyPair } from "../lib/key-storage.js";
+import { ApiClient } from "../lib/api.js";
 
 type Mode = "login" | "register";
 
@@ -35,6 +36,35 @@ export function LoginScreen(): ReactElement {
   const cancelTotp = useAuthStore((s) => s.cancelTotp);
   const [totpCode, setTotpCode] = useState("");
   const [keyImportMessage, setKeyImportMessage] = useState<string | null>(null);
+
+  // Forgot-password sub-flow (WireFrames 1.6): "request" collects the email,
+  // "sent" is the confirmation. The request endpoint always succeeds (no
+  // account enumeration), so "sent" shows regardless of whether the address
+  // has an account.
+  const [forgot, setForgot] = useState<"off" | "request" | "sent">("off");
+  const [forgotBusy, setForgotBusy] = useState(false);
+  const [forgotCooldown, setForgotCooldown] = useState(0);
+
+  useEffect(() => {
+    if (forgotCooldown <= 0) return;
+    const t = setInterval(() => setForgotCooldown((c) => Math.max(0, c - 1)), 1000);
+    return () => clearInterval(t);
+  }, [forgotCooldown]);
+
+  const submitForgot = async (): Promise<void> => {
+    if (forgotBusy || !email) return;
+    setForgotBusy(true);
+    try {
+      const api = new ApiClient(prefsServerUrl);
+      await api.requestPasswordReset(email);
+    } catch {
+      /* deliberately ignored — never reveal whether the email exists */
+    } finally {
+      setForgotBusy(false);
+      setForgot("sent");
+      setForgotCooldown(30);
+    }
+  };
 
   const onImportKey = (e: React.ChangeEvent<HTMLInputElement>): void => {
     const file = e.target.files?.[0];
@@ -116,6 +146,75 @@ export function LoginScreen(): ReactElement {
           </span>
         </div>
 
+        {forgot === "request" && (
+          <form
+            onSubmit={(e) => {
+              e.preventDefault();
+              void submitForgot();
+            }}
+            style={{ display: "flex", flexDirection: "column", gap: "var(--s-5)" }}
+          >
+            <div style={{ textAlign: "center" }}>
+              <div style={{ fontSize: "var(--t-lg)", fontWeight: 600 }}>Reset your password</div>
+              <div style={{ fontSize: "var(--t-xs)", color: "var(--text-dim)", marginTop: 4 }}>
+                We'll email a reset link to your account address.
+              </div>
+            </div>
+            <Field label="Email">
+              <input
+                className="rv-input"
+                type="email"
+                autoComplete="email"
+                required
+                autoFocus
+                value={email}
+                onChange={(e) => setEmail(e.target.value)}
+                placeholder="you@example.com"
+              />
+            </Field>
+            <button className="rv-btn" data-variant="primary" type="submit" disabled={forgotBusy || !email} style={{ height: "2.75rem" }}>
+              {forgotBusy ? (
+                <>
+                  <Spinner /> Sending…
+                </>
+              ) : (
+                "Send reset link"
+              )}
+            </button>
+            <button type="button" className="rv-btn" data-variant="ghost" onClick={() => setForgot("off")} style={{ height: "2.25rem" }}>
+              Back to sign in
+            </button>
+          </form>
+        )}
+
+        {forgot === "sent" && (
+          <div style={{ display: "flex", flexDirection: "column", gap: "var(--s-5)", textAlign: "center" }}>
+            <div>
+              <div style={{ fontSize: "40px", marginBottom: "var(--s-2)" }}>✉</div>
+              <div style={{ fontSize: "var(--t-lg)", fontWeight: 600, marginBottom: "var(--s-2)" }}>Reset link sent</div>
+              <div style={{ fontSize: "var(--t-sm)", color: "var(--text-mid)", lineHeight: 1.5 }}>
+                If an account exists for <span style={{ color: "var(--text)", fontWeight: 600 }}>{email}</span>, a reset
+                link is on its way.
+              </div>
+              <div style={{ fontSize: "var(--t-xs)", color: "var(--text-dim)", marginTop: "var(--s-3)" }}>
+                Don't see it? Check your spam folder. Mail can take ~1 minute.
+              </div>
+            </div>
+            <button
+              className="rv-btn"
+              disabled={forgotCooldown > 0 || forgotBusy}
+              onClick={() => void submitForgot()}
+              style={{ height: "2.5rem" }}
+            >
+              {forgotCooldown > 0 ? `Resend in ${forgotCooldown}s` : "Resend link"}
+            </button>
+            <button type="button" className="rv-btn" data-variant="ghost" onClick={() => setForgot("off")} style={{ height: "2.25rem" }}>
+              Back to sign in
+            </button>
+          </div>
+        )}
+
+        {forgot === "off" && (
         <form onSubmit={onSubmit} style={{ display: "flex", flexDirection: "column", gap: "var(--s-5)" }}>
           {!totpStep && (
             <div className="rv-tabs" role="tablist" style={{ gap: "var(--s-6)" }}>
@@ -192,7 +291,7 @@ export function LoginScreen(): ReactElement {
           {!totpStep && mode === "login" && (
             <button
               type="button"
-              title="Password reset needs the email flows — coming once SMTP is wired."
+              onClick={() => setForgot("request")}
               style={{
                 alignSelf: "flex-end",
                 appearance: "none",
@@ -205,8 +304,7 @@ export function LoginScreen(): ReactElement {
                 color: "var(--text-dim)",
                 textDecoration: "underline",
                 textUnderlineOffset: 2,
-                cursor: "default",
-                opacity: 0.7,
+                cursor: "pointer",
               }}
             >
               Forgot password?
@@ -324,6 +422,7 @@ export function LoginScreen(): ReactElement {
             </>
           )}
         </form>
+        )}
       </div>
 
       {/* footer pinned to the window edge — "self-hostable" doubles as the

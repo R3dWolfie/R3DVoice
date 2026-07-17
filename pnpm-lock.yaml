@@ -120,6 +120,9 @@ importers:
       livekit-server-sdk:
         specifier: ^2.9.0
         version: 2.15.1
+      nodemailer:
+        specifier: ^9.0.3
+        version: 9.0.3
       qrcode:
         specifier: ^1.5.4
         version: 1.5.4
@@ -136,6 +139,9 @@ importers:
       '@types/node':
         specifier: ^22.10.0
         version: 22.19.17
+      '@types/nodemailer':
+        specifier: ^8.0.1
+        version: 8.0.1
       '@types/qrcode':
         specifier: ^1.5.6
         version: 1.5.6
@@ -1359,6 +1365,9 @@ packages:
 
   '@types/node@22.19.17':
     resolution: {integrity: sha512-wGdMcf+vPYM6jikpS/qhg6WiqSV/OhG+jeeHT/KlVqxYfD40iYJf9/AE1uQxVWFvU7MipKRkRv8NSHiCGgPr8Q==}
+
+  '@types/nodemailer@8.0.1':
+    resolution: {integrity: sha512-PxpaInm8V1JQDd4j0ds5HfvWQk8JupS1C0Picb96QJsrrRDjBH+DlK7L4ZdNSqNULhiZRQHc40nLVShaGxXAMw==}
 
   '@types/plist@3.0.5':
     resolution: {integrity: sha512-E6OCaRmAe4WDmWNsL/9RMqdkkzDCY1etutkflWk4c+AcjDU07Pcz1fQwTX0TQz+Pxqn9i4L1TU3UFpjnrcDgxA==}
@@ -2603,6 +2612,10 @@ packages:
 
   node-releases@2.0.38:
     resolution: {integrity: sha512-3qT/88Y3FbH/Kx4szpQQ4HzUbVrHPKTLVpVocKiLfoYvw9XSGOX2FmD2d6DrXbVYyAQTF2HeF6My8jmzx7/CRw==}
+
+  nodemailer@9.0.3:
+    resolution: {integrity: sha512-n+YP+NKwR5zRWa60k3GiQ6Q3B4KXCoAw40dAKeCtYn020iNN74aWK2liXIC3ZEATeGql7we3tE3t8QwhY0eskw==}
+    engines: {node: '>=6.0.0'}
 
   nopt@9.0.0:
     resolution: {integrity: sha512-Zhq3a+yFKrYwSBluL4H9XP3m3y5uvQkB/09CwDruCiRmR/UJYnn9W4R48ry0uGC70aeTPKLynBtscP9efFFcPw==}
@@ -4479,6 +4492,10 @@ snapshots:
     dependencies:
       undici-types: 6.21.0
 
+  '@types/nodemailer@8.0.1':
+    dependencies:
+      '@types/node': 22.19.17
+
   '@types/plist@3.0.5':
     dependencies:
       '@types/node': 22.19.17
@@ -5978,6 +5995,8 @@ snapshots:
       which: 6.0.1
 
   node-releases@2.0.38: {}
+
+  nodemailer@9.0.3: {}
 
   nopt@9.0.0:
     dependencies:
