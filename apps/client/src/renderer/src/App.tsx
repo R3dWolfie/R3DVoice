@@ -5,6 +5,7 @@ import { disconnectTransport, ensureTransport, setCurrentUserForNotifications } 
 import { ApiClient } from "./lib/api.js";
 import { LoginScreen } from "./screens/LoginScreen.js";
 import { LobbyScreen } from "./screens/LobbyScreen.js";
+import { FriendsScreen } from "./screens/FriendsScreen.js";
 import { HandlePickGate } from "./components/HandlePickGate.js";
 import { prefsActions } from "./lib/prefs-singleton.js";
 import { WindowChrome, Spinner } from "./components/Primitives.js";
@@ -106,6 +107,15 @@ function Router(): ReactElement {
               }}
               onJoinRoomIdConsumed={() => setPendingJoinRoomId(null)}
               onInviteCode={(code) => setPendingInviteCode(code)}
+              onOpenDms={() => setTopPage("dms")}
+            />
+          ) : topPage === "friends" ? (
+            <FriendsScreen
+              onJoinRoom={(roomId) => {
+                setPendingJoinRoomId(roomId);
+                setTopPage("lobby");
+              }}
+              onOpenDms={() => setTopPage("dms")}
             />
           ) : (
             <DmsScreen

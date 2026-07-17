@@ -68,9 +68,11 @@ interface LobbyScreenProps {
   onInviteCodeConsumed?: () => void;
   onJoinRoomIdConsumed?: () => void;
   onInviteCode?: (code: string) => void;
+  /** Friend invites redeem into the DMs page — App switches the rail page. */
+  onOpenDms?: () => void;
 }
 
-export function LobbyScreen({ pendingInviteCode, pendingJoinRoomId, onInviteCodeConsumed, onJoinRoomIdConsumed, onInviteCode }: LobbyScreenProps = {}): ReactElement {
+export function LobbyScreen({ pendingInviteCode, pendingJoinRoomId, onInviteCodeConsumed, onJoinRoomIdConsumed, onInviteCode, onOpenDms }: LobbyScreenProps = {}): ReactElement {
   const token = useAuthStore((s) => s.token);
   const serverUrl = useAuthStore((s) => s.serverUrl);
 
@@ -208,8 +210,10 @@ export function LobbyScreen({ pendingInviteCode, pendingJoinRoomId, onInviteCode
           if (redirectTo.startsWith("/rooms/")) {
             const roomId = redirectTo.replace(/^\/rooms\//, "");
             void store.getState().join(roomId);
+          } else if (redirectTo.startsWith("/dms") && onOpenDms) {
+            setPhase({ kind: "lobby" });
+            onOpenDms();
           } else {
-            // /dms or unknown — return to lobby; DM page is not yet implemented.
             setPhase({ kind: "lobby" });
           }
         }}

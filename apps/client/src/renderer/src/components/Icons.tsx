@@ -57,6 +57,35 @@ function StarFilled({ size = 18, style, className }: IconProps): ReactElement {
   );
 }
 
+function Home({ size = 18, style, className }: IconProps): ReactElement {
+  return (
+    <svg viewBox="0 0 24 24" width={size} height={size} fill="none" stroke="currentColor" strokeWidth="1.8" strokeLinecap="round" strokeLinejoin="round" style={style} className={className}>
+      <path d="M3 10.5 12 3l9 7.5" />
+      <path d="M5 9.5V21h5v-6h4v6h5V9.5" />
+    </svg>
+  );
+}
+
+function Users({ size = 18, style, className }: IconProps): ReactElement {
+  return (
+    <svg viewBox="0 0 24 24" width={size} height={size} fill="none" stroke="currentColor" strokeWidth="1.8" strokeLinecap="round" strokeLinejoin="round" style={style} className={className}>
+      <circle cx="9" cy="8" r="3.5" />
+      <path d="M2.5 20c.8-3.2 3.4-5 6.5-5s5.7 1.8 6.5 5" />
+      <path d="M16 5.2a3.5 3.5 0 0 1 0 5.6" />
+      <path d="M17.5 15.3c2 .7 3.5 2.3 4 4.7" />
+    </svg>
+  );
+}
+
+function Bell({ size = 18, style, className }: IconProps): ReactElement {
+  return (
+    <svg viewBox="0 0 24 24" width={size} height={size} fill="none" stroke="currentColor" strokeWidth="1.8" strokeLinecap="round" strokeLinejoin="round" style={style} className={className}>
+      <path d="M6 9a6 6 0 0 1 12 0c0 5 2 6.5 2 6.5H4S6 14 6 9" />
+      <path d="M10 19.5a2.2 2.2 0 0 0 4 0" />
+    </svg>
+  );
+}
+
 function Lock({ size = 18, style, className }: IconProps): ReactElement {
   return (
     <svg viewBox="0 0 24 24" width={size} height={size} fill="none" stroke="currentColor" strokeWidth="1.8" strokeLinecap="round" strokeLinejoin="round" style={style} className={className}>
@@ -324,6 +353,9 @@ export function Logo({ size = 22, style, className }: IconProps): ReactElement {
 }
 
 export const I = {
+  Home,
+  Users,
+  Bell,
   Mic,
   MicOff,
   Speaker,

@@ -6,7 +6,7 @@ import { UserPanelPopover } from "./UserPanelPopover.js";
 import { UnreadDot } from "./UnreadDot.js";
 import { useUnreadStore } from "../lib/unread-store.js";
 
-export type TopPage = "lobby" | "dms";
+export type TopPage = "lobby" | "dms" | "friends";
 
 type Props = {
   active: TopPage;
@@ -69,8 +69,8 @@ export function LeftIconColumn({ active, onNavigate, onOpenSettings }: Props): R
     >
       <I.Logo size={22} />
       <div style={{ height: "var(--s-3)" }} />
-      <NavIcon active={active === "lobby"} onClick={() => onNavigate("lobby")} ariaLabel="Lobby">
-        <I.Logo size={16} />
+      <NavIcon active={active === "lobby"} onClick={() => onNavigate("lobby")} ariaLabel="Home">
+        <I.Home size={16} />
       </NavIcon>
       <div style={{ position: "relative" }}>
         <NavIcon active={active === "dms"} onClick={() => onNavigate("dms")} ariaLabel="Direct messages">
@@ -82,6 +82,9 @@ export function LeftIconColumn({ active, onNavigate, onOpenSettings }: Props): R
           </span>
         )}
       </div>
+      <NavIcon active={active === "friends"} onClick={() => onNavigate("friends")} ariaLabel="Friends">
+        <I.Users size={16} />
+      </NavIcon>
 
       <div style={{ flex: 1 }} />
 
