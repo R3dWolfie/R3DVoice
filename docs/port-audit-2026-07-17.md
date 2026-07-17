@@ -32,8 +32,8 @@ spots; the app deliberately runs `--accent` = Cherry (#e11d48) at
 | 2.4b | timed mute popover (1h/3h/8h/24h/∞) replacing plain select |
 | 2.4d | full user menu (view profile, send DM, invite, mute, copy handle, remove friend) |
 | 2.4a | shared-rooms/friend counts + block/remove buttons (block needs server) |
-| 2.2a | live @handle match preview |
-| 4.1 | friend-list picker instead of bare input |
+| ~~2.2a~~ | DONE — live @handle match preview (add-friend popover, FriendsPane, 4.1 picker) |
+| ~~4.1~~ | DONE — friend-list picker w/ search, presence dots, non-friend handle match card |
 | 4.3 | in-app corner invite queue (join/dismiss/dismiss-all) |
 | 4.16 | standalone modal w/ "recently in voice" grouping |
 | 4.17 | transfer confirm modal (type-name, impact, also-leave) |
@@ -54,6 +54,7 @@ spots; the app deliberately runs `--accent` = Cherry (#e11d48) at
 5. Pins (pin/unpin/list) → 2.5p
 6. Message reactions → completes 2.5k
 7. ~~Mentions history + directed room invites~~ DONE — 4.15 bell tabs live (feed endpoint, DirectInvite table, count-badged tabs, day groups, Join/Later, Mark-all-read watermark, bell badge, 4.16 invite-friends rows)
+8. Owner identity on `/rooms/public` → 4.7 card "by @handle" attribution line
 
 ## C — blocked on decisions
 1. SMTP provider (Migadu available) → 1.5, 1.6, 1.7 email flows
@@ -70,13 +71,19 @@ rows "N in call" + dots + WS live-refresh, browse "in voice" sort), chat
 history scroll-up pagination, deleted messages hidden (tombstone gaps),
 DM header E2EE pill, sender-side E2EE decrypt bug + regression test.
 
-Still open (ranked): DM header presence/status line; Theme
+DONE (social/browse batch, same day): DM header presence/status line
+(friends presence + WS live); browse directory card-grid + show-empty
+toggle + live occupancy refresh (owner attribution blocked on B-8); DMs
+sidebar search (filters threads, surfaces thread-less friends as
+start-new rows); friends top-bar ⋮ (pending-sent + manage links) +
+per-row ⋮ (DM/copy-handle/remove w/ confirm) + PTT hint strip; 2.2a live
+@handle match preview + 4.1 friend-list picker.
+
+Still open (ranked): Theme
 token editor + preview card + Grey preset + export/import; Notifications
 sounds/quiet-hours/desktop-integration/default-room segmented; Devices
 video section (camera select/preview/resolution/mirror) + mic meter +
-speaker test; browse directory card-grid form + show-empty toggle + owner
-attribution; DMs sidebar search + open-thread-in-list; friends ⋮ overflow
-(pending-sent + manage links) + PTT hint strip; keybind populated
+speaker test; keybind populated
 defaults; Account sign-out+clear-keys + always-visible backup button;
 settings nav-foot identity card; monochrome-icon sweep (remaining emoji
 glyphs).

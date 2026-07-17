@@ -1,8 +1,9 @@
 import { useCallback, useEffect, useState, type ReactElement } from "react";
-import type { DmThreadEntry } from "@r3dvoice/shared";
+import type { DmThreadEntry, FriendDTO } from "@r3dvoice/shared";
 import { useAuthStore } from "../lib/auth-context.js";
 import { ApiClient } from "../lib/api.js";
 import { getTransport } from "../lib/chat-transport.js";
+import { dmThreadId } from "../lib/dm-thread-id.js";
 import { Avatar } from "../components/Avatar.js";
 import { ContextMenu, MenuItem, MenuDivider } from "../components/ContextMenu.js";
 import { DmThreadList } from "../components/DmThreadList.js";
@@ -18,12 +19,17 @@ type DmsScreenProps = {
   onJoinRoom?: (roomId: string) => void;
 };
 
+/** Presence snapshot for a DM peer, sourced from the friends list (2.4). */
+type PeerPresence = { isOnline: boolean; currentRoom: { id: string; name: string } | null };
+
 export function DmsScreen({ onJoinRoom }: DmsScreenProps = {}): ReactElement {
   const me = useAuthStore((s) => s.user);
   const serverUrl = useAuthStore((s) => s.serverUrl);
   const token = useAuthStore((s) => s.token);
 
   const [threads, setThreads] = useState<DmThreadEntry[]>([]);
+  const [friends, setFriends] = useState<FriendDTO[]>([]);
+  const [query, setQuery] = useState("");
   const [active, setActive] = useState<string | null>(null);
   const [split, setSplit] = useState<string | null>(null);
   const [chooserOpen, setChooserOpen] = useState(false);
@@ -42,6 +48,37 @@ export function DmsScreen({ onJoinRoom }: DmsScreenProps = {}): ReactElement {
       setThreads(r.threads);
     } catch { /* */ }
   }, [serverUrl, token]);
+
+  // Friends feed two things here: presence for the DM header status line
+  // (online / in voice · room / offline) and the sidebar search's
+  // "start a new thread" rows for friends without a conversation yet.
+  const refreshFriends = useCallback(async () => {
+    if (!token) return;
+    const api = new ApiClient(serverUrl);
+    api.setToken(token);
+    try {
+      const r = await api.friends();
+      setFriends(r.friends);
+    } catch { /* */ }
+  }, [serverUrl, token]);
+
+  useEffect(() => {
+    void refreshFriends();
+  }, [refreshFriends]);
+
+  useEffect(() => {
+    const t = getTransport();
+    if (!t) return;
+    return t.on((event) => {
+      if (
+        event.type === "friend.request" ||
+        event.type === "friend.accepted" ||
+        event.type === "presence.update"
+      ) {
+        void refreshFriends();
+      }
+    });
+  }, [refreshFriends]);
 
   useEffect(() => {
     void refresh();
@@ -111,6 +148,30 @@ export function DmsScreen({ onJoinRoom }: DmsScreenProps = {}): ReactElement {
     ? (threads.find((x) => x.threadId === split)?.otherParticipant ?? null)
     : null;
 
+  const presenceFor = (peerId: string): PeerPresence | undefined => {
+    const f = friends.find((x) => x.status === "accepted" && x.user.id === peerId);
+    if (!f) return undefined;
+    return { isOnline: f.isOnline, currentRoom: f.user.currentRoom ?? null };
+  };
+
+  // Sidebar search (2.4): live-filter the thread list by peer name/handle;
+  // matching friends with no thread yet surface as start-new rows.
+  const q = query.trim().replace(/^@/, "").toLowerCase();
+  const matchesPeer = (name: string, handle: string | null): boolean =>
+    name.toLowerCase().includes(q) || (handle ?? "").toLowerCase().includes(q);
+  const shownThreads = q
+    ? threads.filter((t) => matchesPeer(t.otherParticipant.displayName, t.otherParticipant.handle))
+    : threads;
+  const threadPeerIds = new Set(threads.map((t) => t.otherParticipant.id));
+  const startNew = q
+    ? friends.filter(
+        (f) =>
+          f.status === "accepted" &&
+          !threadPeerIds.has(f.user.id) &&
+          matchesPeer(f.user.displayName, f.user.handle ?? null),
+      )
+    : [];
+
   if (!me) return <div />;
 
   return (
@@ -130,16 +191,29 @@ export function DmsScreen({ onJoinRoom }: DmsScreenProps = {}): ReactElement {
           minHeight: 0,
         }}
       >
-        <div style={{ display: "flex", alignItems: "center", gap: "var(--s-2)", padding: "var(--s-3) var(--s-4)" }}>
-          <span style={{ fontWeight: 600, fontSize: "var(--t-md)", flex: 1 }}>Direct messages</span>
+        {/* 2.4 sidebar head: search field + new-conversation ＋ */}
+        <div style={{ display: "flex", alignItems: "center", gap: "var(--s-2)", padding: "var(--s-3) var(--s-3)" }}>
+          <input
+            className="rv-input"
+            placeholder="Search messages…"
+            aria-label="Search direct messages"
+            value={query}
+            onChange={(e) => setQuery(e.target.value)}
+            onKeyDown={(e) => {
+              if (e.key === "Escape") setQuery("");
+            }}
+            style={{ height: "2.1rem", fontSize: "var(--t-xs)", flex: 1 }}
+          />
           <button
             type="button"
-            className="rv-btn"
+            className="rv-btn rv-btn-icon"
             data-variant="primary"
+            title="New conversation"
+            aria-label="New conversation"
             onClick={() => setPickerOpen(true)}
-            style={{ height: "1.8rem", padding: "0 var(--s-3)", fontSize: "var(--t-sm)" }}
+            style={{ height: "2.1rem", width: "2.1rem", flexShrink: 0 }}
           >
-            <I.Plus size={12} /> New
+            <I.Plus size={14} />
           </button>
         </div>
         {split && (
@@ -177,14 +251,71 @@ export function DmsScreen({ onJoinRoom }: DmsScreenProps = {}): ReactElement {
             </button>
           </div>
         )}
-        <div style={{ flex: "1 1 auto", overflowY: "auto", padding: "var(--s-2) var(--s-3)" }}>
-          <DmThreadList
-            threads={threads}
-            activeThreadId={active}
-            splitThreadId={split}
-            onSelect={setActive}
-            onContextMenu={(threadId, x, y) => setRowMenu({ threadId, x, y })}
-          />
+        <div className="rv-scroll" style={{ flex: "1 1 auto", overflowY: "auto", padding: "var(--s-2) var(--s-3)" }}>
+          {q && shownThreads.length === 0 && startNew.length === 0 ? (
+            <div style={{ padding: "var(--s-4)", color: "var(--text-faint)", fontSize: "var(--t-sm)" }}>
+              No matches for “{query.trim()}”.
+            </div>
+          ) : (
+            <>
+              {(shownThreads.length > 0 || !q) && (
+                <DmThreadList
+                  threads={shownThreads}
+                  activeThreadId={active}
+                  splitThreadId={split}
+                  onSelect={setActive}
+                  onContextMenu={(threadId, x, y) => setRowMenu({ threadId, x, y })}
+                />
+              )}
+              {/* Friends without a thread yet — start-new affordance */}
+              {startNew.length > 0 && (
+                <div style={{ marginTop: shownThreads.length > 0 ? "var(--s-3)" : 0 }}>
+                  <div className="rv-label" style={{ padding: "0 var(--s-3)", marginBottom: "var(--s-1)", fontSize: "var(--t-2xs)" }}>
+                    Friends — start new
+                  </div>
+                  {startNew.map((f) => (
+                    <button
+                      key={f.user.id}
+                      type="button"
+                      className="rv-menu-item"
+                      onClick={() => {
+                        onPick(dmThreadId(me.id, f.user.id), {
+                          id: f.user.id,
+                          handle: f.user.handle ?? null,
+                          displayName: f.user.displayName,
+                        });
+                        setQuery("");
+                      }}
+                    >
+                      <Avatar
+                        src={f.user.avatarUrl ?? null}
+                        fallbackInitials={f.user.displayName}
+                        fallbackColorSeed={f.user.id}
+                        size={26}
+                      />
+                      <span
+                        style={{
+                          flex: 1,
+                          minWidth: 0,
+                          overflow: "hidden",
+                          textOverflow: "ellipsis",
+                          whiteSpace: "nowrap",
+                        }}
+                      >
+                        {f.user.displayName}
+                        {f.user.handle && (
+                          <span className="rv-mono" style={{ color: "var(--text-dim)", fontSize: "var(--t-2xs)" }}>
+                            {" "}@{f.user.handle}
+                          </span>
+                        )}
+                      </span>
+                      <span style={{ fontSize: "var(--t-2xs)", color: "var(--accent)", flexShrink: 0 }}>Start ›</span>
+                    </button>
+                  ))}
+                </div>
+              )}
+            </>
+          )}
         </div>
         <div style={{ borderTop: "1px solid var(--border-soft)", flexShrink: 0 }}>
           <button
@@ -222,6 +353,7 @@ export function DmsScreen({ onJoinRoom }: DmsScreenProps = {}): ReactElement {
             <DmPane
               threadId={active}
               peer={activePeer}
+              presence={presenceFor(activePeer.id)}
               meId={me.id}
               meName={me.displayName}
               borderRight={split !== null}
@@ -245,6 +377,7 @@ export function DmsScreen({ onJoinRoom }: DmsScreenProps = {}): ReactElement {
               <DmPane
                 threadId={split}
                 peer={splitPeer}
+                presence={presenceFor(splitPeer.id)}
                 meId={me.id}
                 meName={me.displayName}
                 onJoinRoom={handleJoinRoom}
@@ -389,6 +522,7 @@ export function DmsScreen({ onJoinRoom }: DmsScreenProps = {}): ReactElement {
 function DmPane({
   threadId,
   peer,
+  presence,
   meId,
   meName,
   borderRight,
@@ -398,6 +532,8 @@ function DmPane({
 }: {
   threadId: string;
   peer: { id: string; handle: string | null; displayName: string };
+  /** Presence from the friends list; undefined when the peer isn't a friend. */
+  presence?: PeerPresence | undefined;
   meId: string;
   meName: string;
   borderRight?: boolean;
@@ -406,6 +542,14 @@ function DmPane({
   actions?: ReactElement;
 }): ReactElement {
   const [profileOpen, setProfileOpen] = useState(false);
+  // 2.4 chat-head status line: in voice · room / online / offline.
+  const statusLine = presence
+    ? presence.currentRoom
+      ? `in voice · ${presence.currentRoom.name}`
+      : presence.isOnline
+        ? "online"
+        : "offline"
+    : undefined;
   return (
     <div
       style={{
@@ -421,13 +565,22 @@ function DmPane({
         threadType="dm"
         threadId={threadId}
         title={peer.displayName}
-        subtitle={peer.handle ? `@${peer.handle}` : undefined}
+        subtitle={statusLine}
         actions={actions}
         onTitleClick={() => setProfileOpen((v) => !v)}
         leading={
           <Avatar src={null} fallbackInitials={peer.displayName} fallbackColorSeed={peer.id} size={34} />
         }
         badge={
+          <>
+          {peer.handle && (
+            <span
+              className="rv-mono"
+              style={{ marginLeft: 6, fontSize: "var(--t-xs)", fontWeight: 400, color: "var(--text-dim)" }}
+            >
+              @{peer.handle}
+            </span>
+          )}
           <span
             title="Direct messages are end-to-end encrypted — the server can't read them."
             style={{
@@ -448,6 +601,7 @@ function DmPane({
           >
             🔒 E2EE
           </span>
+          </>
         }
       />
       {profileOpen && (
