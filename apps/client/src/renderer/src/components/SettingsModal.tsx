@@ -14,7 +14,7 @@ import {
   type DeviceInfo,
 } from "../lib/media.js";
 import { usePrefs, prefsActions } from "../lib/prefs-singleton.js";
-import type { CameraResolution, RoomNotifDefault, ThemePreset } from "../lib/prefs-store.js";
+import type { CameraResolution, RoomNotifDefault, ThemePreset, InputProfile } from "../lib/prefs-store.js";
 import {
   THEME_TOKENS,
   applyThemeOverrides,
@@ -254,11 +254,11 @@ function DevicesTab(): ReactElement {
       <MonoControls />
 
       <div className="rv-section-head">
-        <span className="rv-label">Processing</span>
+        <span className="rv-label">Input profile</span>
       </div>
-      <ProcessingControls />
+      <InputProfileSection />
       <div style={{ fontSize: "var(--t-xs)", color: "var(--text-faint)", marginTop: "var(--s-2)" }}>
-        Changes apply on the next mic open (rejoin or PTT cycle).
+        Sensitivity and gating apply live; profile/processing changes apply on the next mic open (rejoin or PTT cycle).
       </div>
 
       <div className="rv-section-head">
@@ -654,6 +654,145 @@ function MonoControls(): ReactElement {
       <div style={{ fontSize: "var(--t-xs)", color: "var(--text-faint)" }}>
         Mono microphone applies on the next mic open (rejoin); mono output applies immediately.
       </div>
+    </div>
+  );
+}
+
+// Discord-style input presets. Voice Isolation / Studio set the underlying
+// processing dials; Custom reveals them. Sensitivity + Advanced Voice Activity
+// are separate global controls shown for every profile.
+const INPUT_PROFILES: { key: InputProfile; label: string; hint: string }[] = [
+  { key: "voice-isolation", label: "Voice Isolation", hint: "Let R3DVoice cut through the noise: strong suppression + echo cancel + auto-gain." },
+  { key: "studio", label: "Studio", hint: "Pure audio: open mic with no processing." },
+  { key: "custom", label: "Custom", hint: "Advanced mode: give me all the buttons and dials." },
+];
+
+function applyInputProfile(p: InputProfile): void {
+  const a = prefsActions();
+  a.setInputProfile(p);
+  if (p === "voice-isolation") {
+    a.setNoiseSuppression("high");
+    a.setEchoCancellation(true);
+    a.setAutoGainControl(true);
+  } else if (p === "studio") {
+    a.setNoiseSuppression("off");
+    a.setEchoCancellation(false);
+    a.setAutoGainControl(false);
+  }
+}
+
+// Live input meter with a draggable transmit threshold (Discord's input
+// sensitivity). Opens the selected mic raw (honest level), overlays the
+// threshold marker, and greens the bar while it would transmit.
+function SensitivityMeter({ deviceId, threshold, enabled }: { deviceId: string | null; threshold: number; enabled: boolean }): ReactElement {
+  const fillRef = useRef<HTMLDivElement | null>(null);
+  useEffect(() => {
+    let cancelled = false;
+    let stream: MediaStream | null = null;
+    let unsub: (() => void) | null = null;
+    const md = globalThis.navigator?.mediaDevices;
+    if (!md?.getUserMedia) return;
+    md.getUserMedia({ audio: deviceId ? { deviceId: { exact: deviceId } } : true, video: false })
+      .then((s) => {
+        if (cancelled) { s.getTracks().forEach((t) => t.stop()); return; }
+        stream = s;
+        unsub = subscribeMicLevel(s, (level) => {
+          const el = fillRef.current;
+          if (!el) return;
+          el.style.width = `${Math.round(Math.min(1, level * 4) * 100)}%`;
+          const speaking = !enabled || Math.min(1, level * 4) >= threshold;
+          el.style.background = speaking ? "var(--rv-live, #22c55e)" : "var(--text-faint)";
+        });
+      })
+      .catch(() => {});
+    return () => { cancelled = true; unsub?.(); stream?.getTracks().forEach((t) => t.stop()); };
+  }, [deviceId, threshold, enabled]);
+  return (
+    <div style={{ position: "relative", height: 12, borderRadius: 6, background: "var(--bg-elev-3)", border: "1px solid var(--border-soft)", overflow: "hidden" }}>
+      <div ref={fillRef} style={{ height: "100%", width: "0%", background: "var(--rv-live, #22c55e)", transition: "width 60ms linear" }} />
+      {enabled && (
+        <div
+          aria-hidden
+          style={{ position: "absolute", top: -2, bottom: -2, left: `${Math.round(threshold * 100)}%`, width: 2, background: "var(--accent)", boxShadow: "0 0 0 1px var(--bg)" }}
+        />
+      )}
+    </div>
+  );
+}
+
+function InputProfileSection(): ReactElement {
+  const profile = usePrefs((s) => s.inputProfile);
+  const micDeviceId = usePrefs((s) => s.micDeviceId);
+  const vadEnabled = usePrefs((s) => s.vadEnabled);
+  const sensitivity = usePrefs((s) => s.inputSensitivity);
+  return (
+    <div style={{ display: "flex", flexDirection: "column", gap: "var(--s-4)" }}>
+      <div style={{ display: "flex", flexDirection: "column", gap: "var(--s-1)" }}>
+        {INPUT_PROFILES.map((p) => (
+          <button
+            key={p.key}
+            type="button"
+            onClick={() => applyInputProfile(p.key)}
+            style={{
+              appearance: "none",
+              textAlign: "left",
+              cursor: "pointer",
+              display: "flex",
+              gap: "var(--s-3)",
+              alignItems: "flex-start",
+              padding: "var(--s-3)",
+              borderRadius: "var(--r-md)",
+              border: `1px solid ${profile === p.key ? "var(--accent)" : "var(--border-soft)"}`,
+              background: profile === p.key ? "var(--accent-tint)" : "transparent",
+            }}
+          >
+            <span
+              aria-hidden
+              style={{
+                marginTop: 2,
+                width: 15,
+                height: 15,
+                borderRadius: "50%",
+                flexShrink: 0,
+                border: `2px solid ${profile === p.key ? "var(--accent)" : "var(--border-strong)"}`,
+                background: profile === p.key ? "radial-gradient(circle at center, var(--accent) 0 4px, transparent 5px)" : "transparent",
+              }}
+            />
+            <span style={{ minWidth: 0 }}>
+              <span style={{ display: "block", fontSize: "var(--t-sm)", fontWeight: 600 }}>{p.label}</span>
+              <span style={{ display: "block", fontSize: "var(--t-xs)", color: "var(--text-dim)", marginTop: 2 }}>{p.hint}</span>
+            </span>
+          </button>
+        ))}
+      </div>
+
+      {/* Input sensitivity — shown for every profile, like Discord */}
+      <div>
+        <div className="rv-label" style={{ marginBottom: "var(--s-2)" }}>Input sensitivity</div>
+        <SensitivityMeter deviceId={micDeviceId} threshold={sensitivity} enabled={vadEnabled} />
+        <input
+          type="range"
+          min={0}
+          max={0.6}
+          step={0.005}
+          value={sensitivity}
+          disabled={!vadEnabled}
+          onChange={(e) => prefsActions().setInputSensitivity(Number(e.target.value))}
+          style={{ width: "100%", marginTop: "var(--s-2)", accentColor: "var(--accent)", opacity: vadEnabled ? 1 : 0.4 }}
+        />
+        <div style={{ fontSize: "var(--t-xs)", color: "var(--text-faint)" }}>
+          Drag so the bar turns green only while you're speaking. Controls how much sound R3DVoice transmits.
+        </div>
+      </div>
+
+      <SimpleToggle
+        label="Advanced Voice Activity"
+        hint="Only transmit when you're speaking. Turn off for an always-open mic (use with push-to-talk)."
+        value={vadEnabled}
+        onChange={(v) => prefsActions().setVadEnabled(v)}
+      />
+
+      {profile === "custom" && <ProcessingControls />}
     </div>
   );
 }

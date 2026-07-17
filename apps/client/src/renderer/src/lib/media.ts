@@ -84,6 +84,15 @@ export interface MicProcessingOptions {
    * stream's lifetime (no automatic cleanup, but small/cheap).
    */
   gain?: number;
+  /**
+   * Voice-activity gating (Discord's "input sensitivity"): when enabled, the
+   * published signal is muted until the input level crosses `threshold`
+   * (0..1 on the same scale as onLevel), so background noise between words
+   * isn't transmitted. Off = open mic.
+   */
+  vad?: { enabled: boolean; threshold: number };
+  /** Per-frame level (0..1) + whether the gate is currently open (speaking). */
+  onLevel?: (level: number, speaking: boolean) => void;
 }
 
 /** Pref level → which software pipeline stages to apply. */
@@ -115,6 +124,8 @@ export interface MicPipeline {
    *  GainNode in the chain even at unity so the slider can adjust without
    *  re-opening the mic. */
   setGain(gain: number): void;
+  /** Live-update voice-activity gating without re-opening the mic. */
+  setVad(enabled: boolean, threshold: number): void;
   /** Release AudioContexts. Call when the publish is done. */
   close(): void;
 }
@@ -128,8 +139,15 @@ export async function openMicPipeline(
   }
   const audioConstraints: MediaTrackConstraints = {
     ...(deviceId ? { deviceId: { exact: deviceId } } : {}),
+    // Browser noise-suppression and AGC stay OFF — RNNoise (below) does NS and
+    // a Web Audio compressor does AGC, so enabling the browser's would
+    // double-process and smear the voice. Echo cancellation is the exception:
+    // ONLY the browser's AEC can cancel far-end echo (RNNoise can't), so honor
+    // the pref (default on). Previously this was hardcoded false, so echo
+    // cancellation NEVER ran — anyone not wearing headphones echoed. That was
+    // the #1 "sounds terrible" cause.
     noiseSuppression: false,
-    echoCancellation: false,
+    echoCancellation: options.echoCancellation ?? true,
     autoGainControl: false,
     ...(options.mono ? { channelCount: { ideal: 1 } } : {}),
   };
@@ -176,25 +194,73 @@ export async function openMicPipeline(
     gainNode.channelCountMode = "explicit";
     gainNode.channelInterpretation = "speakers";
   }
+  // Voice-activity gate: a second GainNode after the user gain that opens/closes
+  // based on measured level. The AnalyserNode taps the signal post-gain so the
+  // meter and threshold share one scale.
+  const gateNode = ctx.createGain();
+  gateNode.gain.value = 1;
+  const analyser = ctx.createAnalyser();
+  analyser.fftSize = 512;
   const dest = ctx.createMediaStreamDestination();
   if (options.mono) dest.channelCount = 1;
-  source.connect(gainNode).connect(dest);
+  source.connect(gainNode);
+  gainNode.connect(analyser);
+  gainNode.connect(gateNode).connect(dest);
+
+  let vadEnabled = options.vad?.enabled ?? false;
+  let threshold = options.vad?.threshold ?? 0;
+  const buf = new Float32Array(analyser.fftSize);
+  const HOLD_MS = 250; // keep the gate open this long after level dips
+  let lastAbove = 0;
+  let gateTarget = 1; // avoid rescheduling ramps every frame
+  let raf = 0;
+  const loop = (): void => {
+    analyser.getFloatTimeDomainData(buf);
+    let sum = 0;
+    for (let i = 0; i < buf.length; i++) sum += buf[i]! * buf[i]!;
+    const rms = Math.sqrt(sum / buf.length);
+    const level = Math.min(1, rms * 4); // speech rms ~0.05-0.25 → readable 0..1
+    let speaking = true;
+    if (vadEnabled) {
+      const now = performance.now();
+      if (level >= threshold) lastAbove = now;
+      speaking = now - lastAbove < HOLD_MS;
+      const target = speaking ? 1 : 0;
+      if (target !== gateTarget) {
+        gateTarget = target;
+        // Fast attack (no clipped word starts), gentle release (no chatter).
+        gateNode.gain.setTargetAtTime(target, ctx.currentTime, target ? 0.015 : 0.08);
+      }
+    } else if (gateTarget !== 1) {
+      gateTarget = 1;
+      gateNode.gain.setTargetAtTime(1, ctx.currentTime, 0.01);
+    }
+    options.onLevel?.(level, speaking);
+    raf = requestAnimationFrame(loop);
+  };
+  raf = requestAnimationFrame(loop);
+
   // eslint-disable-next-line no-console
   console.log(
-    `[mic] pipeline open — initial gain=${gainNode.gain.value.toFixed(2)} ` +
-      `ctx.state=${ctx.state} sampleRate=${ctx.sampleRate}`,
+    `[mic] pipeline open — gain=${gainNode.gain.value.toFixed(2)} ` +
+      `vad=${vadEnabled ? `on@${threshold.toFixed(2)}` : "off"} ctx.state=${ctx.state}`,
   );
 
   return {
     stream: dest.stream,
     setGain: (g) => {
       gainNode.gain.value = g;
-      // eslint-disable-next-line no-console
-      console.log(`[mic] gain → ${g.toFixed(2)} (ctx.state=${ctx.state})`);
+    },
+    setVad: (enabled, t) => {
+      vadEnabled = enabled;
+      threshold = t;
     },
     close: () => {
+      cancelAnimationFrame(raf);
       try { source.disconnect(); } catch { /* */ }
       try { gainNode.disconnect(); } catch { /* */ }
+      try { gateNode.disconnect(); } catch { /* */ }
+      try { analyser.disconnect(); } catch { /* */ }
       void ctx.close();
     },
   };

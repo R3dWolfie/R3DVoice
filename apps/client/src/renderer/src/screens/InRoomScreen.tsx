@@ -1246,6 +1246,8 @@ export function InRoomScreen(props: InRoomScreenProps): ReactElement {
             echoCancellation: micProcessing.echoCancellation,
             autoGainControl: micProcessing.autoGainControl,
             gain: micProcessing.gain,
+            mono: micProcessing.mono,
+            vad: { enabled: micProcessing.vadEnabled, threshold: micProcessing.inputSensitivity },
           });
           micPipelineRef.current = pipeline;
           micStream = pipeline.stream;
@@ -1373,9 +1375,11 @@ export function InRoomScreen(props: InRoomScreenProps): ReactElement {
   const autoGainControl = usePrefs((s) => s.autoGainControl);
   const micGain = usePrefs((s) => s.micGain);
   const monoInput = usePrefs((s) => s.monoInput);
+  const vadEnabled = usePrefs((s) => s.vadEnabled);
+  const inputSensitivity = usePrefs((s) => s.inputSensitivity);
   const micProcessing = useMemo(
-    () => ({ noiseSuppression, echoCancellation, autoGainControl, gain: micGain, mono: monoInput }),
-    [noiseSuppression, echoCancellation, autoGainControl, micGain, monoInput],
+    () => ({ noiseSuppression, echoCancellation, autoGainControl, gain: micGain, mono: monoInput, vadEnabled, inputSensitivity }),
+    [noiseSuppression, echoCancellation, autoGainControl, micGain, monoInput, vadEnabled, inputSensitivity],
   );
   useEffect(() => {
     if (conn.phase === "connected" && prefMic) {
@@ -1460,6 +1464,12 @@ export function InRoomScreen(props: InRoomScreenProps): ReactElement {
   useEffect(() => {
     micPipelineRef.current?.setGain(micProcessing.gain);
   }, [micProcessing.gain]);
+
+  // Live-apply VAD (Advanced Voice Activity + input sensitivity) without
+  // re-opening the mic.
+  useEffect(() => {
+    micPipelineRef.current?.setVad(micProcessing.vadEnabled, micProcessing.inputSensitivity);
+  }, [micProcessing.vadEnabled, micProcessing.inputSensitivity]);
 
   // Server-initiated disconnect (owner removed us, owner deleted the room,
   // server shutdown) — show a banner for a beat then bounce back to lobby.

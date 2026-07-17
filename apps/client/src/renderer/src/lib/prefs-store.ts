@@ -8,6 +8,7 @@ export interface PrefsStorage {
 export type Resolution = "720p" | "1080p" | "1440p" | "4K";
 export type FrameRate = 30 | 60;
 export type NoiseSuppressionLevel = "off" | "low" | "high";
+export type InputProfile = "voice-isolation" | "studio" | "custom";
 
 /** Deck 3.6 presets: Light · Dark · Grey · Match OS. */
 export type ThemePreset = "light" | "dark" | "grey" | "system";
@@ -60,6 +61,12 @@ export interface PrefsState {
   echoCancellation: boolean;
   autoGainControl: boolean;
   micGain: number;
+  /** Discord-style input preset; "custom" exposes the individual dials. */
+  inputProfile: InputProfile;
+  /** Advanced Voice Activity: gate mic transmission on input level. */
+  vadEnabled: boolean;
+  /** VAD threshold, 0..1 — mic only transmits when level exceeds this. */
+  inputSensitivity: number;
   serverUrl: string;
   /** Room IDs the user has starred — surfaced by future Lobby UX. */
   favoriteRoomIds: string[];
@@ -99,6 +106,9 @@ export interface PrefsState {
   setEchoCancellation(v: boolean): void;
   setAutoGainControl(v: boolean): void;
   setMicGain(v: number): void;
+  setInputProfile(v: InputProfile): void;
+  setVadEnabled(v: boolean): void;
+  setInputSensitivity(v: number): void;
   setServerUrl(u: string): void;
   toggleFavoriteRoom(id: string): void;
   setParticipantVolume(id: string, volume: number): void;
@@ -133,14 +143,16 @@ const DEFAULTS = {
   leaveRoomKeybind: null as string | null,
   compatibilityMode: false,
   crashReporting: false,
-  noiseSuppression: "low" as NoiseSuppressionLevel,
+  noiseSuppression: "high" as NoiseSuppressionLevel,
   echoCancellation: true,
-  // OFF by default — even our software AGC adds Web Audio chain depth
-  // and was correlated with high-RTT/dialup-quality reports. Users who
-  // come through quiet can boost via the live mic gain slider in Settings
-  // (now applies in real time without re-opening the mic).
-  autoGainControl: false,
+  // Fresh installs land on the "Voice Isolation" profile (strong NS + AEC +
+  // AGC + voice-activity gating) for clean Discord-grade audio out of the box.
+  // Existing users keep whatever they had persisted.
+  autoGainControl: true,
   micGain: 1.0,
+  inputProfile: "voice-isolation" as InputProfile,
+  vadEnabled: true,
+  inputSensitivity: 0.12,
   // Server URL default, in priority order:
   //   1. VITE_SERVER_URL at build time (dev/self-host override, fresh profiles)
   //   2. web build (no Electron preload bridge at module-eval time): the page's
@@ -222,6 +234,9 @@ export function createPrefsStore(storage: PrefsStorage): StoreApi<PrefsState> {
       echoCancellation: state.echoCancellation,
       autoGainControl: state.autoGainControl,
       micGain: state.micGain,
+      inputProfile: state.inputProfile,
+      vadEnabled: state.vadEnabled,
+      inputSensitivity: state.inputSensitivity,
       serverUrl: state.serverUrl,
       theme: state.theme,
       themeOverrides: state.themeOverrides,
@@ -274,6 +289,9 @@ export function createPrefsStore(storage: PrefsStorage): StoreApi<PrefsState> {
     setEchoCancellation: (v) => { set({ echoCancellation: v }); persistFromState(get()); },
     setAutoGainControl: (v) => { set({ autoGainControl: v }); persistFromState(get()); },
     setMicGain: (v) => { set({ micGain: v }); persistFromState(get()); },
+    setInputProfile: (v) => { set({ inputProfile: v }); persistFromState(get()); },
+    setVadEnabled: (v) => { set({ vadEnabled: v }); persistFromState(get()); },
+    setInputSensitivity: (v) => { set({ inputSensitivity: v }); persistFromState(get()); },
     setServerUrl: (v) => { set({ serverUrl: v }); persistFromState(get()); },
     toggleFavoriteRoom: (id) => {
       const { favoriteRoomIds } = get();

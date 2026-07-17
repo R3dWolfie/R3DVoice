@@ -224,6 +224,19 @@ async function captureLinuxMonitorSource(
   }
 }
 
+// Microphone publish options, shared by both publish paths (processed-track
+// and setMicrophoneEnabled). red = redundant Opus encoding — every packet also
+// carries the prior frame, so a single lost packet no longer drops audio (the
+// biggest win on lossy home links). dtx skips silent frames (bandwidth-only,
+// fine for voice). 64 kbps mono Opus sits clearly above the LiveKit "speech"
+// default (~24-32 kbps) that made voice sound thin, and above Discord's ~64k.
+const MIC_PUBLISH_OPTIONS = {
+  source: Track.Source.Microphone,
+  red: true,
+  dtx: true,
+  audioPreset: { maxBitrate: 64_000 },
+} as const;
+
 export class LiveKitRoom {
   readonly room: Room;
   private listeners = new Set<RoomStateListener>();
@@ -583,10 +596,10 @@ export class LiveKitRoom {
       if (options.micStream) {
         const [micTrack] = options.micStream.getAudioTracks();
         if (micTrack) {
-          await this.room.localParticipant.publishTrack(micTrack, { source: Track.Source.Microphone });
+          await this.room.localParticipant.publishTrack(micTrack, MIC_PUBLISH_OPTIONS);
         }
       } else {
-        await this.room.localParticipant.setMicrophoneEnabled(true);
+        await this.room.localParticipant.setMicrophoneEnabled(true, undefined, MIC_PUBLISH_OPTIONS);
       }
     }
     // Publish screenshare. We always start the video share with audio:false
@@ -600,7 +613,13 @@ export class LiveKitRoom {
           {
             resolution: { width: q.width, height: q.height, frameRate: q.frameRate },
             audio: false,
-            contentHint: "motion",
+            // "detail" (not "motion") tells the encoder this is screen content:
+            // it favors spatial sharpness (readable text/UI) and, with
+            // maintain-resolution below, sheds framerate before it blurs the
+            // picture — the right tradeoff for sharing a screen. "motion" was
+            // making text mushy and wasting bitrate on frame-rate it couldn't
+            // sustain.
+            contentHint: q.frameRate >= 50 ? "motion" : "detail",
           },
           {
             screenShareEncoding: {
@@ -609,7 +628,9 @@ export class LiveKitRoom {
               priority: "high",
             },
             videoCodec: "vp9",
-            degradationPreference: "maintain-framerate",
+            // High-fps shares (games) want smoothness; everything else keeps
+            // resolution and drops fps so text stays sharp under congestion.
+            degradationPreference: q.frameRate >= 50 ? "maintain-framerate" : "maintain-resolution",
           },
         );
         this.applyScreenShareSenderOverrides({ sourceWidth: q.width, sourceHeight: q.height });
