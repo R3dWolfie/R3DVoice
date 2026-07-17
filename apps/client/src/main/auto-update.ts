@@ -44,6 +44,16 @@ export async function initAutoUpdate(
     return { kind: "no-update" };
   }
 
+  // Distro/package-manager installs (AUR, .deb, Flatpak) own updates via the
+  // system package manager. The AUR wrapper sets R3DVOICE_DISABLE_UPDATER=1 so
+  // electron-updater doesn't try to overwrite a root-owned install (which fails
+  // noisily) and doesn't fight `yay -Syu`. Standalone AppImages leave it unset
+  // and self-update normally.
+  if (process.env["R3DVOICE_DISABLE_UPDATER"]) {
+    setTimeout(() => send({ phase: "loading" }), 250);
+    return { kind: "no-update" };
+  }
+
   // Disable electron-updater's default logger — it calls console.* with
   // verbose output, which EPIPEs when launched headlessly (no terminal).
   autoUpdater.logger = null;
