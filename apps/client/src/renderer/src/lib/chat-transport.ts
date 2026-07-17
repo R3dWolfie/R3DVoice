@@ -237,12 +237,17 @@ export class ChatTransport {
           );
         if (suppressForActiveThread) return;
 
+        const prefs = prefsActions();
         void routeNotification(event, {
           selfUserId: me.id,
           dndUntil: me.dndUntil ? new Date(me.dndUntil) : null,
           prefs: {
-            dmBanners: prefsActions().dmBanners,
-            dmPreviews: prefsActions().dmPreviews,
+            dmBanners: prefs.dmBanners,
+            dmPreviews: prefs.dmPreviews,
+            // 3.7 quiet hours — suppresses every OS banner while active.
+            quietHours: prefs.quietHoursEnabled
+              ? { start: prefs.quietHoursStart, end: prefs.quietHoursEnd }
+              : undefined,
           },
           getMuteLevel: async (threadType, threadId) => this.getMuteLevel(threadType, threadId),
           fireOSNotification: async (p) => {

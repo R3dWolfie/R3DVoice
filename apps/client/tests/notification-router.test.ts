@@ -1,5 +1,5 @@
 import { describe, it, expect, vi } from "vitest";
-import { routeNotification } from "../src/renderer/src/lib/notification-router";
+import { isInQuietHours, routeNotification } from "../src/renderer/src/lib/notification-router";
 import type { ChatMessageDTO, ChatWsEvent } from "@r3dvoice/shared";
 
 function ctx(
@@ -90,5 +90,55 @@ describe("notification-router", () => {
       message: makeMessage(),
     } as ChatWsEvent, c.arg);
     expect(c.fire).toHaveBeenCalledTimes(1);
+  });
+});
+
+describe("quiet hours (3.7)", () => {
+  const at = (h: number, m = 0): Date => new Date(2026, 6, 17, h, m, 0);
+
+  it("same-day window: inside / outside / boundary", () => {
+    expect(isInQuietHours(at(10), "09:00", "17:00")).toBe(true);
+    expect(isInQuietHours(at(8, 59), "09:00", "17:00")).toBe(false);
+    expect(isInQuietHours(at(9, 0), "09:00", "17:00")).toBe(true); // start inclusive
+    expect(isInQuietHours(at(17, 0), "09:00", "17:00")).toBe(false); // end exclusive
+  });
+
+  it("overnight wrap: 22:00 → 08:00", () => {
+    expect(isInQuietHours(at(23), "22:00", "08:00")).toBe(true);
+    expect(isInQuietHours(at(3), "22:00", "08:00")).toBe(true);
+    expect(isInQuietHours(at(12), "22:00", "08:00")).toBe(false);
+  });
+
+  it("degenerate inputs never activate", () => {
+    expect(isInQuietHours(at(12), "12:00", "12:00")).toBe(false);
+    expect(isInQuietHours(at(12), "garbage", "13:00")).toBe(false);
+    expect(isInQuietHours(at(12), "25:00", "13:00")).toBe(false);
+  });
+
+  it("suppresses everything while active — friend.request included", async () => {
+    vi.useFakeTimers();
+    vi.setSystemTime(new Date(2026, 6, 17, 23, 30));
+    try {
+      const c = ctx();
+      const arg = { ...c.arg, prefs: { ...c.arg.prefs, quietHours: { start: "22:00", end: "08:00" } } };
+      await routeNotification(msg(), arg);
+      await routeNotification({ type: "friend.request", from: { id: "x", handle: "x", displayName: "X" } }, arg);
+      expect(c.fire).not.toHaveBeenCalled();
+    } finally {
+      vi.useRealTimers();
+    }
+  });
+
+  it("does not suppress when the window is inactive", async () => {
+    vi.useFakeTimers();
+    vi.setSystemTime(new Date(2026, 6, 17, 12, 0));
+    try {
+      const c = ctx();
+      const arg = { ...c.arg, prefs: { ...c.arg.prefs, quietHours: { start: "22:00", end: "08:00" } } };
+      await routeNotification(msg(), arg);
+      expect(c.fire).toHaveBeenCalledTimes(1);
+    } finally {
+      vi.useRealTimers();
+    }
   });
 });

@@ -1,16 +1,31 @@
 import {
   useEffect,
+  useRef,
   useState,
   type CSSProperties,
   type ReactElement,
   type ReactNode,
 } from "react";
-import { listAudioInputs, listAudioOutputs, type DeviceInfo } from "../lib/media.js";
+import {
+  listAudioInputs,
+  listAudioOutputs,
+  listVideoInputs,
+  subscribeMicLevel,
+  type DeviceInfo,
+} from "../lib/media.js";
 import { usePrefs, prefsActions } from "../lib/prefs-singleton.js";
+import type { CameraResolution, RoomNotifDefault, ThemePreset } from "../lib/prefs-store.js";
+import {
+  THEME_TOKENS,
+  applyThemeOverrides,
+  downloadThemeJson,
+  isValidHex,
+  parseThemeJson,
+} from "../lib/theme-tokens.js";
 import type { MediaPermissionStatus } from "../../../shared/bridge-types.js";
 import { useAuthStore } from "../lib/auth-context.js";
 import { ApiClient } from "../lib/api.js";
-import { downloadKeyBackup, loadKeyPair } from "../lib/key-storage.js";
+import { clearKeyPair, downloadKeyBackup, loadKeyPair } from "../lib/key-storage.js";
 import { Avatar } from "./Avatar.js";
 import { I } from "./Icons.js";
 import { Modal } from "./Modal.js";
@@ -174,7 +189,7 @@ function DevicesTab(): ReactElement {
       }}
     >
       <div className="rv-section-head">
-        <span className="rv-label">Audio In/Out</span>
+        <span className="rv-label">Audio in / out</span>
       </div>
       <Field label="Microphone">
         <select
@@ -190,19 +205,24 @@ function DevicesTab(): ReactElement {
           ))}
         </select>
       </Field>
+      <MicLevelRow deviceId={micId} />
       <Field label="Speakers">
-        <select
-          className="rv-select"
-          value={spkId ?? ""}
-          onChange={(e) => prefsActions().setSpeakerDeviceId(e.target.value || null)}
-        >
-          {speakers.length === 0 && <option value="">Default output</option>}
-          {speakers.map((s) => (
-            <option key={s.deviceId} value={s.deviceId}>
-              {s.label}
-            </option>
-          ))}
-        </select>
+        <div style={{ display: "flex", gap: "var(--s-2)" }}>
+          <select
+            className="rv-select"
+            style={{ flex: 1, minWidth: 0 }}
+            value={spkId ?? ""}
+            onChange={(e) => prefsActions().setSpeakerDeviceId(e.target.value || null)}
+          >
+            {speakers.length === 0 && <option value="">Default output</option>}
+            {speakers.map((s) => (
+              <option key={s.deviceId} value={s.deviceId}>
+                {s.label}
+              </option>
+            ))}
+          </select>
+          <SpeakerTestButton deviceId={spkId} />
+        </div>
       </Field>
       <div
         style={{
@@ -225,7 +245,7 @@ function DevicesTab(): ReactElement {
             boxShadow: "0 0 8px var(--rv-live)",
           }}
         />
-        Changes apply live — no need to rejoin.
+        Microphone and speaker selection apply live. Processing settings apply on next mic open.
       </div>
 
       <div className="rv-section-head">
@@ -240,6 +260,374 @@ function DevicesTab(): ReactElement {
       <div style={{ fontSize: "var(--t-xs)", color: "var(--text-faint)", marginTop: "var(--s-2)" }}>
         Changes apply on the next mic open (rejoin or PTT cycle).
       </div>
+
+      <div className="rv-section-head">
+        <span className="rv-label">Video</span>
+      </div>
+      <VideoSection />
+    </div>
+  );
+}
+
+// 3.1b — inline permission-denied block for mic/camera. The system blocked
+// access; explain + offer retry (and the macOS request-permission path).
+function PermissionDeniedBlock({
+  kind,
+  onRetry,
+}: {
+  kind: "microphone" | "camera";
+  onRetry: () => void;
+}): ReactElement {
+  const isMac = window.r3dvoice.platform() === "darwin";
+  const title = kind === "microphone" ? "Microphone access blocked" : "Camera access not granted";
+  const copy =
+    kind === "microphone"
+      ? "R3DVoice can't reach your mic · the system has it locked. Open Settings → Privacy → Microphone and toggle R3DVoice on, then click Retry."
+      : "Click Request access below and accept the system prompt. If you don't see it, the OS may have remembered a previous deny · open Settings → Privacy → Camera.";
+  const request = (): void => {
+    if (isMac) {
+      void window.r3dvoice
+        .askMediaPermission(kind)
+        .then(() => onRetry())
+        .catch(() => onRetry());
+    } else {
+      onRetry();
+    }
+  };
+  return (
+    <div className="rv-err-banner" role="alert">
+      <span className="ic">!</span>
+      <div style={{ display: "flex", flexDirection: "column", gap: "var(--s-2)", minWidth: 0 }}>
+        <div style={{ fontWeight: 600 }}>{title}</div>
+        <div style={{ fontSize: "var(--t-xs)", color: "var(--text-mid)", lineHeight: 1.5 }}>{copy}</div>
+        <div style={{ display: "flex", gap: "var(--s-2)", flexWrap: "wrap" }}>
+          {kind === "camera" && (
+            <button
+              type="button"
+              className="rv-btn"
+              style={{ height: "1.8rem", fontSize: "var(--t-xs)" }}
+              onClick={request}
+            >
+              Request access
+            </button>
+          )}
+          <button
+            type="button"
+            className="rv-btn"
+            data-variant={kind === "microphone" ? undefined : "ghost"}
+            style={{ height: "1.8rem", fontSize: "var(--t-xs)" }}
+            onClick={onRetry}
+          >
+            Retry
+          </button>
+        </div>
+      </div>
+    </div>
+  );
+}
+
+// 3.1 — live mic input level next to the mic select. Opens the selected
+// device raw (no processing pipeline — we want the honest input level),
+// meters via WebAudio, and releases everything on unmount/device change.
+function MicLevelRow({ deviceId }: { deviceId: string | null }): ReactElement {
+  const [blocked, setBlocked] = useState(false);
+  const [retryNonce, setRetryNonce] = useState(0);
+  const fillRef = useRef<HTMLDivElement | null>(null);
+  const dbRef = useRef<HTMLSpanElement | null>(null);
+
+  useEffect(() => {
+    let cancelled = false;
+    let stream: MediaStream | null = null;
+    let unsub: (() => void) | null = null;
+    const md = globalThis.navigator?.mediaDevices;
+    if (!md?.getUserMedia) return;
+    md.getUserMedia({
+      audio: deviceId ? { deviceId: { exact: deviceId } } : true,
+      video: false,
+    })
+      .then((s) => {
+        if (cancelled) {
+          s.getTracks().forEach((t) => t.stop());
+          return;
+        }
+        stream = s;
+        setBlocked(false);
+        unsub = subscribeMicLevel(s, (level) => {
+          if (fillRef.current) fillRef.current.style.width = `${Math.round(level * 100)}%`;
+          if (dbRef.current) {
+            const db = level > 0 ? Math.max(-60, 20 * Math.log10(level)) : null;
+            dbRef.current.textContent = db === null ? "−∞ dB" : `${db.toFixed(0)} dB`;
+          }
+        });
+      })
+      .catch(() => {
+        if (!cancelled) setBlocked(true);
+      });
+    return () => {
+      cancelled = true;
+      unsub?.();
+      stream?.getTracks().forEach((t) => t.stop());
+    };
+  }, [deviceId, retryNonce]);
+
+  if (blocked) {
+    return <PermissionDeniedBlock kind="microphone" onRetry={() => setRetryNonce((n) => n + 1)} />;
+  }
+  return (
+    <div style={{ display: "flex", alignItems: "center", gap: "var(--s-3)" }}>
+      <span className="rv-label">in</span>
+      <div className="rv-vu" style={{ flex: 1 }}>
+        <div ref={fillRef} className="rv-vu-fill" style={{ width: "0%" }} />
+        <div className="rv-vu-ticks" />
+      </div>
+      <span
+        ref={dbRef}
+        className="rv-mono"
+        style={{ minWidth: 56, textAlign: "right", fontSize: "var(--t-xs)", color: "var(--text-dim)" }}
+      >
+        −∞ dB
+      </span>
+    </div>
+  );
+}
+
+// 3.1 — speaker test: a short generated two-note chime through the selected
+// output (WebAudio oscillator → element sink so setSinkId can route it).
+function SpeakerTestButton({ deviceId }: { deviceId: string | null }): ReactElement {
+  const [testing, setTesting] = useState(false);
+
+  const play = (): void => {
+    if (testing) return;
+    setTesting(true);
+    const ctx = new AudioContext();
+    const dest = ctx.createMediaStreamDestination();
+    const gain = ctx.createGain();
+    gain.gain.value = 0;
+    gain.connect(dest);
+    const note = (freq: number, at: number, dur: number): void => {
+      const osc = ctx.createOscillator();
+      osc.type = "sine";
+      osc.frequency.value = freq;
+      osc.connect(gain);
+      osc.start(ctx.currentTime + at);
+      osc.stop(ctx.currentTime + at + dur);
+    };
+    gain.gain.setValueAtTime(0, ctx.currentTime);
+    gain.gain.linearRampToValueAtTime(0.25, ctx.currentTime + 0.02);
+    gain.gain.setValueAtTime(0.25, ctx.currentTime + 0.55);
+    gain.gain.linearRampToValueAtTime(0, ctx.currentTime + 0.7);
+    note(659.25, 0, 0.3); // E5
+    note(880.0, 0.3, 0.4); // A5
+    const audio = new Audio();
+    audio.srcObject = dest.stream;
+    const el = audio as HTMLMediaElement & { setSinkId?: (id: string) => Promise<void> };
+    const sinkReady =
+      deviceId && typeof el.setSinkId === "function" ? el.setSinkId(deviceId).catch(() => {}) : Promise.resolve();
+    void sinkReady.then(() => audio.play()).catch(() => {});
+    window.setTimeout(() => {
+      audio.pause();
+      audio.srcObject = null;
+      void ctx.close().catch(() => {});
+      setTesting(false);
+    }, 800);
+  };
+
+  return (
+    <button type="button" className="rv-btn" style={{ flex: "none" }} onClick={play} data-disabled={testing || undefined}>
+      {testing ? "Testing…" : "Test"}
+    </button>
+  );
+}
+
+const CAMERA_RES: Array<{ key: CameraResolution; label: string; w: number; h: number }> = [
+  { key: "480p", label: "640 × 480 · 30 fps", w: 640, h: 480 },
+  { key: "720p", label: "1280 × 720 · 30 fps", w: 1280, h: 720 },
+  { key: "1080p", label: "1920 × 1080 · 30 fps", w: 1920, h: 1080 },
+];
+
+// 3.1 / 3.1a — Video: camera select, live preview (released on stop/unmount),
+// resolution select, mirror toggle. Permission denial renders the 3.1b block.
+function VideoSection(): ReactElement {
+  const camId = usePrefs((s) => s.cameraDeviceId);
+  const camRes = usePrefs((s) => s.cameraResolution);
+  const mirror = usePrefs((s) => s.cameraMirror);
+  const [cams, setCams] = useState<DeviceInfo[]>([]);
+  const [previewing, setPreviewing] = useState(false);
+  const [blocked, setBlocked] = useState(false);
+  const [actual, setActual] = useState<string | null>(null);
+  const [retryNonce, setRetryNonce] = useState(0);
+  const videoRef = useRef<HTMLVideoElement | null>(null);
+
+  useEffect(() => {
+    let cancelled = false;
+    void listVideoInputs().then((list) => {
+      if (!cancelled) setCams(list);
+    });
+    return () => {
+      cancelled = true;
+    };
+  }, []);
+
+  useEffect(() => {
+    if (!previewing) return;
+    let cancelled = false;
+    let stream: MediaStream | null = null;
+    const res = CAMERA_RES.find((r) => r.key === camRes) ?? CAMERA_RES[1]!;
+    const md = globalThis.navigator?.mediaDevices;
+    if (!md?.getUserMedia) return;
+    md.getUserMedia({
+      video: {
+        ...(camId ? { deviceId: { exact: camId } } : {}),
+        width: { ideal: res.w },
+        height: { ideal: res.h },
+        frameRate: { ideal: 30 },
+      },
+      audio: false,
+    })
+      .then((s) => {
+        if (cancelled) {
+          s.getTracks().forEach((t) => t.stop());
+          return;
+        }
+        stream = s;
+        setBlocked(false);
+        const v = videoRef.current;
+        if (v) {
+          v.srcObject = s;
+          void v.play().catch(() => {});
+        }
+        const track = s.getVideoTracks()[0];
+        const st = track?.getSettings();
+        if (st?.width && st.height) {
+          const fps = st.frameRate ? ` · ${Math.round(st.frameRate)} fps` : "";
+          setActual(`${st.width}×${st.height}${fps}`);
+        } else {
+          setActual(null);
+        }
+      })
+      .catch(() => {
+        if (!cancelled) {
+          setBlocked(true);
+          setPreviewing(false);
+        }
+      });
+    return () => {
+      cancelled = true;
+      if (videoRef.current) videoRef.current.srcObject = null;
+      stream?.getTracks().forEach((t) => t.stop());
+      setActual(null);
+    };
+  }, [previewing, camId, camRes, retryNonce]);
+
+  return (
+    <div style={{ display: "flex", flexDirection: "column", gap: "var(--s-4)" }}>
+      <Field label="Camera">
+        <div style={{ display: "flex", gap: "var(--s-2)" }}>
+          <select
+            className="rv-select"
+            style={{ flex: 1, minWidth: 0 }}
+            value={camId ?? ""}
+            onChange={(e) => prefsActions().setCameraDeviceId(e.target.value || null)}
+          >
+            {cams.length === 0 && <option value="">No camera detected</option>}
+            {cams.map((c) => (
+              <option key={c.deviceId} value={c.deviceId}>
+                {c.label}
+              </option>
+            ))}
+          </select>
+          <button
+            type="button"
+            className="rv-btn"
+            style={{ flex: "none" }}
+            data-state={previewing ? "active" : undefined}
+            onClick={() => {
+              setBlocked(false);
+              setPreviewing((p) => !p);
+            }}
+          >
+            {previewing ? "■ Stop" : "▶ Preview"}
+          </button>
+        </div>
+      </Field>
+
+      {blocked && (
+        <PermissionDeniedBlock
+          kind="camera"
+          onRetry={() => {
+            setBlocked(false);
+            setRetryNonce((n) => n + 1);
+            setPreviewing(true);
+          }}
+        />
+      )}
+
+      {previewing && (
+        <div
+          style={{
+            position: "relative",
+            aspectRatio: "16 / 9",
+            background: "var(--tile-bg)",
+            border: "1px solid var(--border)",
+            borderRadius: "var(--r-lg)",
+            overflow: "hidden",
+          }}
+        >
+          <video
+            ref={videoRef}
+            muted
+            playsInline
+            style={{
+              width: "100%",
+              height: "100%",
+              objectFit: "cover",
+              transform: mirror ? "scaleX(-1)" : undefined,
+            }}
+          />
+          <span className="rv-badge" data-tone="live" style={{ position: "absolute", top: 8, left: 8 }}>
+            <span className="pip" />
+            live
+          </span>
+          {actual && (
+            <span
+              className="rv-mono"
+              style={{
+                position: "absolute",
+                bottom: 8,
+                right: 8,
+                fontSize: "var(--t-2xs)",
+                color: "#fff",
+                background: "rgba(0,0,0,.55)",
+                padding: "2px 8px",
+                borderRadius: "var(--r-pill)",
+              }}
+            >
+              {actual}
+            </span>
+          )}
+        </div>
+      )}
+
+      <Field label="Resolution">
+        <select
+          className="rv-select"
+          value={camRes}
+          onChange={(e) => prefsActions().setCameraResolution(e.target.value as CameraResolution)}
+        >
+          {CAMERA_RES.map((r) => (
+            <option key={r.key} value={r.key}>
+              {r.label}
+            </option>
+          ))}
+        </select>
+      </Field>
+
+      <SimpleToggle
+        label="Mirror preview"
+        hint="Flip the local view horizontally when previewing. Doesn't affect what others see."
+        value={mirror}
+        onChange={(v) => prefsActions().setCameraMirror(v)}
+      />
     </div>
   );
 }
@@ -474,11 +862,13 @@ interface KeybindRowSpec {
   global: boolean;
 }
 
+// Deck 3.2 rows — labels + defaults ship populated (see prefs-store DEFAULTS);
+// unbound rows show the deck's dim "none" ghost text.
 const KEYBIND_ROWS: KeybindRowSpec[] = [
   { label: "Push to talk", key: "pttKeybind", global: true },
-  { label: "Toggle mute", key: "muteKeybind", global: false },
-  { label: "Toggle ghost", key: "deafenKeybind", global: false },
-  { label: "Toggle screen-share", key: "shareScreenKeybind", global: false },
+  { label: "Mute / unmute", key: "muteKeybind", global: false },
+  { label: "Toggle Ghost", key: "deafenKeybind", global: false },
+  { label: "Share screen", key: "shareScreenKeybind", global: false },
   { label: "Open settings", key: "openSettingsKeybind", global: false },
   { label: "Leave room", key: "leaveRoomKeybind", global: false },
 ];
@@ -621,7 +1011,8 @@ function KeybindRow({ spec }: { spec: KeybindRowSpec }): ReactElement {
     setCaptured(null);
   }
 
-  const display = captured ?? current ?? "(none)";
+  const display = captured ?? current ?? "none";
+  const isGhost = !captured && !current;
 
   return (
     <div
@@ -645,7 +1036,9 @@ function KeybindRow({ spec }: { spec: KeybindRowSpec }): ReactElement {
         </span>
       </span>
       <span style={{ display: "flex", gap: 6, alignItems: "center" }}>
-        <kbd style={kbdStyle}>{display}</kbd>
+        <kbd style={isGhost ? { ...kbdStyle, color: "var(--text-faint)", fontStyle: "italic" } : kbdStyle}>
+          {display}
+        </kbd>
         <button
           className="rv-btn"
           data-variant="ghost"
@@ -991,15 +1384,75 @@ function PermRow({
   );
 }
 
-// Notifications tab per WireFrames 3.7 (honest subset): DM banner + preview
-// toggles feed notification-router; per-thread levels live on each thread's
-// header. Sound pickers land with the chat-extras pass.
+// Notifications & sounds per WireFrames 3.7. Sound pickers render in a
+// disabled state — no sound assets are bundled in the client yet.
+const SOUND_ROWS: Array<{ label: string; hint: string; options: string[] }> = [
+  { label: "Mention ping", hint: "Plays when someone @mentions you.", options: ["Sonar", "Pebble", "Tap", "Off"] },
+  { label: "DM received", hint: "Plays for each new DM message.", options: ["Pebble", "Sonar", "Tap", "Off"] },
+  { label: "Friend joined room", hint: "When a friend joins a room you're in.", options: ["Off", "Tap", "Pebble"] },
+  {
+    label: "Call connect / disconnect",
+    hint: "When you join or leave a room yourself.",
+    options: ["Default pair", "Soft pair", "Off"],
+  },
+];
+
 function NotificationsTab(): ReactElement {
   const dmBanners = usePrefs((s) => s.dmBanners);
   const dmPreviews = usePrefs((s) => s.dmPreviews);
+  const roomDefault = usePrefs((s) => s.roomNotifDefault);
+  const quietEnabled = usePrefs((s) => s.quietHoursEnabled);
+  const quietStart = usePrefs((s) => s.quietHoursStart);
+  const quietEnd = usePrefs((s) => s.quietHoursEnd);
+
+  const roomLevels: Array<{ key: RoomNotifDefault; label: string }> = [
+    { key: "all", label: "All messages" },
+    { key: "mentions", label: "Mentions only" },
+    { key: "none", label: "Nothing" },
+  ];
+
   return (
     <div style={{ display: "flex", flexDirection: "column", gap: "var(--s-5)", maxWidth: 480 }}>
       <div className="rv-section-head">
+        <span className="rv-label">Default room behavior</span>
+      </div>
+      <div className="rv-seg" style={{ alignSelf: "flex-start" }}>
+        {roomLevels.map((l) => (
+          <button
+            key={l.key}
+            type="button"
+            className="rv-seg-btn"
+            data-active={roomDefault === l.key}
+            onClick={() => prefsActions().setRoomNotifDefault(l.key)}
+          >
+            {l.label}
+          </button>
+        ))}
+      </div>
+      <div style={{ display: "flex", gap: "var(--s-2)", fontSize: "var(--t-xs)", color: "var(--text-dim)", lineHeight: 1.5 }}>
+        <span
+          className="rv-mono"
+          style={{
+            flex: "none",
+            width: 16,
+            height: 16,
+            display: "inline-flex",
+            alignItems: "center",
+            justifyContent: "center",
+            border: "1px solid var(--border)",
+            borderRadius: "50%",
+            fontSize: "var(--t-2xs)",
+          }}
+        >
+          i
+        </span>
+        <span>
+          Applied to new rooms you join. Existing rooms keep their override — change one from the
+          level dropdown at the top of its chat.
+        </span>
+      </div>
+
+      <div className="rv-section-head" style={{ marginTop: "var(--s-2)" }}>
         <span className="rv-label">Direct messages</span>
       </div>
       <SimpleToggle
@@ -1010,31 +1463,191 @@ function NotificationsTab(): ReactElement {
       />
       <SimpleToggle
         label="DM previews"
-        hint="Include the message text in the banner. Turn off if you screenshare a lot."
+        hint="Include the message text in the banner. Off if you screenshare a lot."
         value={dmPreviews}
         onChange={(v) => prefsActions().setDmPreviews(v)}
       />
+
       <div className="rv-section-head" style={{ marginTop: "var(--s-2)" }}>
-        <span className="rv-label">Per-room levels</span>
+        <span className="rv-label">Sounds</span>
       </div>
-      <p style={{ margin: 0, fontSize: "var(--t-xs)", color: "var(--text-dim)", lineHeight: 1.5 }}>
-        Each room and DM has its own level (all · @mentions only · muted) in the dropdown at the
-        top of its chat. Do-Not-Disturb silences everything except friend requests.
-      </p>
+      <div style={{ display: "flex", flexDirection: "column", gap: "var(--s-4)", opacity: 0.55, pointerEvents: "none" }} aria-disabled>
+        {SOUND_ROWS.map((row) => (
+          <div key={row.label} style={{ display: "flex", flexDirection: "column", gap: "var(--s-2)" }}>
+            <div>
+              <div style={{ fontSize: "var(--t-sm)", fontWeight: 500 }}>{row.label}</div>
+              <div style={{ fontSize: "var(--t-xs)", color: "var(--text-faint)", marginTop: 2 }}>{row.hint}</div>
+            </div>
+            <div style={{ display: "flex", gap: "var(--s-2)", alignItems: "center" }}>
+              <div className="rv-seg">
+                {row.options.map((opt, i) => (
+                  <button key={opt} type="button" className="rv-seg-btn" data-active={i === 0} tabIndex={-1}>
+                    {opt}
+                  </button>
+                ))}
+              </div>
+              <button type="button" className="rv-btn rv-btn-icon" tabIndex={-1} aria-label={`Preview ${row.label}`}>
+                ▶
+              </button>
+            </div>
+          </div>
+        ))}
+      </div>
+      <div style={{ fontSize: "var(--t-xs)", color: "var(--text-dim)" }}>
+        No notification sounds are bundled in this build yet — pickers activate when the sound pack
+        ships.
+      </div>
+
+      <div className="rv-section-head" style={{ marginTop: "var(--s-2)" }}>
+        <span className="rv-label">Quiet hours</span>
+      </div>
+      <SimpleToggle
+        label="Suppress all banners + sounds during quiet hours"
+        hint="Mentions still appear in the bell panel; you just don't get a popup."
+        value={quietEnabled}
+        onChange={(v) => prefsActions().setQuietHoursEnabled(v)}
+      />
+      <div
+        style={{
+          display: "flex",
+          alignItems: "center",
+          gap: "var(--s-3)",
+          fontSize: "var(--t-sm)",
+          color: "var(--text-mid)",
+          opacity: quietEnabled ? 1 : 0.55,
+        }}
+      >
+        <span>From</span>
+        <input
+          type="time"
+          className="rv-input"
+          style={{ width: "7.5rem" }}
+          value={quietStart}
+          disabled={!quietEnabled}
+          onChange={(e) => prefsActions().setQuietHoursStart(e.target.value)}
+        />
+        <span>to</span>
+        <input
+          type="time"
+          className="rv-input"
+          style={{ width: "7.5rem" }}
+          value={quietEnd}
+          disabled={!quietEnabled}
+          onChange={(e) => prefsActions().setQuietHoursEnd(e.target.value)}
+        />
+        <span style={{ color: "var(--text-dim)" }}>· local time</span>
+      </div>
     </div>
   );
 }
 
-// Theme tab per WireFrames 3.6 — preset picker. The deck also specs a
-// per-token hex editor with live preview; that ships once presets have
-// settled (tracked with the polish backlog).
+// Theme tab per WireFrames 3.6 — presets (Light/Dark/Grey/Match OS), a
+// per-token hex editor with app-wide live preview, the preview card, and the
+// 4.14 reset-to-preset modal (override count + export-first escape hatch).
+const PRESET_LABELS: Record<ThemePreset, string> = {
+  light: "Light",
+  dark: "Dark",
+  grey: "Grey",
+  system: "Match OS",
+};
+
 function ThemeTab(): ReactElement {
   const theme = usePrefs((s) => s.theme);
-  const presets = [
-    { key: "light" as const, label: "Light", swatch: "#fafafa", ink: "#1a1a1a" },
-    { key: "dark" as const, label: "Dark", swatch: "#161616", ink: "#e6e6e6" },
-    { key: "system" as const, label: "Match OS", swatch: "linear-gradient(90deg, #fafafa 50%, #161616 50%)", ink: "var(--text)" },
+  const savedOverrides = usePrefs((s) => s.themeOverrides);
+  /** Preset token values with overrides lifted (what "Reset" returns to). */
+  const [presetVals, setPresetVals] = useState<Record<string, string>>({});
+  /** Raw hex-input texts (may be mid-edit / invalid). */
+  const [texts, setTexts] = useState<Record<string, string>>({});
+  /** Valid values the user applied this session (live-previewed, unsaved). */
+  const [edits, setEdits] = useState<Record<string, string>>({});
+  const [resetOpen, setResetOpen] = useState(false);
+  const [importError, setImportError] = useState<string | null>(null);
+  const fileRef = useRef<HTMLInputElement | null>(null);
+
+  // Seed/re-seed whenever the preset or the saved overrides change. rAF so
+  // App's data-theme effect (parent — runs after ours) has landed first.
+  useEffect(() => {
+    const raf = requestAnimationFrame(() => {
+      const root = document.documentElement;
+      const saved = prefsActions().themeOverrides;
+      for (const t of THEME_TOKENS) root.style.removeProperty(t.cssVar);
+      const cs = getComputedStyle(root);
+      const preset: Record<string, string> = {};
+      for (const t of THEME_TOKENS) preset[t.cssVar] = cs.getPropertyValue(t.cssVar).trim();
+      applyThemeOverrides(saved);
+      setPresetVals(preset);
+      const txt: Record<string, string> = {};
+      for (const t of THEME_TOKENS) {
+        txt[t.cssVar] = (saved[t.cssVar] ?? preset[t.cssVar] ?? "").toUpperCase();
+      }
+      setTexts(txt);
+      setEdits({});
+    });
+    return () => cancelAnimationFrame(raf);
+  }, [theme, savedOverrides]);
+
+  // Leaving the tab without saving reverts the live preview to what's saved.
+  useEffect(() => {
+    return () => applyThemeOverrides(prefsActions().themeOverrides);
+  }, []);
+
+  const effectiveValue = (cssVar: string): string =>
+    edits[cssVar] ?? savedOverrides[cssVar] ?? presetVals[cssVar] ?? "";
+
+  /** Tokens that differ from the preset — what save persists / reset discards. */
+  const mergedOverrides = (): Record<string, string> => {
+    const out: Record<string, string> = {};
+    for (const t of THEME_TOKENS) {
+      const v = edits[t.cssVar] ?? savedOverrides[t.cssVar];
+      if (v && v.toLowerCase() !== (presetVals[t.cssVar] ?? "").toLowerCase()) out[t.cssVar] = v;
+    }
+    return out;
+  };
+  const overrideCount = Object.keys(mergedOverrides()).length;
+
+  const dirty = Object.entries(edits).some(
+    ([k, v]) => v.toLowerCase() !== (savedOverrides[k] ?? presetVals[k] ?? "").toLowerCase(),
+  );
+
+  const onTokenText = (cssVar: string, raw: string): void => {
+    setTexts((t) => ({ ...t, [cssVar]: raw }));
+    const v = raw.trim();
+    if (isValidHex(v)) {
+      document.documentElement.style.setProperty(cssVar, v);
+      setEdits((e) => ({ ...e, [cssVar]: v }));
+    }
+  };
+
+  const save = (): void => {
+    if (!dirty) return;
+    prefsActions().setThemeOverrides(mergedOverrides());
+  };
+
+  const exportTheme = (): void => downloadThemeJson(theme, mergedOverrides());
+
+  const onImportFile = (file: File): void => {
+    void file.text().then((txt) => {
+      const parsed = parseThemeJson(txt);
+      if (!parsed) {
+        setImportError("That file isn't a R3DVoice theme.json export.");
+        return;
+      }
+      setImportError(null);
+      const p = parsed.preset;
+      if (p === "light" || p === "dark" || p === "grey" || p === "system") {
+        prefsActions().setTheme(p);
+      }
+      prefsActions().setThemeOverrides(parsed.overrides);
+    });
+  };
+
+  const presets: Array<{ key: ThemePreset; label: string; swatch: string; ink: string }> = [
+    { key: "light", label: "Light", swatch: "#fafafa", ink: "#1a1a1a" },
+    { key: "dark", label: "Dark", swatch: "#161616", ink: "#e6e6e6" },
+    { key: "grey", label: "Grey", swatch: "#d9d9d9", ink: "#1a1a1a" },
+    { key: "system", label: "Match OS", swatch: "linear-gradient(90deg, #fafafa 50%, #161616 50%)", ink: "var(--text)" },
   ];
+
   return (
     <div style={{ display: "flex", flexDirection: "column", gap: "var(--s-5)", maxWidth: 480 }}>
       <div className="rv-section-head">
@@ -1052,13 +1665,10 @@ function ThemeTab(): ReactElement {
               flexDirection: "column",
               alignItems: "center",
               gap: "var(--s-2)",
-              padding: "var(--s-4)",
+              padding: "var(--s-3)",
               borderRadius: "var(--r-md)",
               background: "var(--bg-elev)",
-              border:
-                theme === p.key
-                  ? "2px solid var(--accent)"
-                  : "1px solid var(--border)",
+              border: theme === p.key ? "2px solid var(--accent)" : "1px solid var(--border)",
               cursor: "pointer",
               font: "inherit",
               color: "var(--text)",
@@ -1068,7 +1678,7 @@ function ThemeTab(): ReactElement {
               aria-hidden
               style={{
                 width: "100%",
-                height: "3rem",
+                height: "2.5rem",
                 borderRadius: "var(--r-sm)",
                 background: p.swatch,
                 border: "1px solid var(--border-soft)",
@@ -1086,25 +1696,363 @@ function ThemeTab(): ReactElement {
           </button>
         ))}
       </div>
-      <p style={{ margin: 0, fontSize: "var(--t-xs)", color: "var(--text-dim)" }}>
-        Applies instantly, everywhere. Custom token editing (per-color tweaks with live
-        preview) is planned — the stylesheet is already token-driven.
-      </p>
-      {/* 4.14 — with presets, reset = back to the deck default */}
-      <div>
-        <button
-          type="button"
-          className="rv-btn"
-          data-variant="danger"
-          data-disabled={theme === "light" || undefined}
-          onClick={() => {
-            if (theme !== "light") prefsActions().setTheme("light");
+
+      <div className="rv-section-head">
+        <span className="rv-label">Tokens · live preview applies app-wide</span>
+      </div>
+      <div style={{ display: "flex", flexDirection: "column" }}>
+        {THEME_TOKENS.map((t) => {
+          const text = texts[t.cssVar] ?? "";
+          const invalid = text.trim() !== "" && !isValidHex(text);
+          return (
+            <div
+              key={t.cssVar}
+              style={{
+                display: "grid",
+                gridTemplateColumns: "auto 1fr auto",
+                alignItems: "center",
+                gap: "var(--s-3)",
+                padding: "7px 0",
+                borderBottom: "1px solid var(--border-soft)",
+              }}
+            >
+              <span
+                aria-hidden
+                style={{
+                  width: 22,
+                  height: 22,
+                  borderRadius: "var(--r-sm)",
+                  border: "1px solid var(--border)",
+                  background: effectiveValue(t.cssVar) || "transparent",
+                  flex: "none",
+                }}
+              />
+              <span style={{ minWidth: 0 }}>
+                <span className="rv-mono" style={{ fontSize: "var(--t-sm)", display: "block" }}>
+                  {t.deckName}
+                </span>
+                <span style={{ display: "block", fontSize: "var(--t-2xs)", color: "var(--text-dim)" }}>
+                  {t.desc}
+                </span>
+              </span>
+              <input
+                className="rv-input rv-mono"
+                spellCheck={false}
+                value={text}
+                onChange={(e) => onTokenText(t.cssVar, e.target.value)}
+                style={{
+                  width: "6.8rem",
+                  height: "1.9rem",
+                  fontSize: "var(--t-xs)",
+                  textTransform: "uppercase",
+                  ...(invalid ? { borderColor: "var(--danger)" } : {}),
+                }}
+              />
+            </div>
+          );
+        })}
+      </div>
+
+      <div className="rv-section-head">
+        <span className="rv-label">Preview</span>
+      </div>
+      <ThemePreviewCard />
+
+      {importError && (
+        <div className="rv-err-banner" role="alert">
+          <span className="ic">!</span>
+          <div>{importError}</div>
+        </div>
+      )}
+
+      <div style={{ display: "flex", justifyContent: "space-between", gap: "var(--s-2)", flexWrap: "wrap" }}>
+        <div style={{ display: "flex", gap: "var(--s-2)" }}>
+          <button type="button" className="rv-btn" data-variant="ghost" onClick={exportTheme}>
+            Export theme.json
+          </button>
+          <button type="button" className="rv-btn" data-variant="ghost" onClick={() => fileRef.current?.click()}>
+            Import…
+          </button>
+          <input
+            ref={fileRef}
+            type="file"
+            accept=".json,application/json"
+            hidden
+            onChange={(e) => {
+              const f = e.target.files?.[0];
+              if (f) onImportFile(f);
+              e.target.value = "";
+            }}
+          />
+        </div>
+        <div style={{ display: "flex", gap: "var(--s-2)" }}>
+          <button type="button" className="rv-btn" data-variant="danger" onClick={() => setResetOpen(true)}>
+            Reset to preset
+          </button>
+          <button
+            type="button"
+            className="rv-btn"
+            data-variant="primary"
+            data-disabled={!dirty || undefined}
+            onClick={save}
+          >
+            Save changes
+          </button>
+        </div>
+      </div>
+
+      {resetOpen && (
+        <ResetThemeModal
+          presetLabel={PRESET_LABELS[theme]}
+          overrideCount={overrideCount}
+          onExport={exportTheme}
+          onConfirm={() => {
+            prefsActions().setThemeOverrides({});
+            setResetOpen(false);
           }}
-        >
-          Reset theme to defaults
-        </button>
+          onClose={() => setResetOpen(false)}
+        />
+      )}
+    </div>
+  );
+}
+
+// 3.6 preview card — sample UI wired to the live tokens (var() refs), so it
+// repaints as the editor above applies values.
+function ThemePreviewCard(): ReactElement {
+  const pvBtn: CSSProperties = {
+    height: "1.8rem",
+    padding: "0 12px",
+    borderRadius: "var(--r-sm)",
+    fontSize: "var(--t-xs)",
+    fontWeight: 500,
+    cursor: "default",
+    border: "1px solid transparent",
+    background: "transparent",
+  };
+  const callout = (border: string, bg: string): CSSProperties => ({
+    fontSize: "var(--t-2xs)",
+    padding: "6px 10px",
+    background: bg,
+    border: `1px solid ${border}`,
+    borderRadius: "var(--r-sm)",
+    color: "var(--text-mid)",
+  });
+  const dotRow: CSSProperties = { display: "inline-flex", alignItems: "center", gap: 5 };
+  const dot = (bg: string): CSSProperties => ({ width: 8, height: 8, borderRadius: "50%", background: bg });
+  return (
+    <div
+      style={{
+        background: "var(--bg)",
+        border: "1px solid var(--border)",
+        borderRadius: "var(--r-lg)",
+        padding: "var(--s-4)",
+      }}
+    >
+      <div
+        style={{
+          background: "var(--bg-elev)",
+          border: "1px solid var(--border-soft)",
+          borderRadius: "var(--r-md)",
+          padding: "var(--s-4)",
+          display: "flex",
+          flexDirection: "column",
+          gap: "var(--s-3)",
+        }}
+      >
+        {/* Row 1: speaker */}
+        <div style={{ display: "flex", alignItems: "center", gap: "var(--s-2)" }}>
+          <span
+            style={{
+              width: 26,
+              height: 26,
+              borderRadius: "50%",
+              background: "var(--tile-bg-2)",
+              color: "#fff",
+              display: "inline-flex",
+              alignItems: "center",
+              justifyContent: "center",
+              fontSize: "var(--t-xs)",
+              fontWeight: 600,
+            }}
+          >
+            A
+          </span>
+          <span style={{ fontSize: "var(--t-sm)", fontWeight: 600, color: "var(--text)" }}>Alice</span>
+          <span
+            style={{
+              fontSize: "var(--t-2xs)",
+              padding: "2px 8px",
+              borderRadius: "var(--r-pill)",
+              background: "color-mix(in srgb, var(--danger) 10%, transparent)",
+              border: "1px solid color-mix(in srgb, var(--danger) 40%, transparent)",
+              color: "var(--danger)",
+            }}
+          >
+            🔇 muted
+          </span>
+        </div>
+        {/* Row 2: message w/ mention + code */}
+        <span style={{ fontSize: "var(--t-sm)", color: "var(--text)", lineHeight: 1.5 }}>
+          Hey{" "}
+          <span style={{ background: "rgba(31,111,235,0.15)", color: "var(--text)", padding: "1px 4px", borderRadius: 3 }}>
+            @bob
+          </span>{" "}
+          can you check the link in{" "}
+          <code
+            className="rv-mono"
+            style={{
+              fontSize: "var(--t-2xs)",
+              background: "var(--bg-elev-2)",
+              padding: "0 4px",
+              borderRadius: 3,
+              border: "1px solid var(--border-soft)",
+            }}
+          >
+            routes.ts
+          </code>
+          ?
+        </span>
+        {/* Row 3: buttons */}
+        <div style={{ display: "flex", gap: "var(--s-2)", flexWrap: "wrap" }}>
+          <button type="button" tabIndex={-1} style={{ ...pvBtn, background: "var(--accent)", color: "var(--on-accent)", fontWeight: 600 }}>
+            Primary
+          </button>
+          <button type="button" tabIndex={-1} style={{ ...pvBtn, background: "var(--bg-elev)", color: "var(--text)", borderColor: "var(--text)" }}>
+            Secondary
+          </button>
+          <button type="button" tabIndex={-1} style={{ ...pvBtn, color: "var(--text-mid)", borderColor: "var(--border)" }}>
+            Cancel
+          </button>
+          <button
+            type="button"
+            tabIndex={-1}
+            style={{ ...pvBtn, color: "var(--danger)", borderColor: "color-mix(in srgb, var(--danger) 40%, transparent)", fontWeight: 600 }}
+          >
+            Delete
+          </button>
+        </div>
+        {/* Row 4: callouts */}
+        <div style={{ display: "flex", gap: "var(--s-2)", flexWrap: "wrap" }}>
+          <span style={callout("color-mix(in srgb, var(--ok) 30%, transparent)", "color-mix(in srgb, var(--ok) 8%, transparent)")}>
+            <span style={{ color: "var(--ok)", fontWeight: 700 }}>✓</span> Saved
+          </span>
+          <span style={callout("color-mix(in srgb, var(--rv-amber) 40%, transparent)", "color-mix(in srgb, var(--rv-amber) 8%, transparent)")}>
+            <span style={{ color: "var(--rv-amber)", fontWeight: 700 }}>!</span> Quiet hours on
+          </span>
+        </div>
+        {/* Row 5: status dots */}
+        <div style={{ display: "flex", gap: 14, fontSize: "var(--t-2xs)", color: "var(--text-dim)", alignItems: "center" }}>
+          <span style={dotRow}>
+            <span style={dot("var(--ok)")} />
+            online
+          </span>
+          <span style={dotRow}>
+            <span style={dot("var(--rv-amber)")} />
+            idle
+          </span>
+          <span style={dotRow}>
+            <span style={dot("var(--danger)")} />
+            DND
+          </span>
+          <span style={dotRow}>
+            <span style={{ width: 8, height: 8, borderRadius: "50%", border: "1.5px solid var(--text-dim)" }} />
+            offline
+          </span>
+        </div>
       </div>
     </div>
+  );
+}
+
+// 4.14 — reset theme to defaults: shows what gets discarded (override count),
+// offers the export escape hatch, then clears the override map.
+function ResetThemeModal({
+  presetLabel,
+  overrideCount,
+  onExport,
+  onConfirm,
+  onClose,
+}: {
+  presetLabel: string;
+  overrideCount: number;
+  onExport: () => void;
+  onConfirm: () => void;
+  onClose: () => void;
+}): ReactElement {
+  const chip: CSSProperties = {
+    display: "flex",
+    flexDirection: "column",
+    gap: 4,
+    padding: "var(--s-3) var(--s-4)",
+    background: "var(--bg-elev-2)",
+    border: "1px solid var(--border-soft)",
+    borderRadius: "var(--r-md)",
+    flex: 1,
+    minWidth: 0,
+  };
+  return (
+    <Modal
+      open={true}
+      onClose={onClose}
+      icon="↺"
+      title="Reset theme to defaults?"
+      subtitle="Your token edits will be replaced by the preset."
+      width="min(92vw, 440px)"
+      footer={
+        <div style={{ display: "flex", justifyContent: "space-between", gap: "var(--s-2)", width: "100%" }}>
+          <button type="button" className="rv-btn" data-variant="ghost" onClick={onExport}>
+            ↓ Export theme.json
+          </button>
+          <div style={{ display: "flex", gap: "var(--s-2)" }}>
+            <button type="button" className="rv-btn" data-variant="ghost" onClick={onClose}>
+              Cancel
+            </button>
+            <button type="button" className="rv-btn" data-variant="danger" onClick={onConfirm}>
+              Reset
+            </button>
+          </div>
+        </div>
+      }
+    >
+      <div style={{ padding: "var(--s-4) var(--s-6)", display: "flex", flexDirection: "column", gap: "var(--s-4)" }}>
+        <p style={{ margin: 0, fontSize: "var(--t-sm)", color: "var(--text-mid)", lineHeight: 1.5 }}>
+          The current theme will be replaced with the {presetLabel} preset's tokens. Anything
+          you've customized goes back to default.
+        </p>
+        <div style={{ display: "flex", gap: "var(--s-3)" }}>
+          <div style={chip}>
+            <span className="rv-label">Current</span>
+            <span style={{ fontSize: "var(--t-sm)", fontWeight: 600 }}>
+              {overrideCount === 0 ? "No overrides" : `Custom (${overrideCount} override${overrideCount === 1 ? "" : "s"})`}
+            </span>
+          </div>
+          <div style={chip}>
+            <span className="rv-label">Reset to</span>
+            <span style={{ fontSize: "var(--t-sm)", fontWeight: 600 }}>{presetLabel}</span>
+          </div>
+        </div>
+        <div
+          style={{
+            display: "flex",
+            gap: "var(--s-2)",
+            padding: "var(--s-3)",
+            background: "var(--bg-elev-2)",
+            border: "1px solid var(--border-soft)",
+            borderRadius: "var(--r-md)",
+            fontSize: "var(--t-xs)",
+            color: "var(--text-mid)",
+            lineHeight: 1.5,
+          }}
+        >
+          <span aria-hidden style={{ flex: "none" }}>↓</span>
+          <span>
+            Export your current theme.json first if you want to keep it. You can re-import it
+            anytime.
+          </span>
+        </div>
+      </div>
+    </Modal>
   );
 }
 
@@ -1251,7 +2199,7 @@ function AccountTab({ onClose }: { onClose: () => void }): ReactElement {
       <div className="rv-section-head" style={{ marginTop: "var(--s-3)" }}>
         <span className="rv-label">Encryption key backup</span>
       </div>
-      <E2eeKeySection />
+      <E2eeKeySection onSignedOut={() => void handleSwitch()} />
 
       <div className="rv-section-head" style={{ marginTop: "var(--s-3)" }}>
         <span className="rv-label">Actions</span>
@@ -1647,12 +2595,17 @@ function ProfileIdentityFields(): ReactElement {
   );
 }
 
-function E2eeKeySection(): ReactElement {
+function E2eeKeySection({ onSignedOut }: { onSignedOut: () => void }): ReactElement {
   const user = useAuthStore((s) => s.user);
+  const [confirmingClear, setConfirmingClear] = useState(false);
   const kp = loadKeyPair();
   const handleExport = (): void => {
     if (!kp || !user) return;
     downloadKeyBackup(user.email, kp);
+  };
+  const clearAndSignOut = (): void => {
+    clearKeyPair();
+    onSignedOut();
   };
   return (
     <div
@@ -1676,7 +2629,7 @@ function E2eeKeySection(): ReactElement {
             : "No keypair on this device. Sign out and sign in again to generate one, or restore from a previous backup at login."}
         </div>
       </div>
-      <div>
+      <div style={{ display: "flex", gap: "var(--s-2)", flexWrap: "wrap" }}>
         <button
           type="button"
           className="rv-btn"
@@ -1686,9 +2639,45 @@ function E2eeKeySection(): ReactElement {
         >
           <I.Copy size={14} /> Download key backup
         </button>
+        {kp && !confirmingClear && (
+          <button
+            type="button"
+            className="rv-btn"
+            data-variant="danger"
+            onClick={() => setConfirmingClear(true)}
+          >
+            Sign out &amp; clear keys on this device…
+          </button>
+        )}
       </div>
-    
-      </div>
+      {confirmingClear && (
+        <div
+          style={{
+            padding: "var(--s-3)",
+            background: "color-mix(in srgb, var(--danger) 6%, transparent)",
+            border: "1px solid color-mix(in srgb, var(--danger) 35%, transparent)",
+            borderRadius: "var(--r-sm)",
+            display: "flex",
+            flexDirection: "column",
+            gap: "var(--s-3)",
+          }}
+        >
+          <div style={{ fontSize: "var(--t-xs)", color: "var(--text-mid)", lineHeight: 1.5 }}>
+            This deletes the E2EE keypair stored on this device, then signs you out. Without a key
+            backup, your encrypted DM history becomes unreadable here — download the backup above
+            first if you might want it back.
+          </div>
+          <div style={{ display: "flex", gap: "var(--s-2)" }}>
+            <button type="button" className="rv-btn" data-variant="danger" onClick={clearAndSignOut}>
+              Clear keys + sign out
+            </button>
+            <button type="button" className="rv-btn" data-variant="ghost" onClick={() => setConfirmingClear(false)}>
+              Cancel
+            </button>
+          </div>
+        </div>
+      )}
+    </div>
   );
 }
 

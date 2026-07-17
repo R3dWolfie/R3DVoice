@@ -1,6 +1,7 @@
 import { useEffect, useState, type ReactElement } from "react";
 import { AuthProvider, useAuthStore, useNeedsHandle } from "./lib/auth-context.js";
 import { usePrefs } from "./lib/prefs-singleton.js";
+import { applyThemeOverrides } from "./lib/theme-tokens.js";
 import { disconnectTransport, ensureTransport, setCurrentUserForNotifications } from "./lib/chat-transport.js";
 import { ApiClient } from "./lib/api.js";
 import { LoginScreen } from "./screens/LoginScreen.js";
@@ -187,14 +188,15 @@ export function App(): ReactElement {
     if (k) void window.r3dvoice.setPttKeybind(k);
   }, []);
 
-  // Theme (3.6): light is the deck default; dark applies via
-  // data-theme="dark" on <html>; "system" tracks the OS live.
+  // Theme (3.6): light is the deck default; dark/grey apply via
+  // data-theme on <html>; "system" tracks the OS live.
   const theme = usePrefs((s) => s.theme);
   useEffect(() => {
     const mq = window.matchMedia("(prefers-color-scheme: dark)");
     const apply = (): void => {
       const dark = theme === "dark" || (theme === "system" && mq.matches);
       if (dark) document.documentElement.setAttribute("data-theme", "dark");
+      else if (theme === "grey") document.documentElement.setAttribute("data-theme", "grey");
       else document.documentElement.removeAttribute("data-theme");
     };
     apply();
@@ -202,6 +204,13 @@ export function App(): ReactElement {
     mq.addEventListener("change", apply);
     return () => mq.removeEventListener("change", apply);
   }, [theme]);
+
+  // 3.6 token editor — saved per-token overrides ride on top of the preset
+  // as inline custom properties on <html>; reapplied on boot + when saved.
+  const themeOverrides = usePrefs((s) => s.themeOverrides);
+  useEffect(() => {
+    applyThemeOverrides(themeOverrides);
+  }, [themeOverrides]);
 
   return (
     <AuthProvider>
