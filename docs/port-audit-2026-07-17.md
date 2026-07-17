@@ -65,9 +65,12 @@ Fixed in batch 1: DM mute popover + header identity/avatar, composer order,
 live titlebar label, add-menu chips + copy, rail presence dot, keybind
 ghost rename + scope tags, settings viewport clamp, login forgot link.
 
-Still open (ranked): live voice-occupancy signals everywhere (lobby room
-meta "N in call" + activity dots, browse "in voice" counts, DM header
-status line — needs presence-per-room from the backend rework); Theme
+DONE later same day: live occupancy (inCall via presence groupBy — lobby
+rows "N in call" + dots + WS live-refresh, browse "in voice" sort), chat
+history scroll-up pagination, deleted messages hidden (tombstone gaps),
+DM header E2EE pill, sender-side E2EE decrypt bug + regression test.
+
+Still open (ranked): DM header presence/status line; Theme
 token editor + preview card + Grey preset + export/import; Notifications
 sounds/quiet-hours/desktop-integration/default-room segmented; Devices
 video section (camera select/preview/resolution/mirror) + mic meter +
