@@ -1,0 +1,2 @@
+# makepkg-downloaded AppImage sources (fetched at build, too large for git)
+*.AppImage

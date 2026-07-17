@@ -948,8 +948,15 @@ export class LiveKitRoom {
       }
     }
 
-    // 3. Windows fallback dialog
-    if (!track) {
+    // 3. getDisplayMedia audio fallback — for Windows (native WASAPI helper
+    //    unavailable) and web (the browser's own picker carries an audio
+    //    checkbox). Explicitly NOT Linux: there, audio-only getDisplayMedia
+    //    still pops the screen portal a SECOND time (Wayland/PipeWire has no
+    //    audio-only capture through this API), which is exactly the "asked me
+    //    to pick a screen twice" bug. On Linux the PipeWire monitor path above
+    //    is the only correct route; if it didn't yield a track we go without
+    //    share-audio rather than double-prompting the portal.
+    if (!track && platform !== "linux") {
       try {
         const stream = await navigator.mediaDevices.getDisplayMedia({
           audio: true,
