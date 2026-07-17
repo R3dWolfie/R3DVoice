@@ -95,6 +95,8 @@ export interface PublicRoomDTO {
   id: string;
   name: string;
   description: string | null;
+  /** Directory attribution (4.7 "by @handle"). */
+  owner: { displayName: string; handle: string | null };
   memberCount: number;
   /** Users currently in the call (live presence count). */
   inCall: number;

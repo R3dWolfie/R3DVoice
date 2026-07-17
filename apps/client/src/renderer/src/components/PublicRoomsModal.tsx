@@ -8,9 +8,7 @@ import { Modal } from "./Modal.js";
 // Public room directory per WireFrames 4.7: filter-by-name input + "Show
 // empty rooms" toggle over a two-up card grid (name · description ·
 // occupancy pip + "N in voice" · Join), rooms with people in them first.
-// The deck also credits an owner ("by @handle") on each card — the
-// /rooms/public payload doesn't carry owner identity yet, so that line
-// waits on a server addition.
+// Cards credit the owner ("by @handle") per deck 4.7.
 export function PublicRoomsModal({
   onClose,
   onJoin,
@@ -141,7 +139,8 @@ export function PublicRoomsModal({
                 <div key={r.id} className="rv-browse-card">
                   <span className="name">{r.name}</span>
                   <span className="by">
-                    {r.memberCount} member{r.memberCount === 1 ? "" : "s"}
+                    by {r.owner.handle ? `@${r.owner.handle}` : r.owner.displayName} · {r.memberCount} member
+                    {r.memberCount === 1 ? "" : "s"}
                   </span>
                   <span className="desc">{r.description ?? "No description yet."}</span>
                   <div className="foot">

@@ -132,7 +132,10 @@ export async function roomRoutes(app: FastifyInstance): Promise<void> {
       where: { isPublic: true },
       orderBy: { createdAt: "desc" },
       take: 100,
-      include: { _count: { select: { memberships: true } } },
+      include: {
+        _count: { select: { memberships: true } },
+        owner: { select: { displayName: true, handle: true } },
+      },
     });
     const counts = rooms.length
       ? await prisma.user.groupBy({
@@ -147,6 +150,7 @@ export async function roomRoutes(app: FastifyInstance): Promise<void> {
         id: r.id,
         name: r.name,
         description: r.description ?? null,
+        owner: { displayName: r.owner.displayName, handle: r.owner.handle },
         memberCount: r._count.memberships,
         inCall: inCall.get(r.id) ?? 0,
         createdAt: r.createdAt.toISOString(),
