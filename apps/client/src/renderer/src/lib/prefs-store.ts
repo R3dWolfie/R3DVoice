@@ -58,6 +58,8 @@ export interface PrefsState {
   compatibilityMode: boolean;
   crashReporting: boolean;
   showDiagnostics: boolean;
+  /** Toast when someone joins/leaves a call you're in (no sound assets yet). */
+  joinLeaveToasts: boolean;
   noiseSuppression: NoiseSuppressionLevel;
   echoCancellation: boolean;
   autoGainControl: boolean;
@@ -104,6 +106,7 @@ export interface PrefsState {
   setCompatibilityMode(v: boolean): void;
   setCrashReporting(v: boolean): void;
   setShowDiagnostics(v: boolean): void;
+  setJoinLeaveToasts(v: boolean): void;
   setNoiseSuppression(v: NoiseSuppressionLevel): void;
   setEchoCancellation(v: boolean): void;
   setAutoGainControl(v: boolean): void;
@@ -116,6 +119,26 @@ export interface PrefsState {
   setParticipantVolume(id: string, volume: number): void;
   setParticipantScreenVolume(id: string, volume: number): void;
 }
+
+/**
+ * Deck 3.2 default keybinds — the single source of truth shared by the store
+ * DEFAULTS below and Settings › Keybinds "Reset to defaults".
+ */
+export const KEYBIND_DEFAULTS: {
+  pttKeybind: string | null;
+  muteKeybind: string | null;
+  deafenKeybind: string | null;
+  shareScreenKeybind: string | null;
+  openSettingsKeybind: string | null;
+  leaveRoomKeybind: string | null;
+} = {
+  pttKeybind: "Control+Space",
+  muteKeybind: "Control+Shift+M",
+  deafenKeybind: null,
+  shareScreenKeybind: "Control+Shift+E",
+  openSettingsKeybind: "Control+,",
+  leaveRoomKeybind: null,
+};
 
 const DEFAULTS = {
   theme: "light" as ThemePreset,
@@ -137,15 +160,16 @@ const DEFAULTS = {
   frameRate: 30 as FrameRate,
   shareAudio: true,
   // Deck 3.2 defaults (⌘ ≈ Control cross-platform). Ghost + Leave ship unbound.
-  pttKeybind: "Control+Space" as string | null,
-  muteKeybind: "Control+Shift+M" as string | null,
-  deafenKeybind: null as string | null,
-  shareScreenKeybind: "Control+Shift+E" as string | null,
-  openSettingsKeybind: "Control+," as string | null,
-  leaveRoomKeybind: null as string | null,
+  pttKeybind: KEYBIND_DEFAULTS.pttKeybind,
+  muteKeybind: KEYBIND_DEFAULTS.muteKeybind,
+  deafenKeybind: KEYBIND_DEFAULTS.deafenKeybind,
+  shareScreenKeybind: KEYBIND_DEFAULTS.shareScreenKeybind,
+  openSettingsKeybind: KEYBIND_DEFAULTS.openSettingsKeybind,
+  leaveRoomKeybind: KEYBIND_DEFAULTS.leaveRoomKeybind,
   compatibilityMode: false,
   crashReporting: false,
   showDiagnostics: false,
+  joinLeaveToasts: true,
   noiseSuppression: "high" as NoiseSuppressionLevel,
   echoCancellation: true,
   // Fresh installs land on the "Voice Isolation" profile (strong NS + AEC +
@@ -234,6 +258,7 @@ export function createPrefsStore(storage: PrefsStorage): StoreApi<PrefsState> {
       compatibilityMode: state.compatibilityMode,
       crashReporting: state.crashReporting,
       showDiagnostics: state.showDiagnostics,
+      joinLeaveToasts: state.joinLeaveToasts,
       noiseSuppression: state.noiseSuppression,
       echoCancellation: state.echoCancellation,
       autoGainControl: state.autoGainControl,
@@ -290,6 +315,7 @@ export function createPrefsStore(storage: PrefsStorage): StoreApi<PrefsState> {
     setCompatibilityMode: (v) => { set({ compatibilityMode: v }); persistFromState(get()); },
     setCrashReporting: (v) => { set({ crashReporting: v }); persistFromState(get()); },
     setShowDiagnostics: (v) => { set({ showDiagnostics: v }); persistFromState(get()); },
+    setJoinLeaveToasts: (v) => { set({ joinLeaveToasts: v }); persistFromState(get()); },
     setNoiseSuppression: (v) => { set({ noiseSuppression: v }); persistFromState(get()); },
     setEchoCancellation: (v) => { set({ echoCancellation: v }); persistFromState(get()); },
     setAutoGainControl: (v) => { set({ autoGainControl: v }); persistFromState(get()); },

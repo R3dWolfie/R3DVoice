@@ -15,6 +15,7 @@ import {
 } from "../lib/media.js";
 import { usePrefs, prefsActions } from "../lib/prefs-singleton.js";
 import type { CameraResolution, RoomNotifDefault, ThemePreset, InputProfile } from "../lib/prefs-store.js";
+import { KEYBIND_DEFAULTS } from "../lib/prefs-store.js";
 import {
   THEME_TOKENS,
   applyThemeOverrides,
@@ -27,6 +28,7 @@ import { useAuthStore } from "../lib/auth-context.js";
 import { ApiClient } from "../lib/api.js";
 import { clearKeyPair, downloadKeyBackup, loadKeyPair } from "../lib/key-storage.js";
 import { Avatar } from "./Avatar.js";
+import { PresenceDot, usePresence } from "./presence.js";
 import { I } from "./Icons.js";
 import { Modal } from "./Modal.js";
 import { Field, APP_VERSION } from "./Primitives.js";
@@ -919,76 +921,6 @@ function SimpleToggle({
   );
 }
 
-function Toggle({
-  label,
-  hint,
-  defaultChecked,
-}: {
-  label: string;
-  hint?: string;
-  defaultChecked?: boolean;
-}): ReactElement {
-  const [on, setOn] = useState<boolean>(!!defaultChecked);
-  return (
-    <label
-      style={{
-        display: "flex",
-        alignItems: "center",
-        justifyContent: "space-between",
-        gap: "var(--s-4)",
-        cursor: "pointer",
-        padding: "10px 0",
-        borderBottom: "1px solid var(--border-soft)",
-      }}
-    >
-      <div>
-        <div style={{ fontSize: "var(--t-sm)", fontWeight: 500 }}>{label}</div>
-        {hint && (
-          <div style={{ fontSize: "var(--t-xs)", color: "var(--text-faint)", marginTop: 2 }}>
-            {hint}
-          </div>
-        )}
-      </div>
-      <span
-        onClick={() => setOn((o) => !o)}
-        style={{
-          width: 36,
-          height: 20,
-          borderRadius: 999,
-          background: on ? "var(--accent)" : "var(--bg-elev-3)",
-          border:
-            "1px solid " +
-            (on ? "color-mix(in oklch, var(--accent) 70%, black)" : "var(--border-strong)"),
-          position: "relative",
-          transition: "all var(--d-base) var(--ease-out)",
-          boxShadow: on ? "0 0 0 3px color-mix(in oklch, var(--accent) 25%, transparent)" : "none",
-        }}
-      >
-        <span
-          style={{
-            position: "absolute",
-            top: 1,
-            left: on ? 17 : 1,
-            width: 16,
-            height: 16,
-            borderRadius: "50%",
-            background: "var(--text)",
-            transition: "left var(--d-base) var(--ease-out)",
-          }}
-        />
-        <input
-          type="checkbox"
-          checked={on}
-          onChange={() => {
-            /* state mutates via the wrapper click */
-          }}
-          style={{ display: "none" }}
-        />
-      </span>
-    </label>
-  );
-}
-
 interface KeybindRowSpec {
   label: string;
   key:
@@ -999,6 +931,14 @@ interface KeybindRowSpec {
     | "openSettingsKeybind"
     | "leaveRoomKeybind";
   global: boolean;
+}
+
+type KeybindKey = KeybindRowSpec["key"];
+
+interface BindSummary {
+  key: KeybindKey;
+  label: string;
+  combo: string | null;
 }
 
 // Deck 3.2 rows — labels + defaults ship populated (see prefs-store DEFAULTS);
@@ -1014,6 +954,39 @@ const KEYBIND_ROWS: KeybindRowSpec[] = [
 
 function KeybindsTab(): ReactElement {
   const [cheatsheetOpen, setCheatsheetOpen] = useState(false);
+  const [confirmingReset, setConfirmingReset] = useState(false);
+
+  // Read every bind up-front so each row can flag combos shared by two actions.
+  const ptt = usePrefs((s) => s.pttKeybind);
+  const mute = usePrefs((s) => s.muteKeybind);
+  const ghost = usePrefs((s) => s.deafenKeybind);
+  const share = usePrefs((s) => s.shareScreenKeybind);
+  const settings = usePrefs((s) => s.openSettingsKeybind);
+  const leave = usePrefs((s) => s.leaveRoomKeybind);
+  const byKey: Record<KeybindKey, string | null> = {
+    pttKeybind: ptt,
+    muteKeybind: mute,
+    deafenKeybind: ghost,
+    shareScreenKeybind: share,
+    openSettingsKeybind: settings,
+    leaveRoomKeybind: leave,
+  };
+  const allBinds: BindSummary[] = KEYBIND_ROWS.map((r) => ({ key: r.key, label: r.label, combo: byKey[r.key] }));
+
+  // UX audit #2d — restore every keybind to the shipped defaults.
+  const resetAll = (): void => {
+    const a = prefsActions();
+    a.setPttKeybind(KEYBIND_DEFAULTS.pttKeybind);
+    a.setMuteKeybind(KEYBIND_DEFAULTS.muteKeybind);
+    a.setDeafenKeybind(KEYBIND_DEFAULTS.deafenKeybind);
+    a.setShareScreenKeybind(KEYBIND_DEFAULTS.shareScreenKeybind);
+    a.setOpenSettingsKeybind(KEYBIND_DEFAULTS.openSettingsKeybind);
+    a.setLeaveRoomKeybind(KEYBIND_DEFAULTS.leaveRoomKeybind);
+    // Re-register the global PTT hotkey at its default accelerator.
+    void window.r3dvoice.setPttKeybind(KEYBIND_DEFAULTS.pttKeybind);
+    setConfirmingReset(false);
+  };
+
   return (
     <div
       style={{ display: "flex", flexDirection: "column", gap: "var(--s-3)", maxWidth: 460 }}
@@ -1030,12 +1003,35 @@ function KeybindsTab(): ReactElement {
         </button>
       </div>
       {KEYBIND_ROWS.map((row) => (
-        <KeybindRow key={row.key} spec={row} />
+        <KeybindRow key={row.key} spec={row} allBinds={allBinds} />
       ))}
       <div style={{ fontSize: "var(--t-xs)", color: "var(--text-faint)", marginTop: "var(--s-2)", lineHeight: 1.5 }}>
         Push-to-talk uses a system-wide hotkey (works when the app is unfocused).
         The rest only fire when the R3DVoice window is focused.
       </div>
+      {!confirmingReset ? (
+        <div>
+          <button
+            type="button"
+            className="rv-btn"
+            data-variant="ghost"
+            style={{ height: "1.8rem", fontSize: "var(--t-xs)" }}
+            onClick={() => setConfirmingReset(true)}
+          >
+            Reset to defaults
+          </button>
+        </div>
+      ) : (
+        <div style={{ display: "flex", alignItems: "center", gap: "var(--s-2)", flexWrap: "wrap", fontSize: "var(--t-sm)", color: "var(--text-mid)" }}>
+          <span>Reset all keybinds to defaults?</span>
+          <button type="button" className="rv-btn" data-variant="danger" style={{ height: "1.8rem", fontSize: "var(--t-xs)" }} onClick={resetAll}>
+            Reset
+          </button>
+          <button type="button" className="rv-btn" data-variant="ghost" style={{ height: "1.8rem", fontSize: "var(--t-xs)" }} onClick={() => setConfirmingReset(false)}>
+            Cancel
+          </button>
+        </div>
+      )}
       {cheatsheetOpen && <CheatsheetModal onClose={() => setCheatsheetOpen(false)} />}
     </div>
   );
@@ -1095,13 +1091,29 @@ function CheatsheetModal({ onClose }: { onClose: () => void }): ReactElement {
   );
 }
 
-function KeybindRow({ spec }: { spec: KeybindRowSpec }): ReactElement {
+const PTT_REG_FAILED =
+  "R3DVoice couldn't register this system-wide shortcut — it may already be taken by another app. Push-to-talk is inactive until you pick a different combo.";
+
+function KeybindRow({ spec, allBinds }: { spec: KeybindRowSpec; allBinds: BindSummary[] }): ReactElement {
   const current = usePrefs((s) => s[spec.key]);
   const [recording, setRecording] = useState(false);
   const [captured, setCaptured] = useState<string | null>(null);
+  const [regError, setRegError] = useState<string | null>(null);
 
   useEffect(() => {
     if (!recording) return;
+    const mods = (e: KeyboardEvent | MouseEvent): string[] => {
+      const parts: string[] = [];
+      if (e.ctrlKey) parts.push("Control");
+      if (e.shiftKey) parts.push("Shift");
+      if (e.altKey) parts.push("Alt");
+      if (e.metaKey) parts.push("Super");
+      return parts;
+    };
+    const finish = (combo: string): void => {
+      setCaptured(combo);
+      setRecording(false);
+    };
     function onKey(e: KeyboardEvent): void {
       e.preventDefault();
       e.stopPropagation();
@@ -1110,18 +1122,25 @@ function KeybindRow({ spec }: { spec: KeybindRowSpec }): ReactElement {
         setRecording(false);
         return;
       }
-      const parts: string[] = [];
-      if (e.ctrlKey) parts.push("Control");
-      if (e.shiftKey) parts.push("Shift");
-      if (e.altKey) parts.push("Alt");
-      if (e.metaKey) parts.push("Super");
       const key = e.key === " " ? "Space" : e.key.length === 1 ? e.key.toUpperCase() : e.key;
-      parts.push(key);
-      setCaptured(parts.join("+"));
-      setRecording(false);
+      finish([...mods(e), key].join("+"));
+    }
+    // UX audit #2b — allow mouse-button binds (Mouse4/Mouse5 = back/forward),
+    // a common push-to-talk choice. Left/middle/right are ignored so the
+    // capture overlay stays clickable (and Esc still cancels).
+    function onMouse(e: MouseEvent): void {
+      const btn = e.button === 3 ? "Mouse4" : e.button === 4 ? "Mouse5" : null;
+      if (!btn) return;
+      e.preventDefault();
+      e.stopPropagation();
+      finish([...mods(e), btn].join("+"));
     }
     window.addEventListener("keydown", onKey, true);
-    return () => window.removeEventListener("keydown", onKey, true);
+    window.addEventListener("mousedown", onMouse, true);
+    return () => {
+      window.removeEventListener("keydown", onKey, true);
+      window.removeEventListener("mousedown", onMouse, true);
+    };
   }, [recording]);
 
   const persist = async (next: string | null): Promise<void> => {
@@ -1133,9 +1152,29 @@ function KeybindRow({ spec }: { spec: KeybindRowSpec }): ReactElement {
       | "setOpenSettingsKeybind"
       | "setLeaveRoomKeybind";
     prefsActions()[setter](next);
-    if (spec.global) {
-      // PTT goes through globalShortcut in main; others stay in renderer.
-      await window.r3dvoice.setPttKeybind(next);
+    setRegError(null);
+    if (!spec.global) return;
+    // PTT goes through globalShortcut in main; others stay in renderer.
+    // UX audit #2c — surface a failed OS registration instead of leaving PTT
+    // silently unbound.
+    if (next && /Mouse\d/.test(next)) {
+      // Electron's globalShortcut can't bind mouse buttons — a global mouse PTT
+      // won't register. Be honest rather than pretend it worked.
+      setRegError(
+        "Mouse buttons can't act as a system-wide push-to-talk (the OS shortcut layer only accepts keyboard keys). Pick a key combo instead.",
+      );
+      return;
+    }
+    try {
+      // The bridge resolves void today; if/when main returns a registration
+      // result, false / { ok:false } is treated as a failure. Note: keyboard
+      // failures still need the main IPC to return that result to fire here.
+      const res: unknown = await window.r3dvoice.setPttKeybind(next);
+      const failed =
+        res === false || (typeof res === "object" && res !== null && (res as { ok?: boolean }).ok === false);
+      if (failed && next) setRegError(PTT_REG_FAILED);
+    } catch {
+      if (next) setRegError(PTT_REG_FAILED);
     }
   };
 
@@ -1153,56 +1192,82 @@ function KeybindRow({ spec }: { spec: KeybindRowSpec }): ReactElement {
   const display = captured ?? current ?? "none";
   const isGhost = !captured && !current;
 
+  // UX audit #2a — flag a combo that is also bound to another action.
+  const activeCombo = captured ?? current;
+  const conflictLabels = activeCombo
+    ? allBinds
+        .filter((b) => b.key !== spec.key && b.combo && b.combo.toLowerCase() === activeCombo.toLowerCase())
+        .map((b) => b.label)
+    : [];
+
+  const warnStyle: CSSProperties = { fontSize: "var(--t-xs)", color: "var(--rv-amber)", lineHeight: 1.45 };
+
   return (
     <div
       style={{
         display: "flex",
-        justifyContent: "space-between",
-        alignItems: "center",
+        flexDirection: "column",
+        gap: 6,
         padding: "10px 0",
         borderBottom: "1px solid var(--border-soft)",
-        gap: "var(--s-3)",
-        flexWrap: "wrap",
       }}
     >
-      <span style={{ fontSize: "var(--t-sm)", display: "inline-flex", alignItems: "baseline", gap: 6 }}>
-        {spec.label}
-        <span
-          className="rv-mono"
-          style={{ fontSize: "var(--t-2xs)", color: spec.global ? "var(--rv-amber)" : "var(--text-faint)", letterSpacing: ".08em", textTransform: "uppercase" }}
-        >
-          {spec.global ? "Global" : "Window"}
+      <div
+        style={{
+          display: "flex",
+          justifyContent: "space-between",
+          alignItems: "center",
+          gap: "var(--s-3)",
+          flexWrap: "wrap",
+        }}
+      >
+        <span style={{ fontSize: "var(--t-sm)", display: "inline-flex", alignItems: "baseline", gap: 6 }}>
+          {spec.label}
+          <span
+            className="rv-mono"
+            style={{ fontSize: "var(--t-2xs)", color: spec.global ? "var(--rv-amber)" : "var(--text-faint)", letterSpacing: ".08em", textTransform: "uppercase" }}
+          >
+            {spec.global ? "Global" : "Window"}
+          </span>
         </span>
-      </span>
-      <span style={{ display: "flex", gap: 6, alignItems: "center" }}>
-        <kbd style={isGhost ? { ...kbdStyle, color: "var(--text-faint)", fontStyle: "italic" } : kbdStyle}>
-          {display}
-        </kbd>
-        <button
-          className="rv-btn"
-          data-variant="ghost"
-          onClick={() => setRecording(true)}
-          disabled={recording}
-        >
-          {recording ? "Press a key…" : "Rebind"}
-        </button>
-        {captured && (
-          <button className="rv-btn" data-variant="primary" onClick={() => void save()}>
-            Save
+        <span style={{ display: "flex", gap: 6, alignItems: "center" }}>
+          <kbd style={isGhost ? { ...kbdStyle, color: "var(--text-faint)", fontStyle: "italic" } : kbdStyle}>
+            {display}
+          </kbd>
+          <button
+            className="rv-btn"
+            data-variant="ghost"
+            onClick={() => setRecording(true)}
+            disabled={recording}
+          >
+            {recording ? "Press a key / mouse…" : "Rebind"}
           </button>
-        )}
-        {current && !captured && (
-          <button className="rv-btn" data-variant="ghost" onClick={() => void clear()}>
-            Clear
-          </button>
-        )}
-      </span>
+          {captured && (
+            <button className="rv-btn" data-variant="primary" onClick={() => void save()}>
+              Save
+            </button>
+          )}
+          {current && !captured && (
+            <button className="rv-btn" data-variant="ghost" onClick={() => void clear()}>
+              Clear
+            </button>
+          )}
+        </span>
+      </div>
+      {conflictLabels.length > 0 && (
+        <div style={warnStyle}>
+          ⚠ Also bound to {conflictLabels.join(", ")} — one combo firing two actions is usually a mistake.
+        </div>
+      )}
+      {regError && <div style={warnStyle}>⚠ {regError}</div>}
     </div>
   );
 }
 
 function CompatTab(): ReactElement {
   const enabled = usePrefs((s) => s.compatibilityMode);
+  const showDiagnostics = usePrefs((s) => s.showDiagnostics);
+  const [confirmingRelaunch, setConfirmingRelaunch] = useState(false);
 
   async function toggleX11(): Promise<void> {
     const next = !enabled;
@@ -1282,15 +1347,51 @@ function CompatTab(): ReactElement {
         </span>
       </label>
 
-      {/* Inert toggles per designer */}
-      <Toggle label="GPU video decode (VP9 / AV1)" defaultChecked />
-      <Toggle label="Use system Picture-in-Picture" />
+      {/* UX audit #1: "GPU video decode (VP9/AV1)" + "Use system
+          Picture-in-Picture" were inert local-state toggles (nothing behind
+          them) — hidden until wired to real backend behavior so the panel
+          doesn't read as "looks real, does nothing". */}
 
-      <div>
-        <button className="rv-btn" onClick={() => void relaunch()}>
-          Relaunch app
-        </button>
-      </div>
+      {/* UX audit #6 — diagnostics overlay toggle (pref + overlay already exist). */}
+      <SimpleToggle
+        label="Show diagnostics overlay"
+        hint="Live connection + media stats overlay. Toggle any time with Ctrl+Shift+D."
+        value={showDiagnostics}
+        onChange={(v) => prefsActions().setShowDiagnostics(v)}
+      />
+
+      {/* UX audit #7 — Relaunch restarts the app on one click; guard it. */}
+      {!confirmingRelaunch ? (
+        <div>
+          <button className="rv-btn" onClick={() => setConfirmingRelaunch(true)}>
+            Relaunch app
+          </button>
+        </div>
+      ) : (
+        <div
+          style={{
+            padding: "var(--s-3) var(--s-4)",
+            background: "color-mix(in oklch, var(--accent) 8%, var(--bg-elev-2))",
+            border: "1px solid color-mix(in oklch, var(--accent) 35%, var(--border))",
+            borderRadius: "var(--r-md)",
+            display: "flex",
+            flexDirection: "column",
+            gap: "var(--s-3)",
+          }}
+        >
+          <div style={{ fontSize: "var(--t-sm)", color: "var(--text)", lineHeight: 1.5 }}>
+            Relaunch R3DVoice now? Any active call or screenshare on this device will drop.
+          </div>
+          <div style={{ display: "flex", gap: "var(--s-2)" }}>
+            <button type="button" className="rv-btn" data-variant="primary" onClick={() => void relaunch()}>
+              Relaunch now
+            </button>
+            <button type="button" className="rv-btn" data-variant="ghost" onClick={() => setConfirmingRelaunch(false)}>
+              Cancel
+            </button>
+          </div>
+        </div>
+      )}
 
       <div style={{ fontSize: "var(--t-xs)", color: "var(--text-dim)" }}>
         Platform-specific notes:
@@ -1523,22 +1624,14 @@ function PermRow({
   );
 }
 
-// Notifications & sounds per WireFrames 3.7. Sound pickers render in a
-// disabled state — no sound assets are bundled in the client yet.
-const SOUND_ROWS: Array<{ label: string; hint: string; options: string[] }> = [
-  { label: "Mention ping", hint: "Plays when someone @mentions you.", options: ["Sonar", "Pebble", "Tap", "Off"] },
-  { label: "DM received", hint: "Plays for each new DM message.", options: ["Pebble", "Sonar", "Tap", "Off"] },
-  { label: "Friend joined room", hint: "When a friend joins a room you're in.", options: ["Off", "Tap", "Pebble"] },
-  {
-    label: "Call connect / disconnect",
-    hint: "When you join or leave a room yourself.",
-    options: ["Default pair", "Soft pair", "Off"],
-  },
-];
+// Notifications per WireFrames 3.7. The "Sounds" section (disabled sound
+// pickers) was removed per UX audit #1 — no sound assets ship yet, and a
+// dead pointerEvents:none block reads as broken. It returns with the pack.
 
 function NotificationsTab(): ReactElement {
   const dmBanners = usePrefs((s) => s.dmBanners);
   const dmPreviews = usePrefs((s) => s.dmPreviews);
+  const joinLeaveToasts = usePrefs((s) => s.joinLeaveToasts);
   const roomDefault = usePrefs((s) => s.roomNotifDefault);
   const quietEnabled = usePrefs((s) => s.quietHoursEnabled);
   const quietStart = usePrefs((s) => s.quietHoursStart);
@@ -1608,34 +1701,17 @@ function NotificationsTab(): ReactElement {
       />
 
       <div className="rv-section-head" style={{ marginTop: "var(--s-2)" }}>
-        <span className="rv-label">Sounds</span>
+        <span className="rv-label">Voice channels</span>
       </div>
-      <div style={{ display: "flex", flexDirection: "column", gap: "var(--s-4)", opacity: 0.55, pointerEvents: "none" }} aria-disabled>
-        {SOUND_ROWS.map((row) => (
-          <div key={row.label} style={{ display: "flex", flexDirection: "column", gap: "var(--s-2)" }}>
-            <div>
-              <div style={{ fontSize: "var(--t-sm)", fontWeight: 500 }}>{row.label}</div>
-              <div style={{ fontSize: "var(--t-xs)", color: "var(--text-faint)", marginTop: 2 }}>{row.hint}</div>
-            </div>
-            <div style={{ display: "flex", gap: "var(--s-2)", alignItems: "center" }}>
-              <div className="rv-seg">
-                {row.options.map((opt, i) => (
-                  <button key={opt} type="button" className="rv-seg-btn" data-active={i === 0} tabIndex={-1}>
-                    {opt}
-                  </button>
-                ))}
-              </div>
-              <button type="button" className="rv-btn rv-btn-icon" tabIndex={-1} aria-label={`Preview ${row.label}`}>
-                ▶
-              </button>
-            </div>
-          </div>
-        ))}
-      </div>
-      <div style={{ fontSize: "var(--t-xs)", color: "var(--text-dim)" }}>
-        No notification sounds are bundled in this build yet — pickers activate when the sound pack
-        ships.
-      </div>
+      {/* UX audit #5 — no cue when people come/go in a call. Until sound assets
+          ship, a toast covers it (see notify-join-leave.ts; InRoomScreen wires
+          the room events). */}
+      <SimpleToggle
+        label="Join / leave alerts"
+        hint="Show a toast when someone joins or leaves a call you're in. (Sound cues arrive with the sound pack.)"
+        value={joinLeaveToasts}
+        onChange={(v) => prefsActions().setJoinLeaveToasts(v)}
+      />
 
       <div className="rv-section-head" style={{ marginTop: "var(--s-2)" }}>
         <span className="rv-label">Quiet hours</span>
@@ -1933,6 +2009,7 @@ function ThemeTab(): ReactElement {
             className="rv-btn"
             data-variant="primary"
             data-disabled={!dirty || undefined}
+            disabled={!dirty}
             onClick={save}
           >
             Save changes
@@ -2200,6 +2277,9 @@ function AccountTab({ onClose }: { onClose: () => void }): ReactElement {
   const serverUrl = useAuthStore((s) => s.serverUrl);
   const logout = useAuthStore((s) => s.logout);
   const updateAvatarUrl = useAuthStore((s) => s.updateAvatarUrl);
+  // UX audit #4 — live presence for the current user (DND from dndUntil + a
+  // client-side idle timer). Friends' idle/DND need server work (see presence.tsx).
+  const presence = usePresence();
   const [confirming, setConfirming] = useState(false);
   const [avatarUrlDraft, setAvatarUrlDraft] = useState(user?.avatarUrl ?? "");
   const [avatarBusy, setAvatarBusy] = useState(false);
@@ -2239,13 +2319,17 @@ function AccountTab({ onClose }: { onClose: () => void }): ReactElement {
           size={48}
         />
         <div style={{ display: "flex", flexDirection: "column", gap: 2, minWidth: 0 }}>
-          <span style={{ fontWeight: 500 }}>{user?.displayName ?? "(unknown)"}</span>
+          <span style={{ fontWeight: 500, display: "inline-flex", alignItems: "center", gap: "var(--s-2)" }}>
+            <PresenceDot state={presence.state} />
+            {user?.displayName ?? "(unknown)"}
+          </span>
           <span
             className="rv-mono"
             style={{ fontSize: "var(--t-xs)", color: "var(--text-faint)", overflow: "hidden", textOverflow: "ellipsis" }}
           >
             {user?.email ?? ""}
           </span>
+          <span style={{ fontSize: "var(--t-2xs)", color: presence.color }}>{presence.label}</span>
         </div>
       </div>
 
@@ -2408,11 +2492,34 @@ function AccountTab({ onClose }: { onClose: () => void }): ReactElement {
   );
 }
 
-// 4.11 — active sessions + sign out everywhere.
+interface SessionRow {
+  id: string;
+  createdAt: string;
+  current: boolean;
+}
+
+/** Relative "started N ago" for a session's createdAt. */
+function formatSessionTime(iso: string): string {
+  const then = new Date(iso).getTime();
+  if (Number.isNaN(then)) return "unknown";
+  const mins = Math.floor((Date.now() - then) / 60000);
+  if (mins < 1) return "just now";
+  if (mins < 60) return `${mins} min ago`;
+  const hrs = Math.floor(mins / 60);
+  if (hrs < 24) return `${hrs} hour${hrs === 1 ? "" : "s"} ago`;
+  const days = Math.floor(hrs / 24);
+  if (days < 30) return `${days} day${days === 1 ? "" : "s"} ago`;
+  return new Date(iso).toLocaleDateString();
+}
+
+// 4.11 — active sessions. UX audit #3: render per-session rows (created time +
+// "current" badge), not just a count. GET /auth/sessions returns {id,
+// createdAt, current}. There is NO per-session revoke route on the server yet,
+// so individual sign-out isn't offered — only "sign out everywhere".
 function SessionsSection({ onSignedOutEverywhere }: { onSignedOutEverywhere: () => void }): ReactElement {
   const serverUrl = useAuthStore((s) => s.serverUrl);
   const token = useAuthStore((s) => s.token);
-  const [count, setCount] = useState<number | null>(null);
+  const [sessions, setSessions] = useState<SessionRow[] | null>(null);
   const [confirming, setConfirming] = useState(false);
   const [busy, setBusy] = useState(false);
 
@@ -2423,20 +2530,62 @@ function SessionsSection({ onSignedOutEverywhere }: { onSignedOutEverywhere: () 
     api
       .listSessions()
       .then((r) => {
-        if (!cancelled) setCount(r.sessions.length);
+        if (!cancelled) setSessions(r.sessions);
       })
-      .catch(() => {});
+      .catch(() => {
+        if (!cancelled) setSessions([]);
+      });
     return () => {
       cancelled = true;
     };
   }, [serverUrl, token]);
 
+  const count = sessions?.length ?? null;
+
   return (
-    <div style={{ display: "flex", flexDirection: "column", gap: "var(--s-2)" }}>
-      <div style={{ fontSize: "var(--t-sm)", color: "var(--text-mid)" }}>
-        {count === null ? "…" : `${count} active session${count === 1 ? "" : "s"}`} — signing out
-        everywhere revokes all of them, including this one.
+    <div style={{ display: "flex", flexDirection: "column", gap: "var(--s-3)" }}>
+      {sessions === null ? (
+        <div className="rv-skeleton" style={{ height: "2.5rem" }} />
+      ) : sessions.length === 0 ? (
+        <div style={{ fontSize: "var(--t-sm)", color: "var(--text-dim)" }}>No active sessions.</div>
+      ) : (
+        <div style={{ display: "flex", flexDirection: "column" }}>
+          {sessions.map((s) => (
+            <div
+              key={s.id}
+              style={{
+                display: "flex",
+                alignItems: "center",
+                justifyContent: "space-between",
+                gap: "var(--s-3)",
+                padding: "10px 0",
+                borderBottom: "1px solid var(--border-soft)",
+              }}
+            >
+              <div style={{ display: "flex", flexDirection: "column", gap: 2, minWidth: 0 }}>
+                <span style={{ fontSize: "var(--t-sm)", fontWeight: 500 }}>
+                  {s.current ? "This device" : "Signed-in device"}
+                </span>
+                <span className="rv-mono" style={{ fontSize: "var(--t-2xs)", color: "var(--text-faint)" }}>
+                  Started {formatSessionTime(s.createdAt)}
+                </span>
+              </div>
+              {s.current && (
+                <span className="rv-badge" data-tone="live">
+                  <span className="pip" />
+                  current
+                </span>
+              )}
+            </div>
+          ))}
+        </div>
+      )}
+
+      <div style={{ fontSize: "var(--t-xs)", color: "var(--text-mid)" }}>
+        {count === null ? "…" : `${count} active session${count === 1 ? "" : "s"}`}
+        {" — signing out everywhere revokes all of them, including this one."}
       </div>
+
       {!confirming ? (
         <div>
           <button type="button" className="rv-btn" data-variant="danger" onClick={() => setConfirming(true)}>
