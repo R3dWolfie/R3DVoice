@@ -83,7 +83,12 @@ const DEFAULTS = {
   // (now applies in real time without re-opening the mic).
   autoGainControl: false,
   micGain: 1.0,
-  serverUrl: "https://voice.r3dwolfie.com",
+  // Dev/self-host override: VITE_SERVER_URL at build time wins for fresh
+  // profiles; persisted prefs always take precedence after first run.
+  serverUrl:
+    (typeof import.meta !== "undefined" &&
+      (import.meta as unknown as { env?: Record<string, string | undefined> }).env?.["VITE_SERVER_URL"]) ||
+    "https://voice.r3dwolfie.com",
   favoriteRoomIds: [] as string[],
   participantVolumes: {} as Record<string, number>,
   participantScreenVolumes: {} as Record<string, number>,

@@ -1,6 +1,6 @@
 import { useState, useEffect, type FormEvent, type ReactElement } from "react";
 import { useAuthStore } from "../lib/auth-context.js";
-import { usePrefs } from "../lib/prefs-singleton.js";
+import { usePrefs, prefsActions } from "../lib/prefs-singleton.js";
 import { Field, Spinner, APP_VERSION } from "../components/Primitives.js";
 import { I } from "../components/Icons.js";
 import { parseKeyBackup, saveKeyPair, loadKeyPair } from "../lib/key-storage.js";
@@ -20,6 +20,7 @@ export function LoginScreen(): ReactElement {
 
   const prefsServerUrl = usePrefs((s) => s.serverUrl);
   const setServerUrl = useAuthStore((s) => s.setServerUrl);
+  const [serverEditOpen, setServerEditOpen] = useState(false);
 
   // Hydrate in-memory auth-store from persisted prefs on mount.
   useEffect(() => {
@@ -72,13 +73,19 @@ export function LoginScreen(): ReactElement {
   const totpStep = status === "totp-required";
 
   return (
-    <div style={{ position: "relative", height: "100%", background: "var(--bg)" }}>
+    // Grid centering, NOT transform centering — rv-fade-in's final keyframe
+    // (transform: none, fill both) would permanently clobber a translate(-50%).
+    <div
+      style={{
+        position: "relative",
+        height: "100%",
+        background: "var(--bg)",
+        display: "grid",
+        placeItems: "center",
+      }}
+    >
       <div
         style={{
-          position: "absolute",
-          top: "50%",
-          left: "50%",
-          transform: "translate(-50%, -50%)",
           width: "min(92vw, 24rem)",
           display: "flex",
           flexDirection: "column",
@@ -297,7 +304,9 @@ export function LoginScreen(): ReactElement {
         </form>
       </div>
 
-      {/* footer pinned to the window edge */}
+      {/* footer pinned to the window edge — "self-hostable" doubles as the
+          server-URL escape hatch (the deck removed the login server picker;
+          self-hosters and dev still need a pre-auth way to point elsewhere) */}
       <div
         style={{
           position: "absolute",
@@ -306,19 +315,67 @@ export function LoginScreen(): ReactElement {
           bottom: 0,
           padding: "var(--s-4) var(--s-6)",
           display: "flex",
-          justifyContent: "center",
+          flexDirection: "column",
           alignItems: "center",
           gap: "var(--s-3)",
-          fontFamily: "var(--font-mono)",
-          fontSize: "var(--t-2xs)",
-          letterSpacing: ".2em",
-          textTransform: "uppercase",
-          color: "var(--text-dim)",
         }}
       >
-        <span>build · v{APP_VERSION}</span>
-        <span style={{ color: "var(--text-faint)" }}>·</span>
-        <span>self-hostable · AGPL</span>
+        {serverEditOpen && (
+          <input
+            autoFocus
+            className="rv-input"
+            value={prefsServerUrl}
+            spellCheck={false}
+            onChange={(e) => {
+              const normalized = e.target.value.replace(/\\/g, "/");
+              prefsActions().setServerUrl(normalized);
+              setServerUrl(normalized);
+            }}
+            onKeyDown={(e) => {
+              if (e.key === "Enter" || e.key === "Escape") setServerEditOpen(false);
+            }}
+            placeholder="https://voice.r3dwolfie.com"
+            style={{ width: "min(92vw, 20rem)", height: "2rem", fontSize: "var(--t-xs)", fontFamily: "var(--font-mono)" }}
+          />
+        )}
+        <div
+          style={{
+            display: "flex",
+            justifyContent: "center",
+            alignItems: "center",
+            gap: "var(--s-3)",
+            fontFamily: "var(--font-mono)",
+            fontSize: "var(--t-2xs)",
+            letterSpacing: ".2em",
+            textTransform: "uppercase",
+            color: "var(--text-dim)",
+          }}
+        >
+          <span>build · v{APP_VERSION}</span>
+          <span style={{ color: "var(--text-faint)" }}>·</span>
+          <button
+            type="button"
+            onClick={() => setServerEditOpen((v) => !v)}
+            title={`Server: ${prefsServerUrl} — click to change`}
+            style={{
+              appearance: "none",
+              background: "transparent",
+              border: 0,
+              padding: 0,
+              font: "inherit",
+              letterSpacing: "inherit",
+              textTransform: "inherit",
+              color: "inherit",
+              cursor: "pointer",
+              textDecoration: serverEditOpen ? "underline" : "none",
+              textUnderlineOffset: 3,
+            }}
+          >
+            self-hostable
+          </button>
+          <span style={{ color: "var(--text-faint)" }}>·</span>
+          <span>AGPL</span>
+        </div>
       </div>
     </div>
   );
