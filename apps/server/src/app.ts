@@ -61,10 +61,13 @@ export async function buildApp(options: BuildAppOptions = {}): Promise<FastifyIn
       index: "index.html",
       wildcard: false,
       setHeaders: (res, filePath) => {
+        // @fastify/static passes the raw ServerResponse at runtime; its
+        // typings say FastifyReply. Bridge with a minimal structural type.
+        const raw = res as unknown as { setHeader(name: string, value: string): void };
         if (/[/\\]assets[/\\]/.test(filePath)) {
-          res.setHeader("Cache-Control", "public, max-age=31536000, immutable");
+          raw.setHeader("Cache-Control", "public, max-age=31536000, immutable");
         } else {
-          res.setHeader("Cache-Control", "no-cache");
+          raw.setHeader("Cache-Control", "no-cache");
         }
       },
     });
