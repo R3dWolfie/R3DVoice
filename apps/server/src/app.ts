@@ -61,14 +61,17 @@ export async function buildApp(options: BuildAppOptions = {}): Promise<FastifyIn
       index: "index.html",
       wildcard: false,
       setHeaders: (res, filePath) => {
-        // @fastify/static passes the raw ServerResponse at runtime; its
-        // typings say FastifyReply. Bridge with a minimal structural type.
-        const raw = res as unknown as { setHeader(name: string, value: string): void };
-        if (/[/\\]assets[/\\]/.test(filePath)) {
-          raw.setHeader("Cache-Control", "public, max-age=31536000, immutable");
-        } else {
-          raw.setHeader("Cache-Control", "no-cache");
-        }
+        // Runtime object varies by send-path (FastifyReply vs raw
+        // ServerResponse) — support both shapes.
+        const value = /[/\\]assets[/\\]/.test(filePath)
+          ? "public, max-age=31536000, immutable"
+          : "no-cache";
+        const r = res as unknown as {
+          setHeader?: (name: string, value: string) => void;
+          header?: (name: string, value: string) => unknown;
+        };
+        if (typeof r.setHeader === "function") r.setHeader("Cache-Control", value);
+        else if (typeof r.header === "function") r.header("Cache-Control", value);
       },
     });
     app.setNotFoundHandler((request, reply) => {
