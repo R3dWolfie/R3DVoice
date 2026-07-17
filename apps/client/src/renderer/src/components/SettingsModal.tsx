@@ -1261,6 +1261,221 @@ function AccountTab({ onClose }: { onClose: () => void }): ReactElement {
           </div>
         </div>
       )}
+
+      <div className="rv-section-head" style={{ marginTop: "var(--s-3)" }}>
+        <span className="rv-label">Sessions</span>
+      </div>
+      <SessionsSection onSignedOutEverywhere={() => void handleSwitch()} />
+
+      <div className="rv-section-head" style={{ marginTop: "var(--s-3)" }}>
+        <span className="rv-label">Blocked users</span>
+      </div>
+      <BlockedUsersSection />
+
+      <div className="rv-section-head" style={{ marginTop: "var(--s-3)" }}>
+        <span className="rv-label">Danger zone</span>
+      </div>
+      <DeleteAccountSection onDeleted={() => void handleSwitch()} />
+    </div>
+  );
+}
+
+// 4.11 — active sessions + sign out everywhere.
+function SessionsSection({ onSignedOutEverywhere }: { onSignedOutEverywhere: () => void }): ReactElement {
+  const serverUrl = useAuthStore((s) => s.serverUrl);
+  const token = useAuthStore((s) => s.token);
+  const [count, setCount] = useState<number | null>(null);
+  const [confirming, setConfirming] = useState(false);
+  const [busy, setBusy] = useState(false);
+
+  useEffect(() => {
+    let cancelled = false;
+    const api = new ApiClient(serverUrl);
+    api.setToken(token);
+    api
+      .listSessions()
+      .then((r) => {
+        if (!cancelled) setCount(r.sessions.length);
+      })
+      .catch(() => {});
+    return () => {
+      cancelled = true;
+    };
+  }, [serverUrl, token]);
+
+  return (
+    <div style={{ display: "flex", flexDirection: "column", gap: "var(--s-2)" }}>
+      <div style={{ fontSize: "var(--t-sm)", color: "var(--text-mid)" }}>
+        {count === null ? "…" : `${count} active session${count === 1 ? "" : "s"}`} — signing out
+        everywhere revokes all of them, including this one.
+      </div>
+      {!confirming ? (
+        <div>
+          <button type="button" className="rv-btn" data-variant="danger" onClick={() => setConfirming(true)}>
+            Sign out everywhere
+          </button>
+        </div>
+      ) : (
+        <div style={{ display: "flex", gap: "var(--s-2)" }}>
+          <button
+            type="button"
+            className="rv-btn"
+            data-variant="danger"
+            disabled={busy}
+            onClick={() => {
+              setBusy(true);
+              const api = new ApiClient(serverUrl);
+              api.setToken(token);
+              void api
+                .logoutAll()
+                .then(() => onSignedOutEverywhere())
+                .finally(() => setBusy(false));
+            }}
+          >
+            {busy ? "Signing out…" : "Yes, everywhere"}
+          </button>
+          <button type="button" className="rv-btn" data-variant="ghost" onClick={() => setConfirming(false)}>
+            Cancel
+          </button>
+        </div>
+      )}
+    </div>
+  );
+}
+
+// 3.3a — blocked users list with unblock.
+function BlockedUsersSection(): ReactElement {
+  const serverUrl = useAuthStore((s) => s.serverUrl);
+  const token = useAuthStore((s) => s.token);
+  const [blocked, setBlocked] = useState<Array<{ friendshipId: string; name: string; handle: string | null }>>([]);
+  const [loaded, setLoaded] = useState(false);
+
+  const refresh = (): void => {
+    const api = new ApiClient(serverUrl);
+    api.setToken(token);
+    void api
+      .friends()
+      .then((r) => {
+        setBlocked(
+          r.friends
+            .filter((f) => f.status === "blocked")
+            .map((f) => ({ friendshipId: f.friendshipId, name: f.user.displayName, handle: f.user.handle ?? null })),
+        );
+        setLoaded(true);
+      })
+      .catch(() => setLoaded(true));
+  };
+
+  useEffect(refresh, [serverUrl, token]);
+
+  if (!loaded) return <div className="rv-skeleton" style={{ height: "2rem" }} />;
+  if (blocked.length === 0) {
+    return <div style={{ fontSize: "var(--t-sm)", color: "var(--text-dim)" }}>Nobody blocked.</div>;
+  }
+  return (
+    <div style={{ display: "flex", flexDirection: "column", gap: "var(--s-2)" }}>
+      {blocked.map((b) => (
+        <div key={b.friendshipId} style={{ display: "flex", alignItems: "center", gap: "var(--s-3)", fontSize: "var(--t-sm)" }}>
+          <span style={{ flex: 1 }}>
+            {b.name}
+            {b.handle && <span className="rv-mono" style={{ fontSize: "var(--t-2xs)", color: "var(--text-dim)" }}> @{b.handle}</span>}
+          </span>
+          <button
+            className="rv-btn"
+            style={{ height: "1.7rem", fontSize: "var(--t-2xs)" }}
+            onClick={() => {
+              const api = new ApiClient(serverUrl);
+              api.setToken(token);
+              void api.unblockFriend(b.friendshipId).then(refresh);
+            }}
+          >
+            Unblock
+          </button>
+        </div>
+      ))}
+    </div>
+  );
+}
+
+// 4.12 — delete account: type-handle confirm (UX) + password re-auth (security).
+function DeleteAccountSection({ onDeleted }: { onDeleted: () => void }): ReactElement {
+  const serverUrl = useAuthStore((s) => s.serverUrl);
+  const token = useAuthStore((s) => s.token);
+  const user = useAuthStore((s) => s.user);
+  const [open, setOpen] = useState(false);
+  const [confirmText, setConfirmText] = useState("");
+  const [password, setPassword] = useState("");
+  const [busy, setBusy] = useState(false);
+  const [error, setError] = useState<string | null>(null);
+
+  const expected = user?.handle ?? user?.displayName ?? "";
+  const matches = confirmText === expected && password.length > 0;
+
+  if (!open) {
+    return (
+      <div>
+        <button type="button" className="rv-btn" data-variant="danger" onClick={() => setOpen(true)}>
+          Delete account…
+        </button>
+      </div>
+    );
+  }
+  return (
+    <div
+      style={{
+        padding: "var(--s-4)",
+        background: "color-mix(in srgb, var(--danger) 6%, transparent)",
+        border: "1px solid color-mix(in srgb, var(--danger) 35%, transparent)",
+        borderRadius: "var(--r-md)",
+        display: "flex",
+        flexDirection: "column",
+        gap: "var(--s-3)",
+      }}
+    >
+      <div style={{ fontSize: "var(--t-sm)", lineHeight: 1.5 }}>
+        Deleting your account removes your profile, sessions, friendships, and every room you
+        own (disconnecting their members). DM messages you sent stay for the other person.
+        <b style={{ fontWeight: 600 }}> There is no undo.</b>
+      </div>
+      <Field label={`Type ${expected} to confirm`}>
+        <input className="rv-input" value={confirmText} spellCheck={false} onChange={(e) => setConfirmText(e.target.value)} />
+      </Field>
+      <Field label="Your password">
+        <input className="rv-input" type="password" value={password} onChange={(e) => setPassword(e.target.value)} />
+      </Field>
+      {error && (
+        <div className="rv-err-banner" role="alert">
+          <span className="ic">!</span>
+          <div>{error}</div>
+        </div>
+      )}
+      <div style={{ display: "flex", gap: "var(--s-2)" }}>
+        <button type="button" className="rv-btn" data-variant="ghost" onClick={() => setOpen(false)}>
+          Cancel
+        </button>
+        <button
+          type="button"
+          className="rv-btn"
+          data-variant="danger"
+          data-disabled={!matches || busy || undefined}
+          onClick={() => {
+            if (!matches || busy) return;
+            setBusy(true);
+            setError(null);
+            const api = new ApiClient(serverUrl);
+            api.setToken(token);
+            void api
+              .deleteAccount(password)
+              .then(() => onDeleted())
+              .catch((e: unknown) => {
+                setError(e instanceof Error ? e.message : "failed");
+                setBusy(false);
+              });
+          }}
+        >
+          {busy ? "Deleting…" : "Delete my account forever"}
+        </button>
+      </div>
     </div>
   );
 }

@@ -208,6 +208,33 @@ export async function authRoutes(app: FastifyInstance): Promise<void> {
     reply.status(204).send();
   });
 
+  // 4.11 — active session list. IDs are opaque; createdAt + current flag is
+  // all the UI needs to reason about "other devices".
+  app.get("/auth/sessions", { preHandler: requireAuth }, async (request) => {
+    const sessions = await prisma.session.findMany({
+      where: { userId: request.auth!.userId, revokedAt: null },
+      orderBy: { createdAt: "desc" },
+      select: { id: true, createdAt: true },
+    });
+    return {
+      sessions: sessions.map((s) => ({
+        id: s.id,
+        createdAt: s.createdAt.toISOString(),
+        current: s.id === request.auth!.sessionId,
+      })),
+    };
+  });
+
+  // 4.11 — sign out everywhere: revokes every live session including this
+  // one; the caller drops its token and lands on login.
+  app.post("/auth/logout-all", { preHandler: requireAuth }, async (request, reply) => {
+    await prisma.session.updateMany({
+      where: { userId: request.auth!.userId, revokedAt: null },
+      data: { revokedAt: new Date() },
+    });
+    reply.status(204).send();
+  });
+
   // 2FA: start enrollment — generates a secret + QR. The secret is staged on the
   // user but `totpEnabledAt` stays null until enrollVerify confirms a working code.
   app.post(

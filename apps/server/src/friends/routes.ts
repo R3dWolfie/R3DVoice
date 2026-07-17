@@ -51,7 +51,10 @@ export async function friendsRoutes(app: FastifyInstance): Promise<void> {
         },
         orderBy: { requestedAt: "desc" },
       });
-      const friends: FriendDTO[] = rows.map((f) => {
+      // The blocked party must not learn they're blocked: rows where someone
+      // else blocked me (I'm the recipient of a blocked row) are invisible.
+      const visible = rows.filter((f) => !(f.status === "blocked" && f.recipientId === userId));
+      const friends: FriendDTO[] = visible.map((f) => {
         const isRequester = f.requesterId === userId;
         const other = isRequester ? f.recipient : f.requester;
         let status: FriendDTO["status"];
@@ -261,4 +264,78 @@ export async function friendsRoutes(app: FastifyInstance): Promise<void> {
       reply.status(204).send();
     },
   );
+
+  // ---------------------------------------------------------------------
+  // Block (4.13 / 3.3a): replaces any existing pair row with a directional
+  // blocked row where requester = blocker. Blocks friend requests both ways
+  // and DM sends; the blocked party never sees the row.
+  // ---------------------------------------------------------------------
+  const blockBodySchema = z.object({ userId: z.string().uuid() });
+
+  app.post(
+    "/friends/block",
+    { preHandler: requireAuth },
+    async (request, reply) => {
+      const parsed = blockBodySchema.safeParse(request.body);
+      if (!parsed.success) throw new ValidationError("invalid user id");
+      const userId = request.auth!.userId;
+      const targetId = parsed.data.userId;
+      if (targetId === userId) throw new ValidationError("cannot block yourself");
+      const target = await prisma.user.findUnique({
+        where: { id: targetId },
+        select: { id: true, displayName: true, email: true, handle: true },
+      });
+      if (!target) throw new NotFoundError("user not found");
+
+      await prisma.$transaction(async (tx) => {
+        await tx.friendship.deleteMany({
+          where: {
+            OR: [
+              { requesterId: userId, recipientId: targetId },
+              { requesterId: targetId, recipientId: userId },
+            ],
+          },
+        });
+        await tx.friendship.create({
+          data: {
+            requesterId: userId,
+            recipientId: targetId,
+            status: "blocked",
+            respondedAt: new Date(),
+          },
+        });
+      });
+      reply.status(204).send();
+    },
+  );
+
+  app.post<{ Params: { id: string } }>(
+    "/friends/:id/unblock",
+    { preHandler: requireAuth },
+    async (request, reply) => {
+      const userId = request.auth!.userId;
+      const row = await prisma.friendship.findUnique({ where: { id: request.params.id } });
+      // Only the blocker may unblock, and only blocked rows qualify.
+      if (!row || row.status !== "blocked" || row.requesterId !== userId) {
+        throw new NotFoundError("block not found");
+      }
+      await prisma.friendship.delete({ where: { id: row.id } });
+      reply.status(204).send();
+    },
+  );
+}
+
+/** True when either user has blocked the other. Used by chat send. */
+export async function isBlockedPair(a: string, b: string): Promise<boolean> {
+  const row = await prisma.friendship.findFirst({
+    where: {
+      status: "blocked",
+      OR: [
+        { requesterId: a, recipientId: b },
+        { requesterId: b, recipientId: a },
+      ],
+    },
+    select: { id: true },
+  });
+  return row !== null;
 }

@@ -4,6 +4,7 @@ import { prisma } from "../db.js";
 import { requireAuth } from "../auth/middleware.js";
 import { AuthError, ValidationError, NotFoundError } from "../errors.js";
 import { isDmParticipant, isThreadType, type ThreadType } from "./threads.js";
+import { isBlockedPair } from "../friends/routes.js";
 import { broadcastToThread, sendToUser } from "./ws-state.js";
 import { wrapAtRest, unwrapAtRest } from "../crypto-at-rest.js";
 
@@ -154,6 +155,15 @@ export async function chatRoutes(app: FastifyInstance): Promise<void> {
       if (!isThreadType(threadType)) throw new ValidationError("unknown thread type");
       const userId = request.auth!.userId;
       await assertThreadAccess(threadType, threadId, userId);
+
+      // Blocks close the pipe at SEND time only (4.13) — history stays
+      // readable on both sides, matching the deck's block semantics.
+      if (threadType === "dm") {
+        const otherId = threadId.split(":").find((part) => part !== userId);
+        if (otherId && (await isBlockedPair(userId, otherId))) {
+          throw new AuthError("you can't message this user");
+        }
+      }
 
       // Resolve @handle tokens against the thread's participant set. Strict
       // regex requires a non-word character (or string start) before the @ so

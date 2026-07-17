@@ -4,7 +4,8 @@ import { z } from "zod";
 import { prisma } from "../db.js";
 import { Prisma } from "@prisma/client";
 import { requireAuth } from "../auth/middleware.js";
-import { ConflictError, NotFoundError, ValidationError } from "../errors.js";
+import { verifyPassword } from "../auth/password.js";
+import { AuthError, ConflictError, NotFoundError, ValidationError } from "../errors.js";
 
 const setHandleSchema = z.object({ handle: userHandleSchema });
 const handleParamSchema = z.object({ handle: z.string() });
@@ -44,6 +45,22 @@ export async function userRoutes(app: FastifyInstance): Promise<void> {
       .nullable()
       .optional(),
     displayName: z.string().trim().min(1).max(50).optional(),
+  });
+
+  // 4.12 — delete account. Password re-auth server-side (the type-handle
+  // confirm is client UX, not security). User row cascades: sessions,
+  // owned rooms (disconnecting their members), memberships, friendships.
+  const deleteMeSchema = z.object({ password: z.string().min(1) });
+  app.delete("/me", { preHandler: requireAuth }, async (request, reply) => {
+    const parsed = deleteMeSchema.safeParse(request.body);
+    if (!parsed.success) throw new ValidationError("password required");
+    const userId = request.auth!.userId;
+    const user = await prisma.user.findUnique({ where: { id: userId } });
+    if (!user) throw new NotFoundError("user not found");
+    const ok = await verifyPassword(parsed.data.password, user.passwordHash);
+    if (!ok) throw new AuthError("wrong password");
+    await prisma.user.delete({ where: { id: userId } });
+    reply.status(204).send();
   });
 
   app.patch("/me", { preHandler: requireAuth }, async (request) => {

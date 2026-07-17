@@ -27,6 +27,7 @@ export function DmsScreen({ onJoinRoom }: DmsScreenProps = {}): ReactElement {
   const [split, setSplit] = useState<string | null>(null);
   const [chooserOpen, setChooserOpen] = useState(false);
   const [rowMenu, setRowMenu] = useState<{ threadId: string; x: number; y: number } | null>(null);
+  const [blockArmed, setBlockArmed] = useState(false);
   const [pickerOpen, setPickerOpen] = useState(false);
   const [friendsOpen, setFriendsOpen] = useState(false);
   const [activePeer, setActivePeer] = useState<{ id: string; handle: string | null; displayName: string } | null>(null);
@@ -331,7 +332,14 @@ export function DmsScreen({ onJoinRoom }: DmsScreenProps = {}): ReactElement {
 
       {/* 2.4d user/thread context menu */}
       {rowMenu && (
-        <ContextMenu x={rowMenu.x} y={rowMenu.y} onClose={() => setRowMenu(null)}>
+        <ContextMenu
+          x={rowMenu.x}
+          y={rowMenu.y}
+          onClose={() => {
+            setRowMenu(null);
+            setBlockArmed(false);
+          }}
+        >
           <MenuItem
             icon="✉"
             label="Open"
@@ -354,10 +362,21 @@ export function DmsScreen({ onJoinRoom }: DmsScreenProps = {}): ReactElement {
           <MenuDivider />
           <MenuItem
             icon="⛔"
-            label="Block user"
+            label={blockArmed ? "Really block? Click again" : "Block user"}
             tone="danger"
-            disabled
-            disabledHint="Needs the server-side block endpoint — tracked in the backend rework."
+            onClick={() => {
+              if (!blockArmed) {
+                setBlockArmed(true);
+                return;
+              }
+              const peer = threads.find((t) => t.threadId === rowMenu.threadId)?.otherParticipant;
+              setRowMenu(null);
+              setBlockArmed(false);
+              if (!peer || !token) return;
+              const api = new ApiClient(serverUrl);
+              api.setToken(token);
+              void api.blockUser(peer.id).then(() => refresh());
+            }}
           />
         </ContextMenu>
       )}

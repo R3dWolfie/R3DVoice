@@ -150,6 +150,21 @@ export class ApiClient {
   transferRoomOwnership(id: string, newOwnerId: string): Promise<RoomDTO> {
     return this.request("POST", `/rooms/${encodeURIComponent(id)}/transfer`, { newOwnerId });
   }
+  blockUser(userId: string): Promise<void> {
+    return this.request("POST", "/friends/block", { userId });
+  }
+  unblockFriend(friendshipId: string): Promise<void> {
+    return this.request("POST", `/friends/${encodeURIComponent(friendshipId)}/unblock`);
+  }
+  listSessions(): Promise<{ sessions: Array<{ id: string; createdAt: string; current: boolean }> }> {
+    return this.request("GET", "/auth/sessions");
+  }
+  logoutAll(): Promise<void> {
+    return this.request("POST", "/auth/logout-all");
+  }
+  deleteAccount(password: string): Promise<void> {
+    return this.request("DELETE", "/me", { password });
+  }
   editChatMessage(id: string, body: string): Promise<void> {
     return this.request("PATCH", `/chat/messages/${encodeURIComponent(id)}`, { body });
   }
