@@ -403,6 +403,7 @@ function DmPane({
           threadId={threadId}
           localIdentity={meId}
           localName={meName}
+          variant="fill"
           onClose={onClose}
           mentionCandidates={
             peer.handle ? [{ id: peer.id, handle: peer.handle, displayName: peer.displayName }] : []

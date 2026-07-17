@@ -18,6 +18,21 @@ function avatarTone(seed: string): 1 | 2 | 3 | 4 | 5 {
   return ((seed.charCodeAt(0) % 5) + 1) as 1 | 2 | 3 | 4 | 5;
 }
 
+// E2EE DM bodies are stored as ciphertext envelopes — never show raw JSON
+// in the preview. Decryption lives in the chat panel; the rail masks.
+function previewText(body: string | null): string {
+  if (body === null) return "(deleted)";
+  if (body.startsWith("{")) {
+    try {
+      const parsed = JSON.parse(body) as { v?: unknown };
+      if (parsed && typeof parsed === "object" && parsed.v !== undefined) return "🔒 Encrypted message";
+    } catch {
+      /* plaintext that happens to start with { */
+    }
+  }
+  return body;
+}
+
 export function DmThreadList({ threads, activeThreadId, splitThreadId, onSelect, onContextMenu }: Props): ReactElement {
   const counts = useUnreadStore((s) => s.counts);
   if (threads.length === 0) {
@@ -67,7 +82,7 @@ export function DmThreadList({ threads, activeThreadId, splitThreadId, onSelect,
                 <UnreadDot count={counts[`dm:${t.threadId}`] ?? 0} />
               </div>
               <div style={{ fontSize: "var(--t-xs)", color: "var(--text-faint)", whiteSpace: "nowrap", overflow: "hidden", textOverflow: "ellipsis" }}>
-                {t.lastMessage.body ?? "(deleted)"}
+                {previewText(t.lastMessage.body)}
               </div>
             </div>
           </li>

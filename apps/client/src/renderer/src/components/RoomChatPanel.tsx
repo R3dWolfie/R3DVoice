@@ -15,6 +15,12 @@ interface Props {
   localName: string;
   onClose(): void;
   mentionCandidates?: { id: string; handle: string; displayName: string }[];
+  /**
+   * "overlay": self-positioned right-side panel (in-room chat, 2.5f).
+   * "fill": fills the parent container — the DMs thread pane (2.4), which
+   * brings its own ThreadHeader, so no panel header is rendered.
+   */
+  variant?: "overlay" | "fill";
 }
 
 // Persistent chat panel backed by REST + WebSocket (P5 T20).
@@ -28,6 +34,7 @@ export function RoomChatPanel({
   localName,
   onClose,
   mentionCandidates = [],
+  variant = "overlay",
 }: Props): ReactElement {
   const serverUrl = useAuthStore((s) => s.serverUrl);
   const token = useAuthStore((s) => s.token);
@@ -184,7 +191,7 @@ export function RoomChatPanel({
       }
       if (typeof payload !== "object" || payload === null || payload.v !== 1) return m;
       const plain = decryptDM(payload, myKeyPair);
-      if (plain === null) return { ...m, body: "(can't decrypt)" };
+      if (plain === null) return { ...m, body: "🔒 Sent before this device had your key" };
       return { ...m, body: plain };
     });
   }, [messages, threadType, myKeyPair]);
@@ -203,58 +210,66 @@ export function RoomChatPanel({
     inputRef.current?.focus();
   };
 
-  // Reference localIdentity/localName for "you" styling without warnings; both
-  // come from props but we don't need them after the rewrite. Keep around for
-  // future per-author UI tweaks.
-  void localIdentity;
   void localName;
 
   return (
     <aside
-      style={{
-        position: "absolute",
-        top: 0,
-        right: 0,
-        bottom: 0,
-        width: 320,
-        zIndex: 40,
-        background: "color-mix(in oklch, var(--rv-ink-0) 92%, transparent)",
-        borderLeft: "1px solid var(--border-soft)",
-        backdropFilter: "blur(10px)",
-        display: "grid",
-        gridTemplateRows: "auto 1fr auto",
-        animation: "rv-fade var(--d-mid) var(--ease-out) both",
-      }}
+      style={
+        variant === "overlay"
+          ? {
+              position: "absolute",
+              top: 0,
+              right: 0,
+              bottom: 0,
+              width: 340,
+              zIndex: 40,
+              background: "var(--bg)",
+              borderLeft: "1px solid var(--border-soft)",
+              display: "grid",
+              gridTemplateRows: "auto 1fr auto",
+              animation: "rv-fade var(--d-mid) var(--ease-out) both",
+            }
+          : {
+              height: "100%",
+              width: "100%",
+              background: "var(--bg)",
+              display: "grid",
+              gridTemplateRows: "1fr auto",
+              minHeight: 0,
+            }
+      }
     >
-      <header
-        style={{
-          padding: "var(--s-3) var(--s-4)",
-          borderBottom: "1px solid var(--border-soft)",
-          display: "flex",
-          alignItems: "center",
-          justifyContent: "space-between",
-        }}
-      >
-        <div style={{ display: "flex", alignItems: "center", gap: "var(--s-2)" }}>
-          <I.Chat size={14} />
-          <span className="rv-label">Room chat</span>
-          <span
-            className="rv-mono"
-            style={{ fontSize: "var(--t-2xs)", color: "var(--text-faint)" }}
-          >
-            ephemeral
-          </span>
-        </div>
-        <button
-          type="button"
-          className="rv-btn rv-btn-icon"
-          data-variant="ghost"
-          onClick={onClose}
-          aria-label="Close chat"
+      {variant === "overlay" && (
+        <header
+          style={{
+            padding: "var(--s-3) var(--s-4)",
+            borderBottom: "1px solid var(--border-soft)",
+            display: "flex",
+            alignItems: "center",
+            justifyContent: "space-between",
+          }}
         >
-          <I.X size={14} />
-        </button>
-      </header>
+          <div style={{ display: "flex", alignItems: "center", gap: "var(--s-2)" }}>
+            <I.Chat size={14} />
+            <span className="rv-label">Room chat</span>
+            <span
+              className="rv-mono"
+              style={{ fontSize: "var(--t-2xs)", color: "var(--text-faint)" }}
+            >
+              persistent
+            </span>
+          </div>
+          <button
+            type="button"
+            className="rv-btn rv-btn-icon"
+            data-variant="ghost"
+            onClick={onClose}
+            aria-label="Close chat"
+          >
+            <I.X size={14} />
+          </button>
+        </header>
+      )}
 
       <div
         ref={listRef}
@@ -280,7 +295,14 @@ export function RoomChatPanel({
             No messages yet.
           </div>
         ) : (
-          decrypted.map((m) => <ChatBubble key={m.id} msg={m} />)
+          decrypted.map((m, i) => (
+            <ChatBubble
+              key={m.id}
+              msg={m}
+              me={m.authorId === localIdentity}
+              followup={i > 0 && decrypted[i - 1]!.authorId === m.authorId}
+            />
+          ))
         )}
         {error && (
           <div
@@ -372,40 +394,79 @@ export function RoomChatPanel({
   );
 }
 
-function ChatBubble({ msg }: { msg: ChatMessageDTO }): ReactElement {
+// Deck 2.4 message row: avatar-side stack, mine reversed with the ink
+// bubble, theirs white with a hairline; follow-ups from the same author
+// drop the name/time and tighten up.
+function ChatBubble({
+  msg,
+  me,
+  followup,
+}: {
+  msg: ChatMessageDTO;
+  me: boolean;
+  followup: boolean;
+}): ReactElement {
   const time = new Date(msg.createdAt).toLocaleTimeString(undefined, {
     hour: "2-digit",
     minute: "2-digit",
   });
   const deleted = msg.deletedAt !== null || msg.body === null;
   return (
-    <div style={{ display: "flex", flexDirection: "column", gap: 2 }}>
+    <div
+      style={{
+        display: "flex",
+        flexDirection: me ? "row-reverse" : "row",
+        gap: "var(--s-2)",
+        marginTop: followup ? -6 : 0,
+      }}
+    >
       <div
         style={{
           display: "flex",
-          alignItems: "baseline",
-          gap: "var(--s-2)",
-          fontSize: "var(--t-xs)",
+          flexDirection: "column",
+          gap: 3,
+          maxWidth: "78%",
+          alignItems: me ? "flex-end" : "flex-start",
         }}
       >
-        <span style={{ fontWeight: 600, color: "var(--text)" }}>{msg.authorName}</span>
-        <span className="rv-mono" style={{ color: "var(--text-faint)", fontSize: "var(--t-2xs)" }}>
-          {time}
-        </span>
-        {msg.editedAt && !deleted && (
-          <span style={{ color: "var(--text-faint)", fontSize: "var(--t-2xs)" }}>(edited)</span>
+        {!followup && (
+          <div
+            style={{
+              display: "flex",
+              flexDirection: me ? "row-reverse" : "row",
+              alignItems: "baseline",
+              gap: "var(--s-2)",
+              fontSize: "var(--t-2xs)",
+            }}
+          >
+            <span style={{ fontWeight: 600, color: "var(--text-mid)" }}>
+              {me ? "You" : msg.authorName}
+            </span>
+            <span className="rv-mono" style={{ color: "var(--text-faint)" }}>{time}</span>
+            {msg.editedAt && !deleted && (
+              <span style={{ color: "var(--text-faint)" }}>(edited)</span>
+            )}
+          </div>
         )}
-      </div>
-      <div
-        style={{
-          fontSize: "var(--t-sm)",
-          color: deleted ? "var(--text-faint)" : "var(--text-mid)",
-          wordBreak: "break-word",
-          lineHeight: 1.4,
-          fontStyle: deleted ? "italic" : "normal",
-        }}
-      >
-        {deleted ? "(deleted)" : msg.body}
+        <div
+          style={{
+            padding: "8px 13px",
+            borderRadius: 14,
+            fontSize: "var(--t-sm)",
+            lineHeight: 1.5,
+            wordBreak: "break-word",
+            background: deleted ? "transparent" : me ? "var(--bubble-me)" : "var(--bubble-them)",
+            color: deleted ? "var(--text-faint)" : me ? "#fff" : "var(--text)",
+            border: deleted
+              ? "1px dashed var(--border-soft)"
+              : me
+                ? "1px solid var(--bubble-me)"
+                : "1px solid var(--border-soft)",
+            fontStyle: deleted ? "italic" : "normal",
+          }}
+        >
+          {deleted ? "(deleted)" : msg.body}
+        </div>
       </div>
     </div>
   );
