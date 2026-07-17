@@ -1158,6 +1158,9 @@ export function InRoomScreen(props: InRoomScreenProps): ReactElement {
   const [connSteps, setConnSteps] = useState<ConnStep[]>(freshConnSteps);
   const cancelRequestedRef = useRef(false);
   const [maximizedId, setMaximizedId] = useState<string | null>(null);
+  // Click your own tile to minimize your self-view out of the grid (Discord
+  // behaviour); a floating thumbnail restores it.
+  const [selfMinimized, setSelfMinimized] = useState(false);
   const persistedParticipantVolumes = usePrefs((s) => s.participantVolumes);
   const persistedScreenVolumes = usePrefs((s) => s.participantScreenVolumes);
   const [voiceVolumes, setVoiceVolumes] = useState<Record<string, number>>(persistedParticipantVolumes);
@@ -1612,6 +1615,12 @@ export function InRoomScreen(props: InRoomScreenProps): ReactElement {
 
   const tileCallbacks: TileCallbacks = {
     onClick: (id) => {
+      // Clicking your OWN tile minimizes your self-view out of the grid
+      // (Discord behaviour) rather than focusing it on yourself.
+      if (id === snapshot.local?.identity) {
+        setSelfMinimized((v) => !v);
+        return;
+      }
       // Single-click focuses a tile in speaker layout. Click the same tile
       // again to clear focus and let the auto-pick (sharer/speaker) take over.
       setFocusedId((current) => (current === id ? null : id));
@@ -1673,7 +1682,10 @@ export function InRoomScreen(props: InRoomScreenProps): ReactElement {
   const cameraOn = snapshot.local?.isCameraEnabled ?? false;
   // Deck 2.5: only participants with a live video/share go in the tile grid;
   // everyone else renders as a compact audio circle (names live in the sidebar).
-  const videoTiles = tiles.filter((t) => t.screenTrack !== null || t.cameraTrack !== null);
+  const allVideoTiles = tiles.filter((t) => t.screenTrack !== null || t.cameraTrack !== null);
+  const localVideoTile = allVideoTiles.find((t) => t.isLocal) ?? null;
+  // When self-minimized, drop the local tile from the grid/speaker layouts.
+  const videoTiles = selfMinimized ? allVideoTiles.filter((t) => !t.isLocal) : allVideoTiles;
   const audioOnlyTiles = tiles.filter((t) => t.screenTrack === null && t.cameraTrack === null);
   const sharingParticipants = tiles.filter((t) => t.screenTrack !== null);
   const maximizedTile = maximizedId ? tiles.find((t) => t.id === maximizedId) : null;
@@ -2055,9 +2067,40 @@ export function InRoomScreen(props: InRoomScreenProps): ReactElement {
             gap: "var(--s-3)",
           }}
         >
+          {selfMinimized && localVideoTile && (
+            <button
+              type="button"
+              onClick={() => setSelfMinimized(false)}
+              title="Restore your video"
+              style={{
+                position: "absolute",
+                right: "var(--s-4)",
+                bottom: "5rem",
+                zIndex: 20,
+                width: 132,
+                height: 78,
+                borderRadius: "var(--r-md)",
+                overflow: "hidden",
+                border: "1px solid var(--border)",
+                boxShadow: "var(--shadow-2)",
+                background: "var(--bg-elev-3)",
+                color: "var(--text-mid)",
+                cursor: "pointer",
+                display: "grid",
+                placeItems: "center",
+                fontSize: "var(--t-xs)",
+                padding: 0,
+              }}
+            >
+              <span style={{ display: "flex", flexDirection: "column", alignItems: "center", gap: 2 }}>
+                <I.Camera size={16} />
+                <span>You · click to restore</span>
+              </span>
+            </button>
+          )}
           {useSpeaker ? (
             <SpeakerLayout
-              people={tiles}
+              people={selfMinimized ? tiles.filter((t) => !t.isLocal) : tiles}
               sharer={focusSharer}
               focusedId={effectiveFocusedId}
               callbacks={tileCallbacks}
