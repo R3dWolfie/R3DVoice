@@ -13,6 +13,7 @@ import {
   trackWindowState,
 } from "./window-state.js";
 import { writeDesktopEntry, resolveIconPath } from "./desktop-integration.js";
+import { hardenWebContents } from "./web-contents-guard.js";
 import {
   openSplashWindow,
   sendSplashStatus,
@@ -150,10 +151,15 @@ function appendCrashLog(message: string): void {
   const ts = new Date().toISOString();
   try {
     const fs = require("node:fs") as typeof import("node:fs");
-    fs.appendFileSync(
-      join(app.getPath("userData"), "renderer-crash.log"),
-      `[${ts}] ${message}\n`,
-    );
+    const logPath = join(app.getPath("userData"), "renderer-crash.log");
+    // Rotate once past ~1 MB so a chatty/looping renderer can't grow it
+    // without bound (keep one previous generation).
+    try {
+      if (fs.statSync(logPath).size > 1_000_000) {
+        fs.renameSync(logPath, `${logPath}.old`);
+      }
+    } catch { /* no existing log yet */ }
+    fs.appendFileSync(logPath, `[${ts}] ${message}\n`);
   } catch { /* logging best-effort */ }
 }
 
@@ -175,6 +181,11 @@ async function createWindow(splash: BrowserWindow | null): Promise<BrowserWindow
       sandbox: false,
     },
   });
+
+  // Prevent a chat link (or any renderer navigation) from loading a remote
+  // page inside this preload-privileged window and exfiltrating the session
+  // token. External links open in the user's real browser instead.
+  hardenWebContents(win.webContents);
 
   trackWindowState(win);
   if (shouldStartMaximized()) {
@@ -441,33 +452,41 @@ app.whenReady().then(async () => {
       return;
     }
 
-    if (isWayland) {
-      // Portal prompts the user; getSources returns just the chosen source.
-      const sources = await desktopCapturer.getSources({ types: ["screen", "window"] });
-      if (sources.length === 0) {
+    // Any throw below (getSources rejecting on the X11 path, picker window
+    // dying) must still settle the request — otherwise the renderer hangs on
+    // "Loading sources…" forever. Deny (callback({})) on error.
+    try {
+      if (isWayland) {
+        // Portal prompts the user; getSources returns just the chosen source.
+        const sources = await desktopCapturer.getSources({ types: ["screen", "window"] });
+        if (sources.length === 0) {
+          callback({});
+          return;
+        }
+        callback({ video: sources[0]! });
+        return;
+      }
+
+      // Everywhere else (X11, macOS, Windows): show our in-app picker
+      const sourceId = await openScreenPicker();
+      if (!sourceId) {
         callback({});
         return;
       }
-      callback({ video: sources[0]! });
-      return;
-    }
-
-    // Everywhere else (X11, macOS, Windows): show our in-app picker
-    const sourceId = await openScreenPicker();
-    if (!sourceId) {
+      const sources = await desktopCapturer.getSources({ types: ["screen", "window"] });
+      const picked = sources.find((s) => s.id === sourceId);
+      if (!picked) {
+        callback({});
+        return;
+      }
+      if (process.platform === "win32") {
+        callback({ video: picked, audio: "loopback" });
+      } else {
+        callback({ video: picked });
+      }
+    } catch (err) {
+      appendCrashLog(`display-media handler failed: ${err instanceof Error ? err.message : String(err)}`);
       callback({});
-      return;
-    }
-    const sources = await desktopCapturer.getSources({ types: ["screen", "window"] });
-    const picked = sources.find((s) => s.id === sourceId);
-    if (!picked) {
-      callback({});
-      return;
-    }
-    if (process.platform === "win32") {
-      callback({ video: picked, audio: "loopback" });
-    } else {
-      callback({ video: picked });
     }
   }, {
     // On Wayland (and macOS 15+) let Electron route getDisplayMedia straight to

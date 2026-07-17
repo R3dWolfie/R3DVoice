@@ -119,8 +119,27 @@ function PointerLayer({ shareId, videoRef }: { shareId: string; videoRef: RefObj
   const [rect, setRect] = useState<{ x: number; y: number; w: number; h: number }>({ x: 0, y: 0, w: 0, h: 0 });
   useEffect(() => {
     const t = setInterval(() => {
-      setPointers(getPointersForShare(shareId));
-      if (videoRef.current) setRect(videoContentRect(videoRef.current));
+      // Bail out of both setStates when nothing actually moved — otherwise the
+      // sharing tile re-renders ~22×/sec even with no pointers on screen.
+      setPointers((prev) => {
+        const next = getPointersForShare(shareId);
+        if (
+          prev.length === next.length &&
+          prev.every((p, i) => {
+            const q = next[i]!;
+            return p.id === q.id && p.x === q.x && p.y === q.y && p.name === q.name;
+          })
+        ) {
+          return prev;
+        }
+        return next;
+      });
+      if (videoRef.current) {
+        const r = videoContentRect(videoRef.current);
+        setRect((prev) =>
+          prev.x === r.x && prev.y === r.y && prev.w === r.w && prev.h === r.h ? prev : r,
+        );
+      }
     }, 45);
     return () => clearInterval(t);
   }, [shareId, videoRef]);
@@ -830,11 +849,13 @@ interface AudioSourceOption {
 function CameraControl({
   cameraOn,
   starting = false,
+  disabled = false,
   roomWrapper,
   onToggle,
 }: {
   cameraOn: boolean;
   starting?: boolean;
+  disabled?: boolean;
   roomWrapper: LiveKitRoom;
   /** Toggle camera on/off — owned by the parent so it can flip optimistically. */
   onToggle: () => void;
@@ -886,6 +907,7 @@ function CameraControl({
         label={starting ? "Starting…" : cameraOn ? "Stop camera" : "Camera"}
         active={cameraOn}
         emphasis={cameraOn}
+        disabled={disabled}
         title={starting ? "Starting camera…" : cameraOn ? "Stop camera" : "Start camera"}
         onClick={onToggle}
       />
@@ -894,6 +916,7 @@ function CameraControl({
         aria-label="Pick camera"
         title="Switch camera"
         data-rv-pop=""
+        disabled={disabled}
         onMouseDown={(e) => e.stopPropagation()}
         onClick={() => setPickerOpen((v) => !v)}
         style={{
@@ -901,7 +924,7 @@ function CameraControl({
           border: 0,
           background: "transparent",
           color: cameraOn ? "var(--text)" : "var(--text-faint)",
-          cursor: "pointer",
+          cursor: disabled ? "not-allowed" : "pointer",
           padding: "0 4px",
           marginLeft: -6,
           height: "100%",
@@ -1228,6 +1251,7 @@ function ControlButton({
   danger,
   leave,
   emphasis,
+  disabled,
   onClick,
   title,
 }: {
@@ -1237,6 +1261,7 @@ function ControlButton({
   danger?: boolean;
   leave?: boolean;
   emphasis?: boolean;
+  disabled?: boolean;
   onClick?: () => void;
   title?: string;
 }): ReactElement {
@@ -1265,6 +1290,7 @@ function ControlButton({
   return (
     <button
       onClick={onClick}
+      disabled={disabled}
       title={title}
       onMouseEnter={() => setHover(true)}
       onMouseLeave={() => {
@@ -1282,7 +1308,8 @@ function ControlButton({
         padding: 0,
         background: "transparent",
         border: 0,
-        cursor: "pointer",
+        cursor: disabled ? "not-allowed" : "pointer",
+        opacity: disabled ? 0.45 : 1,
         minWidth: "3.5rem",
       }}
     >
@@ -1530,6 +1557,8 @@ export function InRoomScreen(props: InRoomScreenProps): ReactElement {
   const roomWrapper = useMemo(() => new LiveKitRoom(), []);
   const [conn, setConn] = useState<ConnectionState>({ phase: "connecting" });
   const [connSteps, setConnSteps] = useState<ConnStep[]>(freshConnSteps);
+  // Bumped by the error state's "Try again" to re-run the join effect.
+  const [retryNonce, setRetryNonce] = useState(0);
   const cancelRequestedRef = useRef(false);
   const [maximizedId, setMaximizedId] = useState<string | null>(null);
   // Click your own tile to minimize your self-view out of the grid (Discord
@@ -1747,7 +1776,7 @@ export function InRoomScreen(props: InRoomScreenProps): ReactElement {
       cancelled = true;
       void roomWrapper.leave();
     };
-  }, [roomWrapper, props.roomId, props.selection, token, serverUrl]);
+  }, [roomWrapper, props.roomId, props.selection, token, serverUrl, retryNonce]);
 
   useEffect(() => {
     const room = roomWrapper.room;
@@ -2903,14 +2932,16 @@ export function InRoomScreen(props: InRoomScreenProps): ReactElement {
               icon={muted ? <I.MicOff size={20} /> : <I.Mic size={20} />}
               label={muted ? "Unmute" : "Mute"}
               danger={muted}
+              disabled={conn.phase !== "connected"}
               title={withBind(muted ? "Unmute" : "Mute", muteKeybind)}
               onClick={handleToggleMute}
             />
-            <CameraControl cameraOn={cameraOn} starting={cameraStarting} roomWrapper={roomWrapper} onToggle={handleToggleCamera} />
+            <CameraControl cameraOn={cameraOn} starting={cameraStarting} disabled={conn.phase !== "connected"} roomWrapper={roomWrapper} onToggle={handleToggleCamera} />
             <ControlButton
               icon={<span style={{ fontSize: 20, lineHeight: 1 }}>👻</span>}
               label="Ghost"
               danger={localGhost}
+              disabled={conn.phase !== "connected"}
               title={withBind("Ghost — mic and camera off together", deafenKeybind)}
               onClick={() => void roomWrapper.setGhost(!localGhost)}
             />
@@ -2921,6 +2952,7 @@ export function InRoomScreen(props: InRoomScreenProps): ReactElement {
               icon={sharing ? <I.ScreenOff size={20} /> : <I.Screen size={20} />}
               label={sharing ? "Stop share" : "Share"}
               active={sharing}
+              disabled={conn.phase !== "connected"}
               title={withBind(sharing ? "Stop sharing" : "Share screen", shareScreenKeybind)}
               onClick={() => void handleToggleScreen()}
             />
@@ -3216,6 +3248,65 @@ export function InRoomScreen(props: InRoomScreenProps): ReactElement {
             >
               Cancel
             </button>
+          </div>
+        </div>
+      )}
+
+      {/* Join-failure overlay — a real recovery surface instead of a tiny header
+          note with a dead control bar behind it. */}
+      {conn.phase === "error" && (
+        <div className="rv-conn-mask">
+          <div className="rv-conn-card">
+            <div
+              aria-hidden
+              style={{
+                width: 40,
+                height: 40,
+                borderRadius: "50%",
+                display: "grid",
+                placeItems: "center",
+                marginBottom: "var(--s-3)",
+                color: "var(--danger)",
+                background: "color-mix(in srgb, var(--danger) 10%, transparent)",
+                border: "1px solid color-mix(in srgb, var(--danger) 40%, transparent)",
+                fontSize: 20,
+                fontWeight: 700,
+              }}
+            >
+              !
+            </div>
+            <span className="rv-conn-title">Couldn’t join the room</span>
+            <span
+              className="rv-conn-room"
+              style={{ color: "var(--danger)", maxWidth: "18rem", textAlign: "center" }}
+            >
+              {conn.message ?? "Something went wrong connecting."}
+            </span>
+            <div style={{ display: "flex", gap: "var(--s-3)", marginTop: "var(--s-4)" }}>
+              <button
+                type="button"
+                className="rv-btn"
+                data-variant="primary"
+                onClick={() => {
+                  // Re-arm the join effect: clear any stale cancel, drop back to
+                  // "connecting", and bump the nonce so the effect re-runs.
+                  cancelRequestedRef.current = false;
+                  setConn({ phase: "connecting" });
+                  setRetryNonce((n) => n + 1);
+                }}
+                style={{ minWidth: "6rem" }}
+              >
+                Try again
+              </button>
+              <button
+                type="button"
+                className="rv-btn"
+                onClick={() => void handleLeave()}
+                style={{ minWidth: "6rem" }}
+              >
+                Back to lobby
+              </button>
+            </div>
           </div>
         </div>
       )}

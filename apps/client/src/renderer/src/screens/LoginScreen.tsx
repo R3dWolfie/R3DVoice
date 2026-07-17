@@ -3,7 +3,7 @@ import { useAuthStore } from "../lib/auth-context.js";
 import { usePrefs, prefsActions } from "../lib/prefs-singleton.js";
 import { Field, Spinner, APP_VERSION } from "../components/Primitives.js";
 import { I } from "../components/Icons.js";
-import { parseKeyBackup, saveKeyPair, loadKeyPair } from "../lib/key-storage.js";
+import { parseKeyBackup, stageRestoredKeyPair, loadKeyPair } from "../lib/key-storage.js";
 import { ApiClient } from "../lib/api.js";
 
 type Mode = "login" | "register";
@@ -77,7 +77,9 @@ export function LoginScreen(): ReactElement {
         setKeyImportMessage("Couldn't parse — make sure it's the r3dvoice-key-*.json file you downloaded at registration.");
         return;
       }
-      saveKeyPair(kp);
+      // Staged (not written to a user slot yet) — the sign-in below claims it
+      // into the account's namespace once we know who's logging in.
+      stageRestoredKeyPair(kp);
       setKeyImportMessage("Key restored. Sign in to decrypt your DM history.");
     };
     reader.onerror = () => setKeyImportMessage("Failed to read file.");

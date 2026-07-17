@@ -1,8 +1,8 @@
 import { createStore, type StoreApi } from "zustand/vanilla";
 import type { UserDTO } from "@r3dvoice/shared";
 import { ApiClient, ApiError } from "./api.js";
-import { ensureKeyPair, downloadKeyBackup, clearKeyPair, loadKeyPair, saveKeyPair } from "./key-storage.js";
-import { wrapSecretKey, unwrapSecretKey, publicKeyFromSecret } from "./crypto.js";
+import { downloadKeyBackup, loadKeyPair, saveKeyPair, setActiveKeyUser } from "./key-storage.js";
+import { wrapSecretKey, unwrapSecretKey, publicKeyFromSecret, generateKeyPair } from "./crypto.js";
 import { useUnreadStore } from "./unread-store.js";
 
 export interface AuthStorageAdapter {
@@ -64,6 +64,15 @@ async function syncE2eeKey(api: ApiClient, password: string): Promise<void> {
       );
       if (secretKey) {
         saveKeyPair({ secretKey, publicKey: publicKeyFromSecret(secretKey) });
+      } else {
+        // An escrow blob exists but wouldn't unwrap — most likely it's still
+        // wrapped under a password that changed (e.g. after a reset). Surface
+        // it instead of silently leaving DMs unreadable; the in-DM "restore
+        // your key" banner is the recovery path.
+        // eslint-disable-next-line no-console
+        console.warn(
+          "[auth] e2ee escrow present but could not be unwrapped with this password (stale after a password change?)",
+        );
       }
     }
   } catch (err) {
@@ -100,6 +109,9 @@ export function createAuthStore(
         }
         const { token, user } = res;
         api.setToken(token);
+        // Scope E2EE keys to this user before touching them (per-device key
+        // isolation — a different account must not inherit this one's key).
+        setActiveKeyUser(user.id);
         await syncE2eeKey(api, password);
         // Persisting the session must never fail the login: on Linux without a
         // keyring, safeStorage is unavailable — the token still works in-memory
@@ -138,6 +150,7 @@ export function createAuthStore(
       try {
         const { token, user } = await api.loginTotp({ twoFactorToken, code });
         api.setToken(token);
+        setActiveKeyUser(user.id);
         if (pendingTotpPassword) {
           await syncE2eeKey(api, pendingTotpPassword);
           pendingTotpPassword = null;
@@ -169,10 +182,11 @@ export function createAuthStore(
     async register(email, password, displayName) {
       set({ status: "loading", error: null });
       try {
-        // Generate the E2EE keypair locally before hitting the server. The
-        // server only receives the public half; the secret stays on the
+        // Generate a FRESH E2EE keypair locally before hitting the server —
+        // always new, never a reuse of some prior account's key on this device.
+        // The server only receives the public half; the secret stays on the
         // device + an offered downloadable backup the user must save.
-        const kp = ensureKeyPair();
+        const kp = generateKeyPair();
         const { token, user } = await api.register({
           email,
           password,
@@ -180,6 +194,9 @@ export function createAuthStore(
           e2eePublicKey: kp.publicKey,
         });
         api.setToken(token);
+        // Now that the server assigned an id, scope + persist the key to it.
+        setActiveKeyUser(user.id);
+        saveKeyPair(kp);
         // Escrow the fresh key under the password so it reaches other devices.
         await syncE2eeKey(api, password);
         // Persisting the session must never fail the login: on Linux without a
@@ -224,10 +241,11 @@ export function createAuthStore(
       // Reset the unread store — otherwise the next user to log in on
       // this Electron session briefly sees the previous user's badges.
       useUnreadStore.setState({ counts: {}, totalUnread: 0 });
-      // Don't clear the E2EE keypair on logout — same user signing back in
-      // on this device should still decrypt their old DMs. Use clearKeyPair()
-      // explicitly during a "switch user / forget me" flow.
-      void clearKeyPair; // marker for future use
+      // Don't delete the keypair on logout — the same user signing back in on
+      // this device should still decrypt their old DMs (their key stays in
+      // their own namespaced slot). But drop the ACTIVE user so no key is
+      // readable while logged out and the next account can't touch this one's.
+      setActiveKeyUser(null);
       set({ status: "unauthenticated", token: null, user: null, error: null, twoFactorToken: null });
     },
 
@@ -241,6 +259,7 @@ export function createAuthStore(
       api.setToken(persisted);
       try {
         const user = await api.me();
+        setActiveKeyUser(user.id);
         set({ status: "authenticated", user, error: null });
       } catch {
         api.setToken(null);

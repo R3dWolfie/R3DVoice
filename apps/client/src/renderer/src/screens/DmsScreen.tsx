@@ -593,7 +593,15 @@ export function DmsScreen({ onJoinRoom, openUserId, onOpenUserConsumed }: DmsScr
               if (!peer || !token) return;
               const api = new ApiClient(serverUrl);
               api.setToken(token);
-              void api.blockUser(peer.id).then(() => refresh());
+              void api
+                .blockUser(peer.id)
+                .then(() => refresh())
+                .catch(() =>
+                  pushToast({
+                    kind: "error",
+                    text: `Couldn't block ${peer.handle ? `@${peer.handle}` : peer.displayName}`,
+                  }),
+                );
             }}
           />
         </ContextMenu>

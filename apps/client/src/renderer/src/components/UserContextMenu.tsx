@@ -128,8 +128,12 @@ export function UserContextMenu({
         icon="⧉"
         label="Copy handle"
         onClick={() => {
-            pushToast({ kind: "success", text: "Handle copied" });
-          void navigator.clipboard.writeText(handleText).catch(() => {});
+          // Toast only after the write resolves — a denied/unfocused clipboard
+          // must not flash a false "copied".
+          void navigator.clipboard
+            .writeText(handleText)
+            .then(() => pushToast({ kind: "success", text: "Handle copied" }))
+            .catch(() => pushToast({ kind: "error", text: "Couldn't copy handle" }));
           onClose();
         }}
       />
@@ -143,11 +147,15 @@ export function UserContextMenu({
             setBlockArmed(true);
             return;
           }
+          // Only dismiss on success — a swallowed failure would falsely imply
+          // the user was blocked and leave the list unrefreshed.
           void apiFor()
             .blockUser(user.id)
-            .then(() => onChanged?.())
-            .catch(() => {});
-          onClose();
+            .then(() => {
+              onChanged?.();
+              onClose();
+            })
+            .catch(() => pushToast({ kind: "error", text: `Couldn't block ${handleText}` }));
         }}
       />
       {accepted && friend && (
@@ -160,11 +168,15 @@ export function UserContextMenu({
               setRemoveArmed(true);
               return;
             }
+            // Close only once the removal lands; otherwise surface the error so
+            // the friend isn't silently left in the list.
             void apiFor()
               .friendReject(friend.friendshipId)
-              .then(() => onChanged?.())
-              .catch(() => {});
-            onClose();
+              .then(() => {
+                onChanged?.();
+                onClose();
+              })
+              .catch(() => pushToast({ kind: "error", text: `Couldn't remove ${handleText}` }));
           }}
         />
       )}

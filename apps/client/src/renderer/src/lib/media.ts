@@ -168,11 +168,24 @@ export async function openMicPipeline(
     }
   }
 
+  // Raw getUserMedia stream — the only node that actually owns the mic
+  // hardware. The RNNoise/AGC/gain graphs below derive NEW streams from it;
+  // stopping those doesn't release the device, so close() must stop this one
+  // explicitly or the OS mic indicator stays lit after leaving a call.
+  const rawInput = stream;
+
   const policy = nsPolicy(options.noiseSuppression);
+  // RNNoise + AGC each spin up their own AudioContext/worklet on a derived
+  // stream. Track them so close() can tear each down — otherwise every mic
+  // reopen leaks a context and after ~6 Chromium refuses to open any more.
+  let rnnoiseStream: MediaStream | null = null;
+  let disposeRnnoiseFn: ((s: MediaStream) => Promise<void>) | null = null;
   if (policy.rnnoise) {
     try {
-      const { applyRnnoise } = await import("./rnnoise-stream.js");
-      stream = await applyRnnoise(stream);
+      const mod = await import("./rnnoise-stream.js");
+      stream = await mod.applyRnnoise(stream);
+      rnnoiseStream = stream;
+      disposeRnnoiseFn = mod.disposeRnnoise;
     } catch (err) {
       // eslint-disable-next-line no-console
       console.warn("[mic] RNNoise unavailable; mic will be raw:", err);
@@ -184,8 +197,13 @@ export async function openMicPipeline(
     );
   }
 
+  let agcStream: MediaStream | null = null;
+  let agcCtx: AudioContext | null = null;
   if (options.autoGainControl) {
-    stream = applySoftwareAgc(stream);
+    const agc = applySoftwareAgc(stream);
+    stream = agc.stream;
+    agcStream = agc.stream;
+    agcCtx = agc.ctx;
   }
 
   // Always wrap in a GainNode pipeline — even at unity. That way the user's
@@ -277,6 +295,14 @@ export async function openMicPipeline(
       try { gateNode.disconnect(); } catch { /* */ }
       try { analyser.disconnect(); } catch { /* */ }
       void ctx.close();
+      // Tear down the derived-stage contexts the gain ctx above doesn't own.
+      if (agcCtx) void agcCtx.close();
+      if (rnnoiseStream && disposeRnnoiseFn) void disposeRnnoiseFn(rnnoiseStream);
+      // Stop every derived + raw track so the mic hardware is actually
+      // released (OS indicator off), not just disconnected from the graph.
+      agcStream?.getTracks().forEach((t) => t.stop());
+      rnnoiseStream?.getTracks().forEach((t) => t.stop());
+      rawInput.getTracks().forEach((t) => t.stop());
     },
   };
 }
@@ -299,7 +325,7 @@ export async function openMicStream(
  * gentle 6:1 ratio that mostly leaves normal speech alone. No interaction
  * with the OS mic — purely a per-stream Web Audio graph.
  */
-function applySoftwareAgc(stream: MediaStream): MediaStream {
+function applySoftwareAgc(stream: MediaStream): { stream: MediaStream; ctx: AudioContext } {
   const ctx = new AudioContext();
   const source = ctx.createMediaStreamSource(stream);
   const compressor = ctx.createDynamicsCompressor();
@@ -312,6 +338,8 @@ function applySoftwareAgc(stream: MediaStream): MediaStream {
   makeup.gain.value = 1.5;
   const dest = ctx.createMediaStreamDestination();
   source.connect(compressor).connect(makeup).connect(dest);
-  return dest.stream;
+  // Return the ctx too — the caller threads it into the pipeline's close() so
+  // it's actually freed (one AudioContext leaked per reopen otherwise).
+  return { stream: dest.stream, ctx };
 }
 

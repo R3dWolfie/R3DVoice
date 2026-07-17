@@ -1,5 +1,6 @@
 import { BrowserWindow, desktopCapturer, ipcMain, type DesktopCapturerSource } from "electron";
 import { join } from "node:path";
+import { hardenWebContents } from "./web-contents-guard.js";
 
 interface PendingRequest {
   resolve: (sourceId: string | null) => void;
@@ -9,6 +10,12 @@ let pending: PendingRequest | null = null;
 let pickerWindow: BrowserWindow | null = null;
 
 export async function openScreenPicker(): Promise<string | null> {
+  // Settle any in-flight request before we replace it — otherwise the previous
+  // getDisplayMedia promise never resolves and its caller spins forever.
+  if (pending) {
+    pending.resolve(null);
+    pending = null;
+  }
   if (pickerWindow) {
     pickerWindow.focus();
     return new Promise((resolve) => (pending = { resolve }));
@@ -31,6 +38,7 @@ export async function openScreenPicker(): Promise<string | null> {
     },
   });
   pickerWindow = win;
+  hardenWebContents(win.webContents);
 
   win.on("closed", () => {
     pickerWindow = null;

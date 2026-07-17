@@ -7,7 +7,9 @@ import { AuthError, ConflictError, NotFoundError, ValidationError } from "../err
 import { isUserOnline, sendToUser } from "../chat/ws-state.js";
 import { userHandleSchema } from "@r3dvoice/shared";
 
-const sendBodySchema = z.object({ email: z.string().email() });
+// Canonicalize (trim + lowercase) so the lookup matches the canonical email
+// now stored at registration — mirrors the handleLower / emailSchema convention.
+const sendBodySchema = z.object({ email: z.string().trim().email().toLowerCase() });
 const respondParamsSchema = z.object({ id: z.string().min(1) });
 
 interface FriendDTO {
@@ -98,7 +100,7 @@ export async function friendsRoutes(app: FastifyInstance): Promise<void> {
       if (!parsed.success) throw new ValidationError("invalid email");
       const userId = request.auth!.userId;
       const recipient = await prisma.user.findUnique({
-        where: { email: parsed.data.email.toLowerCase() },
+        where: { email: parsed.data.email },
         select: { id: true, displayName: true, email: true },
       });
       if (!recipient) throw new NotFoundError("no user with that email");

@@ -119,12 +119,15 @@ export async function notificationRoutes(app: FastifyInstance): Promise<void> {
     const [me, mentionRows, inviteRows] = await Promise.all([
       prisma.user.findUnique({ where: { id: userId }, select: { notificationsSeenAt: true } }),
       // mentions is a JSON array of uuids; a contains-substring match on the
-      // uuid is exact in practice (uuids don't nest inside each other).
+      // uuid is exact in practice (uuids don't nest inside each other). The
+      // `contains` is non-sargable, so bound it to the last 30 days instead of
+      // scanning all history on every bell-open/bootstrap.
       prisma.message.findMany({
         where: {
           mentions: { contains: userId },
           deletedAt: null,
           authorId: { not: userId },
+          createdAt: { gte: new Date(Date.now() - 30 * 24 * 60 * 60 * 1000) },
         },
         orderBy: { createdAt: "desc" },
         take: 30,

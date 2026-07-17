@@ -21,6 +21,10 @@ model User {
 
   totpSecret    String?
   totpEnabledAt DateTime?
+  // Highest 30s TOTP step counter already consumed at login. A code whose step
+  // is <= this is a replay and is rejected (one-time semantics like backup
+  // codes). Null until the first successful TOTP login.
+  lastTotpStep  Int?
 
   // Base64-encoded X25519 public key for E2EE DMs. Generated client-side at
   // register; the matching private key never reaches the server. Optional

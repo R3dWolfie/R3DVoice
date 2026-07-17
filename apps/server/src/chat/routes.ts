@@ -3,7 +3,7 @@ import { z } from "zod";
 import { prisma } from "../db.js";
 import { requireAuth } from "../auth/middleware.js";
 import { AuthError, ValidationError, NotFoundError } from "../errors.js";
-import { isDmParticipant, isThreadType, type ThreadType } from "./threads.js";
+import { dmThreadId, isThreadType, type ThreadType } from "./threads.js";
 import { isBlockedPair } from "../friends/routes.js";
 import { broadcastToThread, sendToUser } from "./ws-state.js";
 import { wrapAtRest, unwrapAtRest } from "../crypto-at-rest.js";
@@ -21,7 +21,9 @@ const editBodySchema = z.object({
 const historyQuerySchema = z.object({
   threadType: z.enum(["room", "dm"]),
   threadId: z.string().min(1),
-  before: z.string().optional(),
+  // ISO-8601 only: a garbage cursor used to become new Date('garbage') → Prisma
+  // 500. Reject it as a 400 at the edge instead.
+  before: z.string().datetime().optional(),
   limit: z.coerce.number().int().min(1).max(200).optional(),
 });
 
@@ -138,9 +140,22 @@ async function assertThreadAccess(
     return;
   }
   if (threadType === "dm") {
-    if (!isDmParticipant(threadId, userId)) {
-      throw new AuthError("not a participant of this DM thread");
+    // Canonicalize server-side: a crafted client could otherwise POST to a
+    // reverse-ordered (Y:X) or bogus-peer thread, spawning phantom rows and
+    // phantom unread. Recompute the canonical id from the two user-ids, require
+    // exactly one of them to be the caller, and reject anything non-canonical.
+    const parts = threadId.split(":");
+    const other = parts.length === 2
+      ? (parts[0] === userId ? parts[1]! : parts[1] === userId ? parts[0]! : null)
+      : null;
+    if (!other) throw new AuthError("not a participant of this DM thread");
+    let canonical: string;
+    try {
+      canonical = dmThreadId(userId, other); // validates both are UUIDs, not self
+    } catch {
+      throw new ValidationError("invalid DM thread id");
     }
+    if (canonical !== threadId) throw new ValidationError("non-canonical DM thread id");
     return;
   }
   throw new ValidationError("unknown thread type");
@@ -329,23 +344,54 @@ export async function chatRoutes(app: FastifyInstance): Promise<void> {
       const userId = request.auth!.userId;
       // Find every DM thread containing this user. The canonical-pair encoding
       // lets us match via two LIKE patterns: `<userId>:%` and `%:<userId>`.
-      const rows = await prisma.message.findMany({
+      // Only threadId strings — cheap — instead of the whole DM history.
+      const threadRows = await prisma.message.findMany({
         where: {
           threadType: "dm",
           OR: [{ threadId: { startsWith: `${userId}:` } }, { threadId: { endsWith: `:${userId}` } }],
         },
-        orderBy: [{ createdAt: "desc" }],
-        include: { author: { select: { displayName: true } } },
+        select: { threadId: true },
+        distinct: ["threadId"],
+        orderBy: { createdAt: "desc" },
       });
+      // Bound the fan-out: most-recently-active threads first.
+      const dmThreadIds = threadRows.map((r) => r.threadId).slice(0, 500);
 
       const seen = new Map<string, MessageDTO>();
-      for (const m of rows) {
-        const existing = seen.get(m.threadId);
-        // Rows arrive newest-first: first non-deleted wins; a deleted row
-        // only stands in until a surviving message shows up (QA: sidebar
-        // previews read "(deleted)" after deleting the newest message).
-        if (existing && existing.deletedAt === null) continue;
-        if (!existing || m.deletedAt === null) seen.set(m.threadId, toDTO(m));
+      if (dmThreadIds.length > 0) {
+        // Preview = newest NON-deleted message per thread; fall back to the newest
+        // message overall when a thread is entirely deleted (preserves the old
+        // full-scan semantics without loading every message).
+        const [liveMax, anyMax] = await Promise.all([
+          prisma.message.groupBy({
+            by: ["threadId"],
+            where: { threadType: "dm", threadId: { in: dmThreadIds }, deletedAt: null },
+            _max: { createdAt: true },
+          }),
+          prisma.message.groupBy({
+            by: ["threadId"],
+            where: { threadType: "dm", threadId: { in: dmThreadIds } },
+            _max: { createdAt: true },
+          }),
+        ]);
+        const liveByThread = new Map(liveMax.map((g) => [g.threadId, g._max.createdAt]));
+        const anyByThread = new Map(anyMax.map((g) => [g.threadId, g._max.createdAt]));
+
+        // One row per thread: the chosen preview message. Single query via a
+        // (threadId, createdAt) OR-list, then bucket newest-first per thread.
+        const wanted = dmThreadIds
+          .map((threadId) => ({ threadId, at: liveByThread.get(threadId) ?? anyByThread.get(threadId) ?? null }))
+          .filter((w): w is { threadId: string; at: Date } => w.at !== null);
+        if (wanted.length > 0) {
+          const picked = await prisma.message.findMany({
+            where: { OR: wanted.map((w) => ({ threadId: w.threadId, createdAt: w.at })) },
+            include: { author: { select: { displayName: true } } },
+            orderBy: [{ createdAt: "desc" }, { id: "desc" }],
+          });
+          for (const m of picked) {
+            if (!seen.has(m.threadId)) seen.set(m.threadId, toDTO(m));
+          }
+        }
       }
 
       // Resolve the OTHER half of each canonical-pair threadId in a single batch.

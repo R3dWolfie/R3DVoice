@@ -197,23 +197,26 @@ export function listLinuxAudioSources(): AudioSourceSummary[] {
     const nodes = pb.list();
 
     // AppImages launched from the desktop have closed stdout, so safeLog
-    // disappears. Mirror the diagnostic to a file in userData every time
-    // sources are listed — easy to inspect with any text editor.
-    try {
-      const userData = process.env["R3DVOICE_USER_DATA_DIR"] ?? app.getPath("userData");
-      const lines: string[] = [];
-      lines.push(`# linux-audio diagnostic — ${new Date().toISOString()}`);
-      lines.push(`venmic returned ${nodes.length} nodes`);
-      lines.push("");
-      nodes.forEach((n, i) => {
-        lines.push(`--- node ${i} ---`);
-        for (const [k, v] of Object.entries(n)) {
-          lines.push(`  ${k} = ${v}`);
-        }
-      });
-      writeFileSync(join(userData, "linux-audio-debug.log"), lines.join("\n"), "utf8");
-    } catch {
-      /* */
+    // disappears. Mirror the diagnostic to a file in userData — but only when
+    // explicitly opted in (R3DVOICE_AUDIO_DEBUG), since it dumps every app's
+    // node/window/media names, which is sensitive to write in production.
+    if (process.env["R3DVOICE_AUDIO_DEBUG"]) {
+      try {
+        const userData = process.env["R3DVOICE_USER_DATA_DIR"] ?? app.getPath("userData");
+        const lines: string[] = [];
+        lines.push(`# linux-audio diagnostic — ${new Date().toISOString()}`);
+        lines.push(`venmic returned ${nodes.length} nodes`);
+        lines.push("");
+        nodes.forEach((n, i) => {
+          lines.push(`--- node ${i} ---`);
+          for (const [k, v] of Object.entries(n)) {
+            lines.push(`  ${k} = ${v}`);
+          }
+        });
+        writeFileSync(join(userData, "linux-audio-debug.log"), lines.join("\n"), "utf8");
+      } catch {
+        /* */
+      }
     }
 
     safeLog(`[linux-audio] venmic returned ${nodes.length} nodes`);

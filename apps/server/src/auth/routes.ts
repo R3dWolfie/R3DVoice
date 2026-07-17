@@ -8,15 +8,27 @@ import { hashPassword, verifyPassword } from "./password.js";
 import { signSessionToken, signTwoFactorToken, verifyTwoFactorToken } from "./jwt.js";
 import { requireAuth } from "./middleware.js";
 import { AuthError, ConflictError, ValidationError } from "../errors.js";
-import { buildOtpAuthUrl, buildQrDataUrl, generateTotpSecret, verifyTotpCode } from "./totp.js";
+import { buildOtpAuthUrl, buildQrDataUrl, generateTotpSecret, verifyTotpCode, verifyTotpCodeStep } from "./totp.js";
 import { wrapAtRest, unwrapAtRest } from "../crypto-at-rest.js";
 import { generateUniqueHandle } from "./handle-generator.js";
 import { emailEnabled, sendMail } from "../email/mailer.js";
 import { verifyEmail, passwordResetEmail, verifyResultPage } from "../email/templates.js";
 import { issueEmailToken, consumeEmailToken } from "../email/tokens.js";
 
+// Canonical email: trim + lowercase so `Foo@Bar.com` and `foo@bar.com` resolve
+// to one identity, mirroring the handleLower convention. Applied on every write
+// and match (register, login, password-reset) so stored emails are always the
+// canonical form and lookups are case-insensitive.
+const emailSchema = z.string().trim().email().toLowerCase();
+
+// Fixed dummy argon2 hash (argon2id, default params) used to equalize login
+// timing when the email doesn't exist — see /auth/login. Never matches any real
+// password; it exists only so the not-found branch pays the same verify cost.
+const DUMMY_PASSWORD_HASH =
+  "$argon2id$v=19$m=19456,t=2,p=1$ldkt1kbTtHfvLqbV+9CLzQ$zxtZSW5X3WVt0pxS6XbSP4h7ByUczBh1w57VzdIeToI";
+
 const registerBodySchema = z.object({
-  email: z.string().email(),
+  email: emailSchema,
   password: z.string().min(12, "password must be at least 12 characters"),
   displayName: z.string().min(1).max(50),
   // Base64-encoded X25519 public key (32 bytes raw → 44 chars base64).
@@ -26,7 +38,7 @@ const registerBodySchema = z.object({
 });
 
 const loginBodySchema = z.object({
-  email: z.string().email(),
+  email: emailSchema,
   password: z.string().min(1),
 });
 
@@ -117,7 +129,12 @@ export async function authRoutes(app: FastifyInstance): Promise<void> {
     },
   );
 
-  app.post("/auth/login", async (request, reply) => {
+  app.post(
+    "/auth/login",
+    {
+      config: { rateLimit: { max: 10, timeWindow: "1 minute" } },
+    },
+    async (request, reply) => {
     const parsed = loginBodySchema.safeParse(request.body);
     if (!parsed.success) {
       throw new ValidationError("invalid input");
@@ -126,6 +143,10 @@ export async function authRoutes(app: FastifyInstance): Promise<void> {
 
     const user = await prisma.user.findUnique({ where: { email } });
     if (!user) {
+      // Equalize timing with the found-user path: still pay one argon2 verify
+      // against a fixed dummy hash so a nonexistent email can't be told apart
+      // from a wrong password by response latency (account enumeration).
+      await verifyPassword(password, DUMMY_PASSWORD_HASH);
       throw new AuthError("invalid credentials");
     }
     const ok = await verifyPassword(password, user.passwordHash);
@@ -170,8 +191,16 @@ export async function authRoutes(app: FastifyInstance): Promise<void> {
       const user = await prisma.user.findUnique({ where: { id: claims.userId } });
       if (!user || !user.totpSecret) throw new AuthError("invalid credentials");
       // Accept either a live TOTP code or an unused backup code (3.3b).
-      const totpOk = verifyTotpCode(unwrapAtRest(user.totpSecret), code);
-      if (!totpOk) {
+      const step = verifyTotpCodeStep(unwrapAtRest(user.totpSecret), code);
+      if (step !== null) {
+        // One-time semantics (mirrors backup codes): each 30s step authenticates
+        // at most once. Reject codes at or below the last consumed step so a
+        // sniffed code can't be replayed inside its ~90s validity window.
+        if (user.lastTotpStep !== null && step <= user.lastTotpStep) {
+          throw new AuthError("this code was already used — wait for the next one");
+        }
+        await prisma.user.update({ where: { id: user.id }, data: { lastTotpStep: step } });
+      } else {
         const burned = await consumeBackupCode(user.id, code);
         if (!burned) throw new AuthError("invalid two-factor code");
       }
@@ -269,8 +298,10 @@ export async function authRoutes(app: FastifyInstance): Promise<void> {
   });
 
   app.post("/auth/logout", { preHandler: requireAuth }, async (request, reply) => {
-    await prisma.session.update({
-      where: { id: request.auth!.sessionId },
+    // updateMany (not update) so a session row already hard-deleted between the
+    // auth check and here is a no-op instead of a P2025 500.
+    await prisma.session.updateMany({
+      where: { id: request.auth!.sessionId, revokedAt: null },
       data: { revokedAt: new Date() },
     });
     reply.status(204).send();
@@ -423,7 +454,7 @@ export async function authRoutes(app: FastifyInstance): Promise<void> {
     "/auth/password-reset/request",
     { config: { rateLimit: { max: 5, timeWindow: "15 minutes" } } },
     async (request, reply) => {
-      const parsed = z.object({ email: z.string().email() }).safeParse(request.body);
+      const parsed = z.object({ email: emailSchema }).safeParse(request.body);
       if (!parsed.success) throw new ValidationError("invalid email");
       if (emailEnabled()) {
         const user = await prisma.user.findUnique({ where: { email: parsed.data.email } });
@@ -456,9 +487,20 @@ export async function authRoutes(app: FastifyInstance): Promise<void> {
       if (!userId) throw new ValidationError("this reset link is invalid or has expired");
       const passwordHash = await hashPassword(parsed.data.password);
       await prisma.$transaction([
-        prisma.user.update({ where: { id: userId }, data: { passwordHash } }),
-        // Resetting the password also confirms control of the inbox.
-        prisma.user.update({ where: { id: userId }, data: { emailVerifiedAt: new Date() } }),
+        prisma.user.update({
+          where: { id: userId },
+          data: {
+            passwordHash,
+            // Resetting the password also confirms control of the inbox.
+            emailVerifiedAt: new Date(),
+            // The escrowed E2EE key is wrapped under the OLD password, so it can
+            // never be unwrapped again — null it so the client re-escrows fresh
+            // on next login instead of holding a permanently-dead blob.
+            e2eeWrappedKey: null,
+            e2eeKeySalt: null,
+            e2eeKeyNonce: null,
+          },
+        }),
         prisma.session.deleteMany({ where: { userId } }),
       ]);
       reply.status(204).send();

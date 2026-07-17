@@ -1,4 +1,4 @@
-import { useEffect, useMemo, useRef, useState, type CSSProperties, type ReactElement, type ReactNode } from "react";
+import { memo, useCallback, useEffect, useMemo, useRef, useState, type CSSProperties, type ReactElement, type ReactNode } from "react";
 import type { ChatMessageDTO } from "@r3dvoice/shared";
 import { ApiClient } from "../lib/api.js";
 import { ensureTransport, setCurrentlyViewingThread, type ChatTransport } from "../lib/chat-transport.js";
@@ -189,7 +189,13 @@ export function RoomChatPanel({
   const lastTypingSentRef = useRef<number>(0);
   useEffect(() => {
     if (typingUntil <= Date.now()) return;
-    const t = setInterval(() => setNow(Date.now()), 1000);
+    const t = setInterval(() => {
+      const n = Date.now();
+      setNow(n);
+      // Once the deadline passes there's nothing left to count down — stop the
+      // ticker so an expired indicator doesn't re-render the panel forever.
+      if (n >= typingUntil) clearInterval(t);
+    }, 1000);
     return () => clearInterval(t);
   }, [typingUntil]);
   const listRef = useRef<HTMLDivElement | null>(null);
@@ -543,7 +549,7 @@ export function RoomChatPanel({
 
   // 2.5k reactions — optimistic toggle; the WS echo is deduped by the
   // mine-guards in the event handler.
-  const toggleReaction = (messageId: string, emoji: string, mine: boolean): void => {
+  const toggleReaction = useCallback((messageId: string, emoji: string, mine: boolean): void => {
     setMessages((prev) =>
       prev.map((m) => {
         if (m.id !== messageId) return m;
@@ -566,7 +572,28 @@ export function RoomChatPanel({
     void call?.catch(() => {
       /* WS truth wins on next event; worst case a refresh corrects */
     });
-  };
+  }, []);
+
+  // Stable per-render handlers so the memoized ChatBubble holds across composer
+  // keystrokes — each takes its own message rather than closing over `m`.
+  const handleBubbleToggleReaction = useCallback(
+    (m: ChatMessageDTO, emoji: string, mine: boolean) => toggleReaction(m.id, emoji, mine),
+    [toggleReaction],
+  );
+  const handleBubbleContextMenu = useCallback(
+    (m: ChatMessageDTO, x: number, y: number) => {
+      setDeleteArmed(false);
+      setMsgMenu({
+        id: m.id,
+        x,
+        y,
+        body: m.body ?? "",
+        mine: m.authorId === localIdentity && m.deletedAt === null,
+        pinned: (m.pinnedAt ?? null) !== null,
+      });
+    },
+    [localIdentity],
+  );
 
   const onPickMention = (c: { id: string; handle: string; displayName: string }): void => {
     if (mentionQuery === null) return;
@@ -861,18 +888,8 @@ export function RoomChatPanel({
                     msg={m}
                     me={m.authorId === localIdentity}
                     followup={!dayChanged && !showUnread && prev !== null && prev.authorId === m.authorId}
-                    onToggleReaction={(emoji, mine) => toggleReaction(m.id, emoji, mine)}
-                    onContextMenu={(x, y) => {
-                      setDeleteArmed(false);
-                      setMsgMenu({
-                        id: m.id,
-                        x,
-                        y,
-                        body: m.body ?? "",
-                        mine: m.authorId === localIdentity && m.deletedAt === null,
-                        pinned: (m.pinnedAt ?? null) !== null,
-                      });
-                    }}
+                    onToggleReaction={handleBubbleToggleReaction}
+                    onContextMenu={handleBubbleContextMenu}
                   />
                 </div>
               );
@@ -1105,8 +1122,12 @@ export function RoomChatPanel({
             icon="⧉"
             label="Copy text"
             onClick={() => {
-                  pushToast({ kind: "success", text: "Message copied" });
-              void navigator.clipboard.writeText(msgMenu.body).catch(() => {});
+              // Toast only after the write resolves — a denied/unfocused
+              // clipboard must not flash a false "copied".
+              void navigator.clipboard
+                .writeText(msgMenu.body)
+                .then(() => pushToast({ kind: "success", text: "Message copied" }))
+                .catch(() => pushToast({ kind: "error", text: "Couldn't copy message" }));
               setMsgMenu(null);
             }}
           />
@@ -1342,7 +1363,10 @@ function applySlashCommand(text: string): string {
   return found ? found.apply(rest) : text;
 }
 
-function ChatBubble({
+// Memoized so a composer keystroke (which re-renders the panel) doesn't re-run
+// renderRichBody's regex parse across every message. The callbacks take their
+// own `msg` so the parent can pass stable references and the memo actually holds.
+const ChatBubble = memo(function ChatBubble({
   msg,
   me,
   followup,
@@ -1352,8 +1376,8 @@ function ChatBubble({
   msg: ChatMessageDTO;
   me: boolean;
   followup: boolean;
-  onContextMenu?: (x: number, y: number) => void;
-  onToggleReaction?: (emoji: string, mine: boolean) => void;
+  onContextMenu?: (msg: ChatMessageDTO, x: number, y: number) => void;
+  onToggleReaction?: (msg: ChatMessageDTO, emoji: string, mine: boolean) => void;
 }): ReactElement {
   const [hovered, setHovered] = useState(false);
   // Arbitrary-emoji reaction picker, opened from the hover menu's "＋".
@@ -1373,7 +1397,7 @@ function ChatBubble({
       onContextMenu={(e) => {
         if (!onContextMenu) return;
         e.preventDefault();
-        onContextMenu(e.clientX, e.clientY);
+        onContextMenu(msg, e.clientX, e.clientY);
       }}
       onMouseEnter={() => setHovered(true)}
       onMouseLeave={() => setHovered(false)}
@@ -1409,7 +1433,7 @@ function ChatBubble({
               <button
                 key={e}
                 type="button"
-                onClick={() => onToggleReaction(e, mine)}
+                onClick={() => onToggleReaction(msg, e, mine)}
                 style={{
                   appearance: "none",
                   background: mine ? "var(--accent-tint)" : "transparent",
@@ -1465,7 +1489,7 @@ function ChatBubble({
             embedded
             onPick={(emoji) => {
               const mine = msg.reactions?.find((r) => r.emoji === emoji)?.mine ?? false;
-              onToggleReaction(emoji, mine);
+              onToggleReaction(msg, emoji, mine);
               setReactPos(null);
             }}
           />
@@ -1528,7 +1552,7 @@ function ChatBubble({
               <button
                 key={r.emoji}
                 type="button"
-                onClick={() => onToggleReaction?.(r.emoji, r.mine)}
+                onClick={() => onToggleReaction?.(msg, r.emoji, r.mine)}
                 title={r.mine ? "Remove your reaction" : "React too"}
                 style={{
                   appearance: "none",
@@ -1555,7 +1579,7 @@ function ChatBubble({
       </div>
     </div>
   );
-}
+});
 
 // 2.5m emoji picker — search, category tabs (deck: 🕒😀🐱🍔⚽🚗💡🎵🚩),
 // stacked sections, and a preview foot (emoji + name + :shortcode:).

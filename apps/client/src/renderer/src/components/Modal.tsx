@@ -1,4 +1,4 @@
-import { useEffect, type ReactElement, type ReactNode } from "react";
+import { useEffect, useId, useRef, type ReactElement, type ReactNode } from "react";
 import { createPortal } from "react-dom";
 import { I } from "./Icons.js";
 
@@ -29,6 +29,9 @@ export function Modal({
   width?: string;
   children: ReactNode;
 }): ReactElement | null {
+  const titleId = useId();
+  const contentRef = useRef<HTMLDivElement>(null);
+
   useEffect(() => {
     if (!open || !dismissible) return;
     function onKey(e: KeyboardEvent): void {
@@ -37,6 +40,51 @@ export function Modal({
     window.addEventListener("keydown", onKey);
     return () => window.removeEventListener("keydown", onKey);
   }, [open, dismissible, onClose]);
+
+  // Dialog focus management: pull focus into the modal on open (unless an
+  // autoFocus field already grabbed it), trap Tab within it, and restore focus
+  // to the previously-focused element on close.
+  useEffect(() => {
+    if (!open) return;
+    const content = contentRef.current;
+    if (!content) return;
+    const previouslyFocused = document.activeElement as HTMLElement | null;
+    const selector =
+      'a[href], button:not([disabled]), textarea:not([disabled]), input:not([disabled]), select:not([disabled]), [tabindex]:not([tabindex="-1"])';
+    const focusables = (): HTMLElement[] =>
+      Array.from(content.querySelectorAll<HTMLElement>(selector)).filter(
+        (el) => el.getClientRects().length > 0,
+      );
+
+    if (!content.contains(document.activeElement)) {
+      (focusables()[0] ?? content).focus();
+    }
+
+    function onKeyDown(e: KeyboardEvent): void {
+      if (e.key !== "Tab") return;
+      const items = focusables();
+      const first = items[0];
+      const last = items[items.length - 1];
+      const active = document.activeElement;
+      if (!first || !last) {
+        e.preventDefault();
+        content!.focus();
+        return;
+      }
+      if (e.shiftKey && (active === first || !content!.contains(active))) {
+        e.preventDefault();
+        last.focus();
+      } else if (!e.shiftKey && (active === last || !content!.contains(active))) {
+        e.preventDefault();
+        first.focus();
+      }
+    }
+    content.addEventListener("keydown", onKeyDown);
+    return () => {
+      content.removeEventListener("keydown", onKeyDown);
+      previouslyFocused?.focus?.();
+    };
+  }, [open]);
 
   if (!open) return null;
 
@@ -57,6 +105,11 @@ export function Modal({
       }}
     >
       <div
+        ref={contentRef}
+        role="dialog"
+        aria-modal="true"
+        aria-labelledby={titleId}
+        tabIndex={-1}
         onClick={(e) => e.stopPropagation()}
         style={{
           width,
@@ -101,7 +154,7 @@ export function Modal({
             </div>
           )}
           <div style={{ minWidth: 0, flex: 1 }}>
-            <div style={{ fontSize: "var(--t-lg)", fontWeight: 600, letterSpacing: "-0.01em" }}>
+            <div id={titleId} style={{ fontSize: "var(--t-lg)", fontWeight: 600, letterSpacing: "-0.01em" }}>
               {title}
             </div>
             {subtitle && (

@@ -2,7 +2,7 @@ import { useCallback, useEffect, useMemo, useState, type ReactElement } from "re
 import { userHandleSchema } from "@r3dvoice/shared";
 import { Modal } from "./Modal.js";
 import { useAuthStore } from "../lib/auth-context.js";
-import { ApiClient } from "../lib/api.js";
+import { ApiClient, ApiError } from "../lib/api.js";
 
 const ADJECTIVES = [
   "cosmic", "crimson", "electric", "quiet", "rapid", "lunar", "amber",
@@ -46,7 +46,7 @@ export function HandlePickGate(): ReactElement {
   const [value, setValue] = useState(initial);
   const [busy, setBusy] = useState(false);
   const [error, setError] = useState<string | null>(null);
-  const [available, setAvailable] = useState<null | "checking" | "yes" | "no">(null);
+  const [available, setAvailable] = useState<null | "checking" | "yes" | "no" | "error">(null);
 
   // Live availability check, debounced.
   useEffect(() => {
@@ -69,8 +69,11 @@ export function HandlePickGate(): ReactElement {
       try {
         await api.getUserByHandle(value);
         setAvailable("no");
-      } catch {
-        setAvailable("yes");
+      } catch (e) {
+        // A 404 is the "handle is free" signal; a network/5xx failure means we
+        // genuinely couldn't check — never green-light (and enable submit) then.
+        if (e instanceof ApiError && e.status === 404) setAvailable("yes");
+        else setAvailable("error");
       }
     }, 350);
     return () => clearTimeout(t);
@@ -210,6 +213,11 @@ export function HandlePickGate(): ReactElement {
           )}
           {!error && available === "checking" && (
             <div style={{ fontSize: "var(--t-xs)", color: "var(--text-faint)" }}>checking…</div>
+          )}
+          {!error && available === "error" && (
+            <div style={{ fontSize: "var(--t-xs)", color: "var(--rv-amber)" }}>
+              couldn&apos;t check availability · edit the handle to retry
+            </div>
           )}
           {!error && available === "yes" && (
             <div

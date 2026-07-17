@@ -20,6 +20,8 @@ export async function saveToken(token: string): Promise<void> {
   if (safeStorage.isEncryptionAvailable()) {
     const encrypted = safeStorage.encryptString(token);
     await fs.writeFile(tokenPath(), encrypted, { mode: 0o600 });
+    // writeFile's mode only applies on CREATE — enforce 0600 on overwrite too.
+    await fs.chmod(tokenPath(), 0o600).catch(() => {});
     // Drop any stale plaintext fallback once encryption is available again.
     await fs.rm(plainTokenPath(), { force: true }).catch(() => {});
     return;
@@ -28,6 +30,11 @@ export async function saveToken(token: string): Promise<void> {
   // a short-lived session JWT (not a password) and userData is per-user, so
   // this is an acceptable degraded mode — the alternative is a broken app.
   await fs.writeFile(plainTokenPath(), token, { mode: 0o600 });
+  await fs.chmod(plainTokenPath(), 0o600).catch(() => {});
+  // Drop any stale ENCRYPTED token: getToken prefers session.enc whenever
+  // encryption is available, so a leftover blob would decrypt an old/revoked
+  // token later and force a spurious logout.
+  await fs.rm(tokenPath(), { force: true }).catch(() => {});
 }
 
 export async function getToken(): Promise<string | null> {

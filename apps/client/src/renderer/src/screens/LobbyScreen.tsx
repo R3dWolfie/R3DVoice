@@ -291,6 +291,9 @@ export function LobbyScreen({ pendingInviteCode, pendingJoinRoomId, onInviteCode
           onInviteCodeConsumed?.();
           if (redirectTo.startsWith("/rooms/")) {
             const roomId = redirectTo.replace(/^\/rooms\//, "");
+            // Return to the lobby so the phase-gated join transition fires;
+            // without this the invite card stays mounted and never enters.
+            setPhase({ kind: "lobby" });
             void store.getState().join(roomId);
           } else if (redirectTo.startsWith("/dms") && onOpenDms) {
             setPhase({ kind: "lobby" });

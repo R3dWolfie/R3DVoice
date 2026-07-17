@@ -301,6 +301,13 @@ export class LiveKitRoom {
   // (Linux PipeWire monitor or Windows getDisplayMedia fallback). We keep the
   // stream so we can stop() its tracks when the user disables audio share.
   private screenAudioAuxStream: MediaStream | null = null;
+  // Guards against a second concurrent enableScreenShareAudio() double-starting
+  // capture (two portals / two venmic sinks) before the first has published.
+  private screenAudioInFlight = false;
+  // Last dims passed to applyScreenShareSenderOverrides, so a soft reconnect
+  // (which keeps the sender but reverts our encoder overrides) can re-apply
+  // them without the full re-publish path.
+  private lastScreenShareDims: { sourceWidth?: number; sourceHeight?: number } | null = null;
 
   constructor(options: { enableE2EE?: boolean } = {}) {
     // E2EE is opt-in. When OFF, we don't construct the keyProvider/worker
@@ -377,6 +384,13 @@ export class LiveKitRoom {
     });
     this.room.on(RoomEvent.Reconnected, () => {
       this.reconnecting = false;
+      // A soft resume keeps the screenshare sender but reverts our encoder/
+      // transport overrides to Chromium defaults, so a live share can collapse
+      // to ~1 fps. Only the full-restart path re-publishes (re-applying them),
+      // so re-apply here from the last-known dims when a share is still active.
+      if (this.room.localParticipant.getTrackPublication(Track.Source.ScreenShare)) {
+        this.applyScreenShareSenderOverrides(this.lastScreenShareDims ?? {});
+      }
       this.emit();
     });
 
@@ -805,6 +819,9 @@ export class LiveKitRoom {
     sourceWidth?: number;
     sourceHeight?: number;
   }): void {
+    // Remember the dims so a soft reconnect (sender kept, overrides dropped)
+    // can re-apply them — see the RoomEvent.Reconnected handler.
+    this.lastScreenShareDims = opts;
     try {
       const screenPub = this.room.localParticipant.getTrackPublication(
         Track.Source.ScreenShare,
@@ -927,108 +944,127 @@ export class LiveKitRoom {
     if (this.room.localParticipant.getTrackPublication(Track.Source.ScreenShareAudio)) {
       return true;
     }
+    // In-flight guard: capture setup (portals, venmic sink, WASAPI helper) is
+    // async and not idempotent — a second concurrent call would double-start
+    // it. Bail until the first attempt settles (the finally clears the flag).
+    if (this.screenAudioInFlight) return false;
+    this.screenAudioInFlight = true;
 
     const platform = window.r3dvoice?.platform();
 
     let track: MediaStreamTrack | null = null;
     let auxStream: MediaStream | null = null;
 
-    // 1. Native WASAPI filter
-    if (platform === "win32") {
-      try {
-        const winPid = includeProcessId ? Number.parseInt(includeProcessId, 10) : undefined;
-        const stream = await startSystemAudioStream(
-          Number.isFinite(winPid) ? { includePid: winPid as number } : {},
-        );
-        track = stream?.getAudioTracks()[0] ?? null;
-      } catch { /* */ }
-      if (track) {
-        // eslint-disable-next-line no-console
-        console.log(
-          includeProcessId
-            ? `[screenshare] capturing PID ${includeProcessId} via WASAPI`
-            : "[screenshare] system audio filtered via native helper (your voice excluded)",
-        );
-      }
-    }
-
-    // 2. Linux: ask main to set up a virtual sink that excludes R3DVoice's
-    //    playback, then capture from its monitor. Falls back to the full
-    //    system-mix monitor if pactl isn't available.
-    if (!track && platform === "linux") {
-      let preferLabel: string | undefined;
-      let routingEnabled = false;
-      try {
-        const routing = await window.r3dvoice.enableLinuxAudioRouting(
-          includeProcessId ? { includeProcessId } : undefined,
-        );
-        if (routing) {
-          preferLabel = routing.monitorDeviceDescription;
-          routingEnabled = true;
-        }
-      } catch (e) {
-        linuxAudioDbg(`enableLinuxAudioRouting threw: ${e instanceof Error ? e.message : String(e)}`);
-      }
-      linuxAudioDbg(`venmic routing ${routingEnabled ? "ok" : "FAILED (falling back to system monitor)"}, target="${preferLabel ?? "monitor"}"`);
-
-      auxStream = await captureLinuxMonitorSource(preferLabel);
-      track = auxStream?.getAudioTracks()[0] ?? null;
-      if (track) {
-        linuxAudioDbg(
-          routingEnabled
-            ? "capturing venmic vencord-screen-share — R3DVoice playback excluded"
-            : "capturing default monitor (system mix; use headphones to avoid echo)",
-        );
-      } else if (routingEnabled) {
-        // Capture failed even though routing was set up — tear it down so
-        // we don't leave the user's audio rerouted.
-        try { await window.r3dvoice.disableLinuxAudioRouting(); } catch { /* */ }
-      }
-    }
-
-    // 3. getDisplayMedia audio fallback — for Windows (native WASAPI helper
-    //    unavailable) and web (the browser's own picker carries an audio
-    //    checkbox). Explicitly NOT Linux: there, audio-only getDisplayMedia
-    //    still pops the screen portal a SECOND time (Wayland/PipeWire has no
-    //    audio-only capture through this API), which is exactly the "asked me
-    //    to pick a screen twice" bug. On Linux the PipeWire monitor path above
-    //    is the only correct route; if it didn't yield a track we go without
-    //    share-audio rather than double-prompting the portal.
-    if (!track && platform !== "linux") {
-      try {
-        const stream = await navigator.mediaDevices.getDisplayMedia({
-          audio: true,
-          video: false,
-        } as DisplayMediaStreamOptions);
-        track = stream.getAudioTracks()[0] ?? null;
-        stream.getVideoTracks().forEach((t) => t.stop());
+    try {
+      // 1. Native WASAPI filter
+      if (platform === "win32") {
+        try {
+          const winPid = includeProcessId ? Number.parseInt(includeProcessId, 10) : undefined;
+          const stream = await startSystemAudioStream(
+            Number.isFinite(winPid) ? { includePid: winPid as number } : {},
+          );
+          track = stream?.getAudioTracks()[0] ?? null;
+        } catch { /* */ }
         if (track) {
-          auxStream = stream;
           // eslint-disable-next-line no-console
-          console.log("[screenshare] system audio NOT filtered — others may hear themselves; use headphones");
+          console.log(
+            includeProcessId
+              ? `[screenshare] capturing PID ${includeProcessId} via WASAPI`
+              : "[screenshare] system audio filtered via native helper (your voice excluded)",
+          );
         }
-      } catch {
-        return false;
       }
+
+      // 2. Linux: ask main to set up a virtual sink that excludes R3DVoice's
+      //    playback, then capture from its monitor. Falls back to the full
+      //    system-mix monitor if pactl isn't available.
+      if (!track && platform === "linux") {
+        let preferLabel: string | undefined;
+        let routingEnabled = false;
+        try {
+          const routing = await window.r3dvoice.enableLinuxAudioRouting(
+            includeProcessId ? { includeProcessId } : undefined,
+          );
+          if (routing) {
+            preferLabel = routing.monitorDeviceDescription;
+            routingEnabled = true;
+          }
+        } catch (e) {
+          linuxAudioDbg(`enableLinuxAudioRouting threw: ${e instanceof Error ? e.message : String(e)}`);
+        }
+        linuxAudioDbg(`venmic routing ${routingEnabled ? "ok" : "FAILED (falling back to system monitor)"}, target="${preferLabel ?? "monitor"}"`);
+
+        auxStream = await captureLinuxMonitorSource(preferLabel);
+        track = auxStream?.getAudioTracks()[0] ?? null;
+        if (track) {
+          linuxAudioDbg(
+            routingEnabled
+              ? "capturing venmic vencord-screen-share — R3DVoice playback excluded"
+              : "capturing default monitor (system mix; use headphones to avoid echo)",
+          );
+        } else if (routingEnabled) {
+          // Capture failed even though routing was set up — tear it down so
+          // we don't leave the user's audio rerouted.
+          try { await window.r3dvoice.disableLinuxAudioRouting(); } catch { /* */ }
+        }
+      }
+
+      // 3. getDisplayMedia audio fallback — for Windows (native WASAPI helper
+      //    unavailable) and web (the browser's own picker carries an audio
+      //    checkbox). Explicitly NOT Linux: there, audio-only getDisplayMedia
+      //    still pops the screen portal a SECOND time (Wayland/PipeWire has no
+      //    audio-only capture through this API), which is exactly the "asked me
+      //    to pick a screen twice" bug. On Linux the PipeWire monitor path above
+      //    is the only correct route; if it didn't yield a track we go without
+      //    share-audio rather than double-prompting the portal.
+      if (!track && platform !== "linux") {
+        try {
+          const stream = await navigator.mediaDevices.getDisplayMedia({
+            audio: true,
+            video: false,
+          } as DisplayMediaStreamOptions);
+          track = stream.getAudioTracks()[0] ?? null;
+          stream.getVideoTracks().forEach((t) => t.stop());
+          if (track) {
+            auxStream = stream;
+            // eslint-disable-next-line no-console
+            console.log("[screenshare] system audio NOT filtered — others may hear themselves; use headphones");
+          }
+        } catch {
+          return false;
+        }
+      }
+
+      if (!track) return false;
+
+      this.screenAudioAuxStream = auxStream;
+      // High-quality stereo Opus for screenshare audio. The LiveKit default
+      // is a speech preset (~24 kbps mono) which butchers music/game audio.
+      // dtx (discontinuous transmission) drops silent frames — fine for voice,
+      // but it kills tail/decay on music. red (redundant encoding) adds
+      // latency, also undesirable here. forceStereo keeps both channels.
+      await this.room.localParticipant.publishTrack(track, {
+        source: Track.Source.ScreenShareAudio,
+        audioPreset: AudioPresets.musicHighQualityStereo,
+        dtx: false,
+        red: false,
+        forceStereo: true,
+      });
+      this.emit();
+      return true;
+    } catch (err) {
+      // Publish (or a capture step) threw — every resource this path may have
+      // stood up is now consumer-less. Tear down the aux capture, the native
+      // WASAPI capture, and the Linux venmic sink (whichever the platform path
+      // used) so nothing is left running, then rethrow.
+      auxStream?.getTracks().forEach((t) => t.stop());
+      this.screenAudioAuxStream = null;
+      if (platform === "win32") { try { await stopSystemAudioStream(); } catch { /* */ } }
+      if (platform === "linux") { try { await window.r3dvoice?.disableLinuxAudioRouting?.(); } catch { /* */ } }
+      throw err;
+    } finally {
+      this.screenAudioInFlight = false;
     }
-
-    if (!track) return false;
-
-    this.screenAudioAuxStream = auxStream;
-    // High-quality stereo Opus for screenshare audio. The LiveKit default
-    // is a speech preset (~24 kbps mono) which butchers music/game audio.
-    // dtx (discontinuous transmission) drops silent frames — fine for voice,
-    // but it kills tail/decay on music. red (redundant encoding) adds
-    // latency, also undesirable here. forceStereo keeps both channels.
-    await this.room.localParticipant.publishTrack(track, {
-      source: Track.Source.ScreenShareAudio,
-      audioPreset: AudioPresets.musicHighQualityStereo,
-      dtx: false,
-      red: false,
-      forceStereo: true,
-    });
-    this.emit();
-    return true;
   }
 
   /** Unpublish the active screen_share_audio track and release the source. */

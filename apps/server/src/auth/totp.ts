@@ -41,3 +41,28 @@ export function verifyTotpCode(secret: string, code: string): boolean {
     return false;
   }
 }
+
+/**
+ * Like verifyTotpCode, but returns the exact 30s step counter the code matched
+ * (or null if invalid). Callers persist the last-consumed step to reject
+ * replays of a still-valid code within its ~90s window.
+ */
+export function verifyTotpCodeStep(secret: string, code: string): number | null {
+  const trimmed = code.replace(/\s+/g, "");
+  if (!/^\d{6}$/.test(trimmed)) return null;
+  try {
+    // window: 1 = ±30s drift tolerance. verifyDelta returns { delta } (the
+    // signed offset from the current step) when the code is valid, else undefined.
+    const result = speakeasy.totp.verifyDelta({
+      secret,
+      encoding: "base32",
+      token: trimmed,
+      window: 1,
+    });
+    if (!result) return null;
+    const currentStep = Math.floor(Date.now() / 1000 / 30);
+    return currentStep + result.delta;
+  } catch {
+    return null;
+  }
+}

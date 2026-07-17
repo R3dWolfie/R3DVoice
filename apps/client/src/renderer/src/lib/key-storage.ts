@@ -1,23 +1,62 @@
 import { generateKeyPair, isPlausibleKey, type KeyPair } from "./crypto.js";
 
+// Base (unnamespaced) keys. These now double as a one-shot "staging" slot:
+// keypairs from pre-namespacing builds AND login-screen restores land here, and
+// the next successful login CLAIMS the staged pair into that user's own
+// namespace, then clears staging.
 const SECRET_KEY_LS = "r3dvoice.e2ee.secretKey";
 const PUBLIC_KEY_LS = "r3dvoice.e2ee.publicKey";
 
 /**
- * Per-user E2EE keypair store. We keep the keys in localStorage for now —
- * an Electron renderer's localStorage is process-private to this app, and
- * the JWT is already there too. Future hardening: wrap the secret key in
- * Electron safeStorage (OS keychain) via IPC. For now: simple, working.
+ * Per-USER E2EE keypair store. The keypair is keyed by user id, not shared
+ * device-wide — otherwise a second account signing in on the same device would
+ * inherit (and could decrypt with) the first user's crypto identity. auth-store
+ * calls setActiveKeyUser() on every login/hydrate; load/save/clear operate only
+ * on that user's slot and no-op when logged out.
  *
- * The secret key NEVER leaves the user's device unless explicitly exported
- * via `exportKeyBackup`. The public key is uploaded to the server during
- * registration.
+ * The secret key NEVER leaves the device unless explicitly exported via
+ * downloadKeyBackup. The public key is uploaded to the server at registration.
  */
+let activeUserId: string | null = null;
+
+/** Scope subsequent key reads/writes to a user (or null when logged out). */
+export function setActiveKeyUser(userId: string | null): void {
+  activeUserId = userId;
+}
+
+function nsKey(base: string, userId: string): string {
+  return `${base}::${userId}`;
+}
+
+// Move a staged (unnamespaced) keypair into a user's namespace and burn the
+// staging slot — so a staged key is claimable exactly once, by the first user
+// to sign in after it was staged.
+function claimStagedFor(userId: string): boolean {
+  const ls = globalThis.localStorage;
+  if (!ls) return false;
+  const s = ls.getItem(SECRET_KEY_LS);
+  const p = ls.getItem(PUBLIC_KEY_LS);
+  if (!s || !p) return false;
+  ls.setItem(nsKey(SECRET_KEY_LS, userId), s);
+  ls.setItem(nsKey(PUBLIC_KEY_LS, userId), p);
+  ls.removeItem(SECRET_KEY_LS);
+  ls.removeItem(PUBLIC_KEY_LS);
+  return true;
+}
 
 export function loadKeyPair(): KeyPair | null {
+  if (!activeUserId) return null;
+  const ls = globalThis.localStorage;
+  if (!ls) return null;
   try {
-    const sk = globalThis.localStorage?.getItem(SECRET_KEY_LS);
-    const pk = globalThis.localStorage?.getItem(PUBLIC_KEY_LS);
+    let sk = ls.getItem(nsKey(SECRET_KEY_LS, activeUserId));
+    let pk = ls.getItem(nsKey(PUBLIC_KEY_LS, activeUserId));
+    // First read after login with an empty namespace: adopt a staged key
+    // (legacy pre-namespacing key, or a login-screen restore) into this user.
+    if ((!sk || !pk) && claimStagedFor(activeUserId)) {
+      sk = ls.getItem(nsKey(SECRET_KEY_LS, activeUserId));
+      pk = ls.getItem(nsKey(PUBLIC_KEY_LS, activeUserId));
+    }
     if (!sk || !pk) return null;
     if (!isPlausibleKey(sk) || !isPlausibleKey(pk)) return null;
     return { publicKey: pk, secretKey: sk };
@@ -27,18 +66,32 @@ export function loadKeyPair(): KeyPair | null {
 }
 
 export function saveKeyPair(kp: KeyPair): void {
-  globalThis.localStorage?.setItem(SECRET_KEY_LS, kp.secretKey);
-  globalThis.localStorage?.setItem(PUBLIC_KEY_LS, kp.publicKey);
+  if (!activeUserId) return;
+  globalThis.localStorage?.setItem(nsKey(SECRET_KEY_LS, activeUserId), kp.secretKey);
+  globalThis.localStorage?.setItem(nsKey(PUBLIC_KEY_LS, activeUserId), kp.publicKey);
 }
 
 export function clearKeyPair(): void {
-  globalThis.localStorage?.removeItem(SECRET_KEY_LS);
-  globalThis.localStorage?.removeItem(PUBLIC_KEY_LS);
+  if (!activeUserId) return;
+  globalThis.localStorage?.removeItem(nsKey(SECRET_KEY_LS, activeUserId));
+  globalThis.localStorage?.removeItem(nsKey(PUBLIC_KEY_LS, activeUserId));
 }
 
 /**
- * Generate + persist a fresh keypair. Returns the new pair so the caller
- * can immediately upload the public half to the server.
+ * Stage a keypair BEFORE login (the login-screen "Restore E2EE key backup"
+ * flow, which runs while logged out). It lands in the shared staging slot and
+ * is claimed into the user's namespace the moment they sign in.
+ */
+export function stageRestoredKeyPair(kp: KeyPair): void {
+  const ls = globalThis.localStorage;
+  if (!ls) return;
+  ls.setItem(SECRET_KEY_LS, kp.secretKey);
+  ls.setItem(PUBLIC_KEY_LS, kp.publicKey);
+}
+
+/**
+ * Generate + persist a fresh keypair for the active user. Returns the new pair
+ * so the caller can upload the public half to the server.
  */
 export function ensureKeyPair(): KeyPair {
   const existing = loadKeyPair();

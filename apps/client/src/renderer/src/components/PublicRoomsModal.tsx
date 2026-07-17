@@ -25,6 +25,7 @@ export function PublicRoomsModal({
 
   const refresh = useCallback(async () => {
     try {
+      setError(null);
       const api = new ApiClient(serverUrl);
       api.setToken(token);
       const r = await api.listPublicRooms();
@@ -102,14 +103,31 @@ export function PublicRoomsModal({
             <span>Show empty rooms</span>
           </label>
         </div>
-        {error && (
+        {error && rooms !== null && (
+          // A refresh failed while a prior list is on screen — banner over the
+          // stale grid. The empty-first-load case is owned by the body below.
           <div className="rv-err-banner" role="alert">
             <span className="ic">!</span>
             <div>{error}</div>
           </div>
         )}
         <div className="rv-scroll" style={{ overflowY: "auto", minHeight: 0, maxHeight: 440 }}>
-          {rooms === null ? (
+          {error && rooms === null ? (
+            // A failed first load must not leave the skeletons pulsing forever —
+            // give the user a way out instead.
+            <div className="rv-empty" style={{ padding: "var(--s-8) 0", gap: "var(--s-3)" }}>
+              <span className="rv-empty-title">Couldn’t load the directory</span>
+              <span className="rv-empty-hint">{error}</span>
+              <button
+                className="rv-btn"
+                data-variant="primary"
+                style={{ height: "2rem", padding: "0 var(--s-4)", fontSize: "var(--t-xs)" }}
+                onClick={() => void refresh()}
+              >
+                Retry
+              </button>
+            </div>
+          ) : rooms === null ? (
             <div className="rv-browse-grid">
               <div className="rv-skeleton" style={{ height: "7rem" }} />
               <div className="rv-skeleton" style={{ height: "7rem" }} />

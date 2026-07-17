@@ -108,43 +108,56 @@ export async function startSystemAudioStream(
   const result = await window.r3dvoice.startSystemAudioCapture(options);
   if (result !== "started") return null;
 
-  const fmt = await window.r3dvoice.systemAudioFormat();
-  // Match the helper's sample rate — otherwise the AudioContext would
-  // resample, which adds latency and CPU.
-  const ctx = new AudioContext({ sampleRate: fmt.sampleRate, latencyHint: "interactive" });
-
-  const blob = new Blob([PROCESSOR_SOURCE], { type: "application/javascript" });
-  const url = URL.createObjectURL(blob);
+  // Past this point the native OS loopback is already running. Anything that
+  // throws here (format probe, AudioContext, worklet) would leave `active`
+  // null, so a later stopSystemAudioStream() early-returns and the capture
+  // runs for the whole process lifetime. Tear it down on any failure.
+  let ctx: AudioContext | null = null;
   try {
-    await ctx.audioWorklet.addModule(url);
-  } finally {
-    URL.revokeObjectURL(url);
+    const fmt = await window.r3dvoice.systemAudioFormat();
+    // Match the helper's sample rate — otherwise the AudioContext would
+    // resample, which adds latency and CPU.
+    ctx = new AudioContext({ sampleRate: fmt.sampleRate, latencyHint: "interactive" });
+
+    const blob = new Blob([PROCESSOR_SOURCE], { type: "application/javascript" });
+    const url = URL.createObjectURL(blob);
+    try {
+      await ctx.audioWorklet.addModule(url);
+    } finally {
+      URL.revokeObjectURL(url);
+    }
+
+    const worklet = new AudioWorkletNode(ctx, "system-audio-pcm-processor", {
+      numberOfInputs: 0,
+      numberOfOutputs: 1,
+      outputChannelCount: [fmt.channels],
+    });
+
+    const destination = ctx.createMediaStreamDestination();
+    worklet.connect(destination);
+
+    // Forward PCM chunks from main → worklet. We pass the ArrayBuffer (zero-
+    // copy transfer would need .postMessage(ab, [ab]) but the IPC layer
+    // already structured-cloned it once, so a second copy is unavoidable).
+    const unsubscribeChunk = window.r3dvoice.onSystemAudioChunk((chunk) => {
+      // chunk is a Uint8Array view from IPC; hand the underlying buffer to
+      // the worklet so it can read it as Int16Array.
+      worklet.port.postMessage(chunk.buffer.slice(chunk.byteOffset, chunk.byteOffset + chunk.byteLength));
+    });
+
+    const unsubscribeEnded = window.r3dvoice.onSystemAudioEnded(() => {
+      void stopSystemAudioStream();
+    });
+
+    active = { ctx, destination, worklet, unsubscribeChunk, unsubscribeEnded };
+    return destination.stream;
+  } catch (err) {
+    try { await window.r3dvoice.stopSystemAudioCapture(); } catch { /* */ }
+    if (ctx) { try { await ctx.close(); } catch { /* */ } }
+    // eslint-disable-next-line no-console
+    console.warn("[system-audio] setup failed after capture started; torn down:", err);
+    return null;
   }
-
-  const worklet = new AudioWorkletNode(ctx, "system-audio-pcm-processor", {
-    numberOfInputs: 0,
-    numberOfOutputs: 1,
-    outputChannelCount: [fmt.channels],
-  });
-
-  const destination = ctx.createMediaStreamDestination();
-  worklet.connect(destination);
-
-  // Forward PCM chunks from main → worklet. We pass the ArrayBuffer (zero-
-  // copy transfer would need .postMessage(ab, [ab]) but the IPC layer
-  // already structured-cloned it once, so a second copy is unavoidable).
-  const unsubscribeChunk = window.r3dvoice.onSystemAudioChunk((chunk) => {
-    // chunk is a Uint8Array view from IPC; hand the underlying buffer to
-    // the worklet so it can read it as Int16Array.
-    worklet.port.postMessage(chunk.buffer.slice(chunk.byteOffset, chunk.byteOffset + chunk.byteLength));
-  });
-
-  const unsubscribeEnded = window.r3dvoice.onSystemAudioEnded(() => {
-    void stopSystemAudioStream();
-  });
-
-  active = { ctx, destination, worklet, unsubscribeChunk, unsubscribeEnded };
-  return destination.stream;
 }
 
 export async function stopSystemAudioStream(): Promise<void> {

@@ -43,24 +43,33 @@ export async function computeUnread(userId: string): Promise<UnreadCounts> {
   });
   const muteByThread = new Map(mutes.map((m) => [m.threadId, m]));
 
+  // Single query for every candidate message across all threads (was one query
+  // per thread → K+3). Read-state / mute filtering happens in memory below.
+  const messages = await prisma.message.findMany({
+    where: {
+      threadType: "dm",
+      threadId: { in: dmThreadIds },
+      authorId: { not: userId },
+    },
+    select: { threadId: true, createdAt: true, mentions: true },
+  });
+  const byThread = new Map<string, Array<{ createdAt: Date; mentions: string | null }>>();
+  for (const m of messages) {
+    const arr = byThread.get(m.threadId);
+    if (arr) arr.push(m);
+    else byThread.set(m.threadId, [m]);
+  }
+
   for (const threadId of dmThreadIds) {
     const mute = muteByThread.get(threadId);
     if (mute?.level === "none") continue;
 
     const lastRead = readByThread.get(threadId) ?? new Date(0);
-    const messages = await prisma.message.findMany({
-      where: {
-        threadType: "dm",
-        threadId,
-        authorId: { not: userId },
-        createdAt: { gt: lastRead },
-      },
-      select: { id: true, mentions: true },
-    });
+    const unread = (byThread.get(threadId) ?? []).filter((m) => m.createdAt > lastRead);
 
-    let n = messages.length;
+    let n = unread.length;
     if (mute?.level === "mentions") {
-      n = messages.filter((m) => {
+      n = unread.filter((m) => {
         if (!m.mentions) return false;
         try {
           const arr = JSON.parse(m.mentions) as string[];
