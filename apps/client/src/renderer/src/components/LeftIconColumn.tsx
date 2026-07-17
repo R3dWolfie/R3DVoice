@@ -3,6 +3,7 @@ import { useAuthStore } from "../lib/auth-context.js";
 import { Avatar } from "./Avatar.js";
 import { I } from "./Icons.js";
 import { UserPanelPopover } from "./UserPanelPopover.js";
+import { NotificationsPanel } from "./NotificationsPanel.js";
 import { UnreadDot } from "./UnreadDot.js";
 import { useUnreadStore } from "../lib/unread-store.js";
 
@@ -51,6 +52,7 @@ export function LeftIconColumn({ active, onNavigate, onOpenSettings }: Props): R
   const me = useAuthStore((s) => s.user);
   const logout = useAuthStore((s) => s.logout);
   const [userPanelOpen, setUserPanelOpen] = useState(false);
+  const [bellOpen, setBellOpen] = useState(false);
   const totalUnread = useUnreadStore((s) => s.totalUnread);
 
   return (
@@ -85,6 +87,17 @@ export function LeftIconColumn({ active, onNavigate, onOpenSettings }: Props): R
       <NavIcon active={active === "friends"} onClick={() => onNavigate("friends")} ariaLabel="Friends">
         <I.Users size={16} />
       </NavIcon>
+      <div style={{ position: "relative" }}>
+        <NavIcon active={bellOpen} onClick={() => setBellOpen((v) => !v)} ariaLabel="Notifications">
+          <I.Bell size={16} />
+        </NavIcon>
+        <NotificationsPanel
+          open={bellOpen}
+          onClose={() => setBellOpen(false)}
+          onOpenDms={() => onNavigate("dms")}
+          onOpenFriends={() => onNavigate("friends")}
+        />
+      </div>
 
       <div style={{ flex: 1 }} />
 
