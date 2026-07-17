@@ -2,7 +2,7 @@
 pkgname=r3dvoice-bin
 _appname=R3DVoice
 pkgver=0.11.0
-pkgrel=1
+pkgrel=2
 pkgdesc="Discord-style low-latency voice, video & screenshare for gamers (Electron + LiveKit)"
 arch=('x86_64')
 url="https://github.com/R3dWolfie/R3DVoice"
@@ -16,7 +16,7 @@ options=('!strip')
 source=("${_appname}-${pkgver}.AppImage::${url}/releases/download/v${pkgver}/R3DVoice.AppImage")
 # Filled in by the release step (makepkg -g). AppImage is an ELF, not an archive.
 noextract=("${_appname}-${pkgver}.AppImage")
-sha256sums=('SHA256_PLACEHOLDER')
+sha256sums=('7ed3359f6893a6e14731669aecdfced6d39884b7ad46a0156d6e02e1fbbea5a9')
 
 prepare() {
   chmod +x "${_appname}-${pkgver}.AppImage"
@@ -27,6 +27,9 @@ package() {
   # App payload → /opt (the extracted AppImage bundles its own Electron).
   install -dm755 "${pkgdir}/opt/${pkgname}"
   cp -a squashfs-root/. "${pkgdir}/opt/${pkgname}/"
+  # --appimage-extract leaves dirs mode 700; make the whole tree world
+  # readable + traversable (dirs/executables get +x, data files don't).
+  chmod -R a+rX "${pkgdir}/opt/${pkgname}"
   # AppImage-only bits we don't want at /opt (we ship our own launcher/desktop).
   rm -f "${pkgdir}/opt/${pkgname}/AppRun" \
         "${pkgdir}/opt/${pkgname}/.DirIcon" \
