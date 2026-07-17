@@ -59,3 +59,21 @@ spots; the app deliberately runs `--accent` = Cherry (#e11d48) at
 1. SMTP provider (Migadu available) → 1.5, 1.6, 1.7 email flows
 2. Private (invite-only) room tier → third privacy segment in 4.8/4.9
 3. Co-owner role → 4.9b "Make co-owner", 4.17 badge
+
+## Visual QA pass (same day) — remaining after batch 1
+Fixed in batch 1: DM mute popover + header identity/avatar, composer order,
+live titlebar label, add-menu chips + copy, rail presence dot, keybind
+ghost rename + scope tags, settings viewport clamp, login forgot link.
+
+Still open (ranked): live voice-occupancy signals everywhere (lobby room
+meta "N in call" + activity dots, browse "in voice" counts, DM header
+status line — needs presence-per-room from the backend rework); Theme
+token editor + preview card + Grey preset + export/import; Notifications
+sounds/quiet-hours/desktop-integration/default-room segmented; Devices
+video section (camera select/preview/resolution/mirror) + mic meter +
+speaker test; browse directory card-grid form + show-empty toggle + owner
+attribution; DMs sidebar search + open-thread-in-list; friends ⋮ overflow
+(pending-sent + manage links) + PTT hint strip; keybind populated
+defaults; Account sign-out+clear-keys + always-visible backup button;
+settings nav-foot identity card; monochrome-icon sweep (remaining emoji
+glyphs).
