@@ -106,9 +106,20 @@ export async function roomRoutes(app: FastifyInstance): Promise<void> {
         orderBy: { lastJoined: "desc" },
       }),
     ]);
+    // Live occupancy (deck's "N in call" signal): presence already tracks
+    // each user's currentRoomId — count it per room in one groupBy.
+    const roomIds = [...owned.map((r) => r.id), ...memberships.map((m) => m.roomId)];
+    const counts = roomIds.length
+      ? await prisma.user.groupBy({
+          by: ["currentRoomId"],
+          where: { currentRoomId: { in: roomIds } },
+          _count: { _all: true },
+        })
+      : [];
+    const inCall = new Map(counts.map((c) => [c.currentRoomId, c._count._all]));
     return {
-      owned: owned.map((r) => toResponse(r, userId, null)),
-      recent: memberships.map((m) => toResponse(m.room, userId, m)),
+      owned: owned.map((r) => ({ ...toResponse(r, userId, null), inCall: inCall.get(r.id) ?? 0 })),
+      recent: memberships.map((m) => ({ ...toResponse(m.room, userId, m), inCall: inCall.get(m.roomId) ?? 0 })),
     };
   });
 
@@ -123,12 +134,21 @@ export async function roomRoutes(app: FastifyInstance): Promise<void> {
       take: 100,
       include: { _count: { select: { memberships: true } } },
     });
+    const counts = rooms.length
+      ? await prisma.user.groupBy({
+          by: ["currentRoomId"],
+          where: { currentRoomId: { in: rooms.map((r) => r.id) } },
+          _count: { _all: true },
+        })
+      : [];
+    const inCall = new Map(counts.map((c) => [c.currentRoomId, c._count._all]));
     return {
       rooms: rooms.map((r) => ({
         id: r.id,
         name: r.name,
         description: r.description ?? null,
         memberCount: r._count.memberships,
+        inCall: inCall.get(r.id) ?? 0,
         createdAt: r.createdAt.toISOString(),
       })),
     };

@@ -74,6 +74,8 @@ export interface RoomDTO {
   createdAt: string; // ISO 8601
   isOwner: boolean;
   lastJoined: string | null; // ISO 8601 or null if never joined
+  /** Users currently in the call (live presence count). */
+  inCall?: number;
 }
 
 export interface RoomMemberDTO {
@@ -94,6 +96,8 @@ export interface PublicRoomDTO {
   name: string;
   description: string | null;
   memberCount: number;
+  /** Users currently in the call (live presence count). */
+  inCall: number;
   createdAt: string;
 }
 

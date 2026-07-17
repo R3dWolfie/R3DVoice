@@ -3,6 +3,7 @@ import type { RoomDTO } from "@r3dvoice/shared";
 import { ApiClient } from "../lib/api.js";
 import { createRoomsStore, extractInviteCode, type RoomsState } from "../lib/rooms-store.js";
 import { useAuthStore } from "../lib/auth-context.js";
+import { getTransport } from "../lib/chat-transport.js";
 import { usePrefs, prefsActions } from "../lib/prefs-singleton.js";
 import { I } from "../components/Icons.js";
 import { ContextMenu, MenuItem, MenuDivider, MenuSection } from "../components/ContextMenu.js";
@@ -180,6 +181,23 @@ export function LobbyScreen({ pendingInviteCode, pendingJoinRoomId, onInviteCode
     };
   }, [serverUrl]);
 
+  // Live occupancy: refresh room lists when anyone's presence changes.
+  useEffect(() => {
+    const t = getTransport();
+    if (!t) return;
+    let timer: ReturnType<typeof setTimeout> | null = null;
+    const off = t.on((event) => {
+      if (event.type === "presence.update") {
+        if (timer) clearTimeout(timer);
+        timer = setTimeout(() => void store.getState().refresh(), 800);
+      }
+    });
+    return () => {
+      off();
+      if (timer) clearTimeout(timer);
+    };
+  }, [store]);
+
   // Close the + menu on outside click.
   useEffect(() => {
     if (!addMenuOpen) return;
@@ -301,10 +319,17 @@ export function LobbyScreen({ pendingInviteCode, pendingJoinRoomId, onInviteCode
         <span style={{ fontSize: "var(--t-sm)", whiteSpace: "nowrap", overflow: "hidden", textOverflow: "ellipsis" }}>
           {r.name}
         </span>
-        <span className="rv-mono" style={{ fontSize: "var(--t-2xs)", color: "var(--text-faint)" }}>
-          {r.isOwner ? "yours" : "member"} · {relativeAge(r.lastJoined ?? r.createdAt)}
+        <span
+          className="rv-mono"
+          style={{ fontSize: "var(--t-2xs)", color: (r.inCall ?? 0) > 0 ? "var(--ok)" : "var(--text-faint)" }}
+          title={`${r.isOwner ? "yours" : "member"} · ${relativeAge(r.lastJoined ?? r.createdAt)}`}
+        >
+          {(r.inCall ?? 0) > 0 ? `${r.inCall} in call` : "empty"}
         </span>
       </div>
+      {(r.inCall ?? 0) > 0 && (
+        <span style={{ width: 6, height: 6, borderRadius: "50%", background: "var(--ok)", flexShrink: 0 }} />
+      )}
       {starredRow && <I.StarFilled size={12} style={{ color: "var(--rv-amber)", flexShrink: 0 }} />}
     </div>
   );

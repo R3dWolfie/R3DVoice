@@ -25,7 +25,7 @@ export function PublicRoomsModal({
       const api = new ApiClient(serverUrl);
       api.setToken(token);
       const r = await api.listPublicRooms();
-      setRooms([...r.rooms].sort((a, b) => b.memberCount - a.memberCount));
+      setRooms([...r.rooms].sort((a, b) => b.inCall - a.inCall || b.memberCount - a.memberCount));
     } catch (e) {
       setError(e instanceof Error ? e.message : "failed to load directory");
     }
@@ -121,8 +121,15 @@ export function PublicRoomsModal({
                     }}
                   >
                     {r.description ?? "No description"}
-                    <span className="rv-mono" style={{ marginLeft: 8, color: "var(--text-faint)" }}>
-                      {r.memberCount} member{r.memberCount === 1 ? "" : "s"}
+                    <span
+                      className="rv-mono"
+                      style={{ marginLeft: 8, color: r.inCall > 0 ? "var(--ok)" : "var(--text-faint)" }}
+                    >
+                      {r.inCall > 0
+                        ? `${r.inCall} in voice`
+                        : r.memberCount > 0
+                          ? `${r.memberCount} member${r.memberCount === 1 ? "" : "s"}`
+                          : "Empty · be the first"}
                     </span>
                   </div>
                 </div>
