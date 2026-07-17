@@ -5,6 +5,7 @@ import type {
   ChatWsEvent,
 } from "@r3dvoice/shared";
 import type { ApiClient } from "./api.js";
+import { setConnectionState } from "./connection-store.js";
 import { routeNotification } from "./notification-router.js";
 import { prefsActions } from "./prefs-singleton.js";
 import { useUnreadStore } from "./unread-store.js";
@@ -62,6 +63,9 @@ export class ChatTransport {
   private token: string;
   private closed = false;
   private reconnectDelay = 1000;
+  private reconnectTimer: number | null = null;
+  private reconnectAttempts = 0;
+  private everOpened = false;
   private heartbeatTimer: number | null = null;
   private _muteCache = new Map<string, "all" | "mentions" | "none">();
   private _api: ApiClient | null = null;
@@ -87,6 +91,10 @@ export class ChatTransport {
       window.clearInterval(this.heartbeatTimer);
       this.heartbeatTimer = null;
     }
+    if (this.reconnectTimer != null) {
+      window.clearTimeout(this.reconnectTimer);
+      this.reconnectTimer = null;
+    }
     if (this.ws) {
       try {
         this.ws.close();
@@ -95,6 +103,23 @@ export class ChatTransport {
       }
       this.ws = null;
     }
+    setConnectionState({ status: "idle", attempts: 0, nextRetryAt: null });
+  }
+
+  /**
+   * "Retry now" (offline banner): skip the pending backoff timer, reset the
+   * delay, and reconnect immediately. No-op if the transport was torn down.
+   */
+  retryNow(): void {
+    if (this.closed) return;
+    if (this.ws && this.ws.readyState === WebSocket.OPEN) return;
+    if (this.reconnectTimer != null) {
+      window.clearTimeout(this.reconnectTimer);
+      this.reconnectTimer = null;
+    }
+    this.reconnectDelay = 1000;
+    setConnectionState({ nextRetryAt: null });
+    if (this.ws === null) this.connect();
   }
 
   on(cb: Listener): () => void {
@@ -144,6 +169,10 @@ export class ChatTransport {
   }
 
   private connect(): void {
+    setConnectionState({
+      status: this.everOpened ? "reconnecting" : "connecting",
+      nextRetryAt: null,
+    });
     const wsUrl = httpToWs(this.serverUrl) + "/ws";
     let ws: WebSocket;
     try {
@@ -156,6 +185,9 @@ export class ChatTransport {
 
     ws.addEventListener("open", () => {
       this.reconnectDelay = 1000;
+      this.reconnectAttempts = 0;
+      this.everOpened = true;
+      setConnectionState({ status: "open", attempts: 0, nextRetryAt: null, lastOpenAt: Date.now() });
       // Re-subscribe everything we cared about.
       for (const k of this.subscribed) {
         const [t, ...rest] = k.split(":");
@@ -233,6 +265,7 @@ export class ChatTransport {
       // (re-login, re-hydrate) re-establish the singleton via ensureTransport.
       if (ev.code === 4401) {
         this.closed = true;
+        setConnectionState({ status: "idle", attempts: 0, nextRetryAt: null });
         return;
       }
       if (!this.closed) this.scheduleReconnect();
@@ -254,7 +287,14 @@ export class ChatTransport {
 
   private scheduleReconnect(): void {
     const delay = Math.min(this.reconnectDelay, 30000);
-    window.setTimeout(() => {
+    this.reconnectAttempts += 1;
+    setConnectionState({
+      status: "reconnecting",
+      attempts: this.reconnectAttempts,
+      nextRetryAt: Date.now() + delay,
+    });
+    this.reconnectTimer = window.setTimeout(() => {
+      this.reconnectTimer = null;
       if (!this.closed) this.connect();
     }, delay);
     this.reconnectDelay = Math.min(this.reconnectDelay * 2, 30000);

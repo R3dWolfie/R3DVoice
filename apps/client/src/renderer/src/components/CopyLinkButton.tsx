@@ -1,4 +1,5 @@
 import { useEffect, useRef, useState, type ReactElement } from "react";
+import { pushToast } from "../lib/toast-store.js";
 import { I } from "./Icons.js";
 
 /**
@@ -13,7 +14,6 @@ export function CopyLinkButton({
   roomId: string;
   serverUrl: string;
 }): ReactElement {
-  const [copiedKind, setCopiedKind] = useState<"link" | "id" | null>(null);
   const [menuOpen, setMenuOpen] = useState(false);
   const wrapperRef = useRef<HTMLDivElement | null>(null);
 
@@ -33,14 +33,15 @@ export function CopyLinkButton({
       kind === "link" ? `${serverUrl.replace(/\/$/, "")}/join/${roomId}` : roomId;
     try {
       await navigator.clipboard.writeText(value);
-      setCopiedKind(kind);
-      setTimeout(() => setCopiedKind(null), 1500);
+      pushToast({
+        kind: "success",
+        text: kind === "link" ? "Room link copied" : "Room ID copied",
+        sub: value,
+      });
     } catch {
-      /* clipboard blocked; UI stays on default */
+      pushToast({ kind: "error", text: "Couldn't access the clipboard" });
     }
   }
-
-  const label = copiedKind === "link" ? "Copied link" : copiedKind === "id" ? "Copied ID" : "Copy";
 
   return (
     <div ref={wrapperRef} style={{ position: "relative", display: "inline-flex" }}>
@@ -50,7 +51,7 @@ export function CopyLinkButton({
         title="Copy room link to clipboard"
         style={{ borderTopRightRadius: 0, borderBottomRightRadius: 0, paddingRight: "var(--s-2)" }}
       >
-        {label}
+        Copy
       </button>
       <button
         className="rv-btn"

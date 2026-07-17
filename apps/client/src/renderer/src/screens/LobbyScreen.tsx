@@ -5,6 +5,7 @@ import { createRoomsStore, extractInviteCode, type RoomsState } from "../lib/roo
 import { useAuthStore } from "../lib/auth-context.js";
 import { getTransport } from "../lib/chat-transport.js";
 import { usePrefs, prefsActions } from "../lib/prefs-singleton.js";
+import { pushToast } from "../lib/toast-store.js";
 import { I } from "../components/Icons.js";
 import { ContextMenu, MenuItem, MenuDivider, MenuSection } from "../components/ContextMenu.js";
 import { CreateRoomModal } from "../components/CreateRoomModal.js";
@@ -301,7 +302,11 @@ export function LobbyScreen({ pendingInviteCode, pendingJoinRoomId, onInviteCode
     .slice(0, 25);
 
   const copyRoomLink = (roomId: string): void => {
-    void navigator.clipboard.writeText(`${serverUrl.replace(/\/$/, "")}/join/${roomId}`).catch(() => {});
+    const url = `${serverUrl.replace(/\/$/, "")}/join/${roomId}`;
+    void navigator.clipboard
+      .writeText(url)
+      .then(() => pushToast({ kind: "success", text: "Room link copied", sub: url }))
+      .catch(() => pushToast({ kind: "error", text: "Couldn't access the clipboard" }));
   };
 
   const roomRow = (r: RoomDTO, starredRow: boolean): ReactElement => (
