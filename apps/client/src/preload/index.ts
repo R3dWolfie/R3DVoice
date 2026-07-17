@@ -1,7 +1,7 @@
 import { contextBridge, ipcRenderer } from "electron";
-import type { RedVoiceBridge, SplashStatus, DeepLinkEvent, NotifyPayload } from "../shared/bridge-types.js";
+import type { R3DVoiceBridge, SplashStatus, DeepLinkEvent, NotifyPayload } from "../shared/bridge-types.js";
 
-const bridge: RedVoiceBridge = {
+const bridge: R3DVoiceBridge = {
   saveToken: (token) => ipcRenderer.invoke("auth:save-token", token),
   getToken: () => ipcRenderer.invoke("auth:get-token"),
   clearToken: () => ipcRenderer.invoke("auth:clear-token"),
@@ -70,4 +70,4 @@ const bridge: RedVoiceBridge = {
   notify: (payload: NotifyPayload) => ipcRenderer.invoke("notify", payload),
 };
 
-contextBridge.exposeInMainWorld("redvoice", bridge);
+contextBridge.exposeInMainWorld("r3dvoice", bridge);

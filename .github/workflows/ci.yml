@@ -18,13 +18,13 @@ jobs:
           node-version: 20
           cache: pnpm
       - run: pnpm install --frozen-lockfile
-      - run: pnpm --filter @redvoice/server prisma generate
-      - run: pnpm --filter @redvoice/server prisma migrate deploy
+      - run: pnpm --filter @r3dvoice/server prisma generate
+      - run: pnpm --filter @r3dvoice/server prisma migrate deploy
         env:
           DATABASE_URL: "file:./dev.db"
-      - run: pnpm --filter @redvoice/shared build
+      - run: pnpm --filter @r3dvoice/shared build
       - run: pnpm -r typecheck
-      - run: pnpm --filter @redvoice/server test
+      - run: pnpm --filter @r3dvoice/server test
         # Note: vitest.config.ts injects its own env block for tests, which
         # overrides any env we set here. This block is only for the migrate
         # step above. Keep vitest.config.ts in sync if you change secrets.

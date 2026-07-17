@@ -1,5 +1,5 @@
 import { createStore, type StoreApi } from "zustand/vanilla";
-import type { RoomDTO } from "@redvoice/shared";
+import type { RoomDTO } from "@r3dvoice/shared";
 import { ApiClient, ApiError } from "./api.js";
 
 export interface RoomsState {

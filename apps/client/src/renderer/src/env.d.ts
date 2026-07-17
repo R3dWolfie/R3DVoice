@@ -1,8 +1,8 @@
-import type { RedVoiceBridge } from "../../shared/bridge-types.js";
+import type { R3DVoiceBridge } from "../../shared/bridge-types.js";
 
 declare global {
   interface Window {
-    redvoice: RedVoiceBridge;
+    r3dvoice: R3DVoiceBridge;
   }
 }
 

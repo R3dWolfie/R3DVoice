@@ -1,5 +1,5 @@
 import { type ReactElement } from "react";
-import type { DmThreadEntry } from "@redvoice/shared";
+import type { DmThreadEntry } from "@r3dvoice/shared";
 import { Avatar } from "./Avatar.js";
 import { UnreadDot } from "./UnreadDot.js";
 import { useUnreadStore } from "../lib/unread-store.js";

@@ -26,12 +26,12 @@ import {
 } from "./deep-links.js";
 import { registerNotificationsHandler } from "./notifications.js";
 
-// Force app name / WMClass to "RedVoice" so Plasma/GNOME taskbars match this
-// window to ~/.local/share/applications/redvoice.desktop instead of falling
-// back to the AppImage's bundled @redvoiceclient.desktop (which lives inside
+// Force app name / WMClass to "R3DVoice" so Plasma/GNOME taskbars match this
+// window to ~/.local/share/applications/r3dvoice.desktop instead of falling
+// back to the AppImage's bundled @r3dvoiceclient.desktop (which lives inside
 // a temporary mount that vanishes on exit).
-app.setName("RedVoice");
-app.commandLine.appendSwitch("class", "RedVoice");
+app.setName("R3DVoice");
+app.commandLine.appendSwitch("class", "R3DVoice");
 Menu.setApplicationMenu(null);
 
 // Force WebRTC H.264 encoding to go through hardware (Media Foundation on
@@ -71,15 +71,22 @@ app.commandLine.appendSwitch(
 );
 
 // Dev/test escape hatch: run a second instance with an isolated session.
-// REDVOICE_USER_DATA_DIR=/tmp/redvoice-b pnpm --filter @redvoice/client dev
+// R3DVOICE_USER_DATA_DIR=/tmp/r3dvoice-b pnpm --filter @r3dvoice/client dev
 // Must happen BEFORE requestSingleInstanceLock so the lock is keyed on the
 // overridden userData path — otherwise both instances contend for the same
 // default-path lock and the second silently quits.
-if (process.env["REDVOICE_USER_DATA_DIR"]) {
-  app.setPath("userData", process.env["REDVOICE_USER_DATA_DIR"]);
+// Pre-rename REDVOICE_* env vars still work (scripts/muscle memory).
+for (const [oldKey, newKey] of [
+  ["REDVOICE_USER_DATA_DIR", "R3DVOICE_USER_DATA_DIR"],
+  ["REDVOICE_SPLASH_DEMO", "R3DVOICE_SPLASH_DEMO"],
+] as const) {
+  if (!process.env[newKey] && process.env[oldKey]) process.env[newKey] = process.env[oldKey];
+}
+if (process.env["R3DVOICE_USER_DATA_DIR"]) {
+  app.setPath("userData", process.env["R3DVOICE_USER_DATA_DIR"]);
 }
 
-// Single-instance lock: a second `redvoice://…` launch funnels through
+// Single-instance lock: a second `r3dvoice://…` launch funnels through
 // `second-instance` instead of spawning another process.
 const gotSingleInstanceLock = app.requestSingleInstanceLock();
 if (!gotSingleInstanceLock) {
@@ -108,7 +115,7 @@ const RENDERER_DEV_URL = process.env["ELECTRON_RENDERER_URL"];
 
 // Self-relaunch compatibility mode: if a prior session set compat mode, honor it.
 try {
-  const userData = process.env["REDVOICE_USER_DATA_DIR"] ?? app.getPath("userData");
+  const userData = process.env["R3DVOICE_USER_DATA_DIR"] ?? app.getPath("userData");
   const compatFlagPath = join(userData, "compat.flag");
   if (
     process.platform === "linux" &&
@@ -124,11 +131,11 @@ try {
 // Opt-in crash reporting. When enabled, dumps go to userData/Crashpad locally;
 // no remote upload until/unless a submitURL is configured by the operator.
 try {
-  const userData = process.env["REDVOICE_USER_DATA_DIR"] ?? app.getPath("userData");
+  const userData = process.env["R3DVOICE_USER_DATA_DIR"] ?? app.getPath("userData");
   const crashFlagPath = join(userData, "crash-reporting.flag");
   if (existsSync(crashFlagPath)) {
     crashReporter.start({
-      productName: "RedVoice",
+      productName: "R3DVoice",
       companyName: "R3dWolfie",
       // Empty submitURL = local-only dumps. Operator can override later.
       submitURL: "",
@@ -194,12 +201,12 @@ async function createWindow(splash: BrowserWindow | null): Promise<BrowserWindow
     if (!app.isReady() || win.isDestroyed()) return;
     void dialog.showMessageBox(win, {
       type: "error",
-      title: "RedVoice — renderer crashed",
+      title: "R3DVoice — renderer crashed",
       message: `The window stopped rendering (${details.reason}).`,
       detail:
         `Exit code: ${details.exitCode}\n\n` +
         `A log was written to:\n${join(app.getPath("userData"), "renderer-crash.log")}\n\n` +
-        `Click "Reload" to try again, or "Quit" to close RedVoice.`,
+        `Click "Reload" to try again, or "Quit" to close R3DVoice.`,
       buttons: ["Reload", "Quit"],
       defaultId: 0,
       cancelId: 1,
@@ -216,7 +223,7 @@ async function createWindow(splash: BrowserWindow | null): Promise<BrowserWindow
     if (win.isDestroyed()) return;
     void dialog.showMessageBox(win, {
       type: "warning",
-      title: "RedVoice — window frozen",
+      title: "R3DVoice — window frozen",
       message: "The window stopped responding.",
       detail:
         `A log was written to:\n${join(app.getPath("userData"), "renderer-crash.log")}\n\n` +
@@ -282,7 +289,7 @@ function registerIpcHandlers(): void {
     });
   });
   ipcMain.handle("app:set-compatibility-env", (_evt, enabled: unknown) => {
-    const userData = process.env["REDVOICE_USER_DATA_DIR"] ?? app.getPath("userData");
+    const userData = process.env["R3DVOICE_USER_DATA_DIR"] ?? app.getPath("userData");
     const flagPath = join(userData, "compat.flag");
     if (enabled === true) {
       writeFileSync(flagPath, "1");
@@ -291,7 +298,7 @@ function registerIpcHandlers(): void {
     }
   });
   ipcMain.handle("app:set-crash-reporting", (_evt, enabled: unknown) => {
-    const userData = process.env["REDVOICE_USER_DATA_DIR"] ?? app.getPath("userData");
+    const userData = process.env["R3DVOICE_USER_DATA_DIR"] ?? app.getPath("userData");
     const flagPath = join(userData, "crash-reporting.flag");
     if (enabled === true) {
       writeFileSync(flagPath, "1");
@@ -300,7 +307,7 @@ function registerIpcHandlers(): void {
     }
   });
   ipcMain.handle("app:open-crash-dumps", async () => {
-    const userData = process.env["REDVOICE_USER_DATA_DIR"] ?? app.getPath("userData");
+    const userData = process.env["R3DVOICE_USER_DATA_DIR"] ?? app.getPath("userData");
     const dumpsDir = join(userData, "Crashpad");
     if (existsSync(dumpsDir)) {
       await shell.openPath(dumpsDir);
@@ -372,9 +379,9 @@ app.whenReady().then(async () => {
   registerNotificationsHandler();
   writeDesktopEntry();
 
-  // Dev-only: REDVOICE_SPLASH_DEMO=1 cycles every splash phase slowly and
+  // Dev-only: R3DVOICE_SPLASH_DEMO=1 cycles every splash phase slowly and
   // skips the main window so you can inspect the splash in isolation.
-  if (process.env["REDVOICE_SPLASH_DEMO"]) {
+  if (process.env["R3DVOICE_SPLASH_DEMO"]) {
     const splash = openSplashWindow();
     splash.webContents.once("did-finish-load", () => {
       const steps: Array<[Parameters<typeof sendSplashStatus>[1], number]> = [
@@ -466,7 +473,7 @@ app.whenReady().then(async () => {
 
   mainWindow = await createWindow(splash);
 
-  // Cold launch via `redvoice://…` — URL is in process.argv; stash as pending
+  // Cold launch via `r3dvoice://…` — URL is in process.argv; stash as pending
   // so the renderer picks it up after it finishes loading.
   const coldLink = extractDeepLinkFromArgv(process.argv);
   if (coldLink) dispatchDeepLink(coldLink, mainWindow);

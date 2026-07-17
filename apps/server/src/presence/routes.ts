@@ -1,5 +1,5 @@
 import type { FastifyInstance } from "fastify";
-import { setPresenceSchema } from "@redvoice/shared";
+import { setPresenceSchema } from "@r3dvoice/shared";
 import { prisma } from "../db.js";
 import { requireAuth } from "../auth/middleware.js";
 import { ValidationError } from "../errors.js";

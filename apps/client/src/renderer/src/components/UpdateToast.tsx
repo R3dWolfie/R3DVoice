@@ -1,6 +1,6 @@
 import { useEffect, useState, type ReactElement } from "react";
 
-const KEY = "redvoice.lastSeenVersion";
+const KEY = "r3dvoice.lastSeenVersion";
 
 export function UpdateToast(): ReactElement | null {
   const [version, setVersion] = useState<string | null>(null);
@@ -9,7 +9,7 @@ export function UpdateToast(): ReactElement | null {
   useEffect(() => {
     let cancelled = false;
     void (async () => {
-      const current = await window.redvoice.getAppVersion();
+      const current = await window.r3dvoice.getAppVersion();
       if (cancelled) return;
       const lastSeen = localStorage.getItem(KEY);
       if (lastSeen === null) {
@@ -32,8 +32,8 @@ export function UpdateToast(): ReactElement | null {
 
   const openWhatsNew = (): void => {
     if (!version) return;
-    void window.redvoice.openExternal(
-      `https://github.com/R3dWolfie/RedVoice/releases/tag/v${version}`,
+    void window.r3dvoice.openExternal(
+      `https://github.com/R3dWolfie/R3DVoice/releases/tag/v${version}`,
     );
     localStorage.setItem(KEY, version);
     setShow(false);

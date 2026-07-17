@@ -1,4 +1,4 @@
-// Generate RedVoice app icons from the Monogram R Refined logo.
+// Generate R3DVoice app icons from the Monogram R Refined logo.
 //
 // The SVG markup below mirrors `src/renderer/src/components/Icons.tsx`
 // (the `Logo` component) with three changes:

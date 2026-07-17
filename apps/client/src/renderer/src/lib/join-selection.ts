@@ -7,7 +7,7 @@ export interface ScreenQuality {
   /**
    * Audio source for the screenshare:
    *   null  → no audio (silent share)
-   *   "all" → every app's audio except RedVoice's own playback
+   *   "all" → every app's audio except R3DVoice's own playback
    *   "<pid>" → only this process's audio (per-app capture)
    */
   audioSource: null | "all" | string;

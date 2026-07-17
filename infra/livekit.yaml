@@ -11,5 +11,5 @@ rtc:
 keys:
   # <api_key>: <api_secret>
   # DEV ONLY — change before exposing to the internet.
-  devkey-redvoice: devsecret-redvoice-devsecret-redvoice-32
+  devkey-r3dvoice: devsecret-r3dvoice-devsecret-r3dvoice-32
 log_level: info

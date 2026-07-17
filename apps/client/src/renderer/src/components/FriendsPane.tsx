@@ -1,5 +1,5 @@
 import { useCallback, useEffect, useState, type ReactElement } from "react";
-import type { FriendDTO } from "@redvoice/shared";
+import type { FriendDTO } from "@r3dvoice/shared";
 import { useAuthStore } from "../lib/auth-context.js";
 import { ApiClient } from "../lib/api.js";
 import { getTransport } from "../lib/chat-transport.js";

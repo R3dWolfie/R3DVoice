@@ -15,7 +15,7 @@ export function ScreenPickerDialog(): ReactElement {
     let cancelled = false;
     (async () => {
       try {
-        const list = await window.redvoice.listScreenSources();
+        const list = await window.r3dvoice.listScreenSources();
         if (cancelled) return;
         setSources(list);
       } catch (err) {
@@ -30,11 +30,11 @@ export function ScreenPickerDialog(): ReactElement {
   }, []);
 
   async function pick(id: string): Promise<void> {
-    await window.redvoice.selectScreenSource(id);
+    await window.r3dvoice.selectScreenSource(id);
   }
 
   async function cancel(): Promise<void> {
-    await window.redvoice.cancelScreenPicker();
+    await window.r3dvoice.cancelScreenPicker();
   }
 
   useEffect(() => {

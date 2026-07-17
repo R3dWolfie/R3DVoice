@@ -15,10 +15,10 @@ const LANDING_HTML = `<!doctype html>
 <html lang="en">
 <head>
   <meta charset="utf-8"/>
-  <title>RedVoice — voice + screenshare for friends</title>
+  <title>R3DVoice — voice + screenshare for friends</title>
   <meta name="viewport" content="width=device-width, initial-scale=1"/>
   <meta name="description" content="Open-source, self-hostable voice + screenshare. End-to-end encrypted DMs. Cross-platform desktop client."/>
-  <meta property="og:title" content="RedVoice"/>
+  <meta property="og:title" content="R3DVoice"/>
   <meta property="og:description" content="Voice + screenshare for friends, raid nights, and the people you actually want to hear."/>
   <link rel="preconnect" href="https://fonts.googleapis.com"/>
   <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin/>
@@ -174,7 +174,7 @@ const LANDING_HTML = `<!doctype html>
               d="M8.1 5.9 h8.4 a4.7 4.7 0 0 1 4.7 4.7 v.95 a4.7 4.7 0 0 1 -3.45 4.55 l4.4 6.4 h-4.05 l-3.9 -5.95 h-2.35 v5.95 h-3.75 z M11.85 9.3 v3.45 h4.4 a1.72 1.72 0 0 0 0 -3.45 z"/>
         <circle cx="16.25" cy="11.05" r=".62" fill="oklch(0.58 0.18 22)"/>
       </svg>
-      <span style="font-weight:700;letter-spacing:-0.01em;font-size:1.4rem;">RedVoice</span>
+      <span style="font-weight:700;letter-spacing:-0.01em;font-size:1.4rem;">R3DVoice</span>
     </header>
 
     <h1 class="title">
@@ -194,8 +194,8 @@ const LANDING_HTML = `<!doctype html>
     </div>
 
     <div class="cta">
-      <a class="btn primary" href="https://github.com/R3dWolfie/RedVoice/releases/latest">Download desktop client →</a>
-      <a class="btn ghost" href="https://github.com/R3dWolfie/RedVoice">View on GitHub</a>
+      <a class="btn primary" href="https://github.com/R3dWolfie/R3DVoice/releases/latest">Download desktop client →</a>
+      <a class="btn ghost" href="https://github.com/R3dWolfie/R3DVoice">View on GitHub</a>
     </div>
 
     <h2 class="h2">What's in it</h2>
@@ -230,7 +230,7 @@ const LANDING_HTML = `<!doctype html>
       </div>
       <div class="card">
         <h3>Self-hostable</h3>
-        <p>Run on your hardware. Cloudflare Tunnel friendly. <a href="https://github.com/R3dWolfie/RedVoice/blob/main/docs/SELF_HOSTING.md">Setup guide</a>.</p>
+        <p>Run on your hardware. Cloudflare Tunnel friendly. <a href="https://github.com/R3dWolfie/R3DVoice/blob/main/docs/SELF_HOSTING.md">Setup guide</a>.</p>
       </div>
     </div>
 
@@ -239,8 +239,8 @@ const LANDING_HTML = `<!doctype html>
       Download the desktop client → register an account on this server → start a room.
       Or self-host your own instance.
     </p>
-    <pre>git clone https://github.com/R3dWolfie/RedVoice.git
-cd RedVoice
+    <pre>git clone https://github.com/R3dWolfie/R3DVoice.git
+cd R3DVoice
 docs/SELF_HOSTING.md  # full walkthrough</pre>
   </div>
   <footer>

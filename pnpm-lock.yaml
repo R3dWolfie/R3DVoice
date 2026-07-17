@@ -13,7 +13,7 @@ importers:
       '@jitsi/rnnoise-wasm':
         specifier: ^0.2.1
         version: 0.2.1
-      '@redvoice/shared':
+      '@r3dvoice/shared':
         specifier: workspace:*
         version: link:../../packages/shared
       electron-updater:
@@ -102,7 +102,7 @@ importers:
       '@prisma/client':
         specifier: ^6.1.0
         version: 6.19.3(prisma@6.19.3(typescript@5.9.3))(typescript@5.9.3)
-      '@redvoice/shared':
+      '@r3dvoice/shared':
         specifier: workspace:*
         version: link:../../packages/shared
       fastify:

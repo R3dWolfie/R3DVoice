@@ -1,5 +1,5 @@
 import { createStore, type StoreApi } from "zustand/vanilla";
-import type { UserDTO } from "@redvoice/shared";
+import type { UserDTO } from "@r3dvoice/shared";
 import { ApiClient, ApiError } from "./api.js";
 import { ensureKeyPair, downloadKeyBackup, clearKeyPair } from "./key-storage.js";
 import { useUnreadStore } from "./unread-store.js";

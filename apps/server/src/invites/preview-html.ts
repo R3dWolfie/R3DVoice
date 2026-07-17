@@ -45,7 +45,7 @@ export function renderInvitePreview(a: Args): string {
 <html lang="en"><head>
 <meta charset="utf-8">
 <meta name="viewport" content="width=device-width,initial-scale=1">
-<title>RedVoice — Invite from @${handle}</title>
+<title>R3DVoice — Invite from @${handle}</title>
 <style>
 :root { color-scheme: dark; }
 body { background:#101014; color:#eee; font-family:system-ui,sans-serif; display:grid; place-items:center; min-height:100vh; margin:0; padding:24px; }
@@ -59,7 +59,7 @@ p { color:#b0b0c0; margin:0 0 24px; line-height:1.5; }
 .footer { color:#787888; font-size:0.875rem; margin-top:24px; }
 </style></head><body>
 <div class="card">
-  <h1><span class="handle">${display} (@${handle})</span> invited you to RedVoice</h1>
+  <h1><span class="handle">${display} (@${handle})</span> invited you to R3DVoice</h1>
   <p>Open-source voice and screenshare for friends. Self-host or join an invite from someone you trust.</p>
   <a class="btn primary" href="/login?invite=${code}">Sign in</a>
   <a class="btn ghost" href="/register?invite=${code}">Create account</a>
@@ -70,7 +70,7 @@ p { color:#b0b0c0; margin:0 0 24px; line-height:1.5; }
 export function renderInviteNotFound(): string {
   return `<!doctype html>
 <html lang="en"><head>
-<meta charset="utf-8"><title>RedVoice — Invite not found</title>
+<meta charset="utf-8"><title>R3DVoice — Invite not found</title>
 <style>body{background:#101014;color:#eee;font-family:system-ui,sans-serif;display:grid;place-items:center;min-height:100vh;margin:0;padding:24px}
 .card{background:#181820;border:1px solid #2a2a36;border-radius:14px;max-width:420px;padding:32px;text-align:center}
 h1{margin:0 0 12px} p{color:#b0b0c0}

@@ -6,7 +6,7 @@
 // non-excluded application audio streams are routed to that virtual device.
 // The renderer captures the device via getUserMedia like any other mic.
 //
-// Phase 1 (this version): exclude RedVoice's own audio service from the
+// Phase 1 (this version): exclude R3DVoice's own audio service from the
 // virtual device, so screenshare audio carries every OTHER app's sound but
 // not the call audio we're playing back. Same effect as the previous
 // combine-sink hack but without modifying the user's default sink — much
@@ -60,7 +60,7 @@ function obtainPatchBay(): PatchBayType | null {
 
 function getRendererAudioServicePid(): string | null {
   // Electron runs WebRTC audio playback in a separate "Audio Service"
-  // utility process. Excluding its PID from venmic keeps RedVoice's own
+  // utility process. Excluding its PID from venmic keeps R3DVoice's own
   // playback (incoming call voices) out of the virtual capture device.
   const procs = app.getAppMetrics();
   const audio = procs.find(
@@ -73,9 +73,9 @@ function getRendererAudioServicePid(): string | null {
  * Every PID Electron has spawned for this app — main, all renderers, the
  * GPU process, every utility process (Audio Service, Network Service, etc).
  * Audio output can come from any of them depending on which renderer is
- * playing what; missing one means RedVoice leaks into the share.
+ * playing what; missing one means R3DVoice leaks into the share.
  */
-function getAllRedVoicePids(): Set<string> {
+function getAllR3DVoicePids(): Set<string> {
   const pids = new Set<string>();
   pids.add(String(process.pid));
   for (const proc of app.getAppMetrics()) {
@@ -84,23 +84,23 @@ function getAllRedVoicePids(): Set<string> {
   return pids;
 }
 
-function getRedVoiceExcludeRules(): Node[] {
-  // Match any audio stream whose origin is a RedVoice process — by PID,
+function getR3DVoiceExcludeRules(): Node[] {
+  // Match any audio stream whose origin is a R3DVoice process — by PID,
   // by binary name, by app name. Each rule is OR'd by venmic, so adding
   // more is strictly safer.
   const rules: Node[] = [];
 
   // One PID rule per sub-process. ~5–10 entries typical (main + audio +
   // gpu + renderers); cheap.
-  for (const pid of getAllRedVoicePids()) {
+  for (const pid of getAllR3DVoicePids()) {
     rules.push({ "application.process.id": pid });
   }
 
   const execName = basename(process.execPath).toLowerCase();
   if (execName) rules.push({ "application.process.binary": execName });
-  rules.push({ "application.process.binary": "redvoice" });
+  rules.push({ "application.process.binary": "r3dvoice" });
 
-  rules.push({ "application.name": "RedVoice" });
+  rules.push({ "application.name": "R3DVoice" });
   rules.push({ "application.name": app.getName() });
 
   // Skip mic-input streams entirely so we never accidentally re-capture them.
@@ -163,29 +163,29 @@ function labelForNode(n: Record<string, string>): string {
   return app;
 }
 
-/** List audio-producing apps PipeWire knows about, with RedVoice filtered out. */
+/** List audio-producing apps PipeWire knows about, with R3DVoice filtered out. */
 export function listLinuxAudioSources(): AudioSourceSummary[] {
   const pb = obtainPatchBay();
   if (!pb) return [];
 
-  // Build a "is this RedVoice?" predicate using the same facet matches we
+  // Build a "is this R3DVoice?" predicate using the same facet matches we
   // hand to PatchBay.link()'s exclude. PipeWire reports audio streams under
   // multiple sub-process PIDs (main, Audio Service, renderer, GPU);
   // single-PID exclusion misses some, so the user sees their own "Chromium"
   // entry. Enumerate every Electron sub-process PID via getAppMetrics().
-  const ourPids = getAllRedVoicePids();
+  const ourPids = getAllR3DVoicePids();
   const execName = basename(process.execPath).toLowerCase();
   const appName = app.getName();
-  const isRedVoice = (n: Record<string, string>): boolean => {
+  const isR3DVoice = (n: Record<string, string>): boolean => {
     const pid = n["application.process.id"];
     if (pid && ourPids.has(pid)) return true;
     const bin = n["application.process.binary"]?.toLowerCase();
     if (bin === execName) return true;
-    if (bin === "redvoice") return true;
+    if (bin === "r3dvoice") return true;
     // Catch substring matches in case the binary is wrapped (AppRun /
     // appimage-launcher) or someone renamed the bundle.
-    if (bin && bin.includes("redvoice")) return true;
-    if (n["application.name"] === "RedVoice") return true;
+    if (bin && bin.includes("r3dvoice")) return true;
+    if (n["application.name"] === "R3DVoice") return true;
     if (n["application.name"] === appName) return true;
     return false;
   };
@@ -193,14 +193,14 @@ export function listLinuxAudioSources(): AudioSourceSummary[] {
   try {
     // Match Vesktop exactly: list() with default props, no media.class
     // gate, only drop our own audio service PID. Then layer the friendly
-    // label + dedup + RedVoice filter on top.
+    // label + dedup + R3DVoice filter on top.
     const nodes = pb.list();
 
     // AppImages launched from the desktop have closed stdout, so safeLog
     // disappears. Mirror the diagnostic to a file in userData every time
     // sources are listed — easy to inspect with any text editor.
     try {
-      const userData = process.env["REDVOICE_USER_DATA_DIR"] ?? app.getPath("userData");
+      const userData = process.env["R3DVOICE_USER_DATA_DIR"] ?? app.getPath("userData");
       const lines: string[] = [];
       lines.push(`# linux-audio diagnostic — ${new Date().toISOString()}`);
       lines.push(`venmic returned ${nodes.length} nodes`);
@@ -221,7 +221,7 @@ export function listLinuxAudioSources(): AudioSourceSummary[] {
     const seen = new Set<string>();
     const out: AudioSourceSummary[] = [];
     for (const n of nodes) {
-      if (isRedVoice(n)) continue;
+      if (isR3DVoice(n)) continue;
       const label = labelForNode(n);
       if (!label || label === "Unknown") continue;
       const nodeName = n["node.name"] ?? "";
@@ -247,7 +247,7 @@ export function listLinuxAudioSources(): AudioSourceSummary[] {
 export interface EnableOptions {
   /**
    * If given, capture only this specific app (by application.process.id).
-   * If omitted, capture every output stream except RedVoice itself —
+   * If omitted, capture every output stream except R3DVoice itself —
    * the existing v0.4.14 behavior.
    */
   includeProcessId?: string;
@@ -260,7 +260,7 @@ export function enableLinuxAudioRouting(options: EnableOptions = {}): EnableResu
   // Re-link if we're already linked but the caller wants a different scope —
   // PatchBay.link() replaces the existing graph wiring atomically.
 
-  const excludeRules = getRedVoiceExcludeRules();
+  const excludeRules = getR3DVoiceExcludeRules();
   if (excludeRules.length === 0) {
     safeLog("[linux-audio] no exclude rules derivable; aborting to avoid self-capture");
     return null;
@@ -290,7 +290,7 @@ export function enableLinuxAudioRouting(options: EnableOptions = {}): EnableResu
       "[linux-audio] venmic linked —",
       options.includeProcessId
         ? `including PID ${options.includeProcessId}`
-        : `excluding ${excludeRules.length} RedVoice rules`,
+        : `excluding ${excludeRules.length} R3DVoice rules`,
     );
     return { monitorDeviceDescription: "vencord-screen-share" };
   } catch (err) {

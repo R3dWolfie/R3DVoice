@@ -1,5 +1,5 @@
 import { useEffect, useMemo, useRef, useState, useSyncExternalStore, type FormEvent, type ReactElement } from "react";
-import type { RoomDTO } from "@redvoice/shared";
+import type { RoomDTO } from "@r3dvoice/shared";
 import { ApiClient } from "../lib/api.js";
 import { createRoomsStore, extractInviteCode, type RoomsState } from "../lib/rooms-store.js";
 import { useAuthStore } from "../lib/auth-context.js";
@@ -135,11 +135,11 @@ export function LobbyScreen({ pendingInviteCode, pendingJoinRoomId, onInviteCode
     }
   }, [activeRoomId, phase.kind, joinMicDeviceId, joinSpeakerDeviceId, joinResolution, joinFrameRate]);
 
-  // Deep-link consumer: redvoice://join/<uuid> → auto-open the prejoin flow.
+  // Deep-link consumer: r3dvoice://join/<uuid> → auto-open the prejoin flow.
   // Preload replays any queued event on subscribe, so cold-start with a
   // restored session also works.
   useEffect(() => {
-    return window.redvoice.onDeepLink((link) => {
+    return window.r3dvoice.onDeepLink((link) => {
       if (link.type === "join-room") {
         void store.getState().join(link.roomId);
       }

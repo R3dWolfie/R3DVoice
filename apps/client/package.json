@@ -1,13 +1,13 @@
 {
-  "name": "@redvoice/client",
+  "name": "@r3dvoice/client",
   "version": "0.9.0",
   "private": true,
-  "description": "RedVoice – low-latency voice/video communication for gamers",
+  "description": "R3DVoice – low-latency voice/video communication for gamers",
   "author": {
     "name": "R3dWolfie",
     "email": "arui939@gmail.com"
   },
-  "homepage": "https://github.com/R3dWolfie/RedVoice",
+  "homepage": "https://github.com/R3dWolfie/R3DVoice",
   "type": "module",
   "main": "out/main/index.js",
   "scripts": {
@@ -24,7 +24,7 @@
   },
   "dependencies": {
     "@jitsi/rnnoise-wasm": "^0.2.1",
-    "@redvoice/shared": "workspace:*",
+    "@r3dvoice/shared": "workspace:*",
     "electron-updater": "^6.3.0",
     "livekit-client": "^2.9.0",
     "tweetnacl": "^1.0.3",

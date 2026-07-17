@@ -1,26 +1,26 @@
 [Unit]
-Description=RedVoice signaling + auth server
-Documentation=https://github.com/R3dWolfie/RedVoice
+Description=R3DVoice signaling + auth server
+Documentation=https://github.com/R3dWolfie/R3DVoice
 After=network-online.target
 Wants=network-online.target
 
 [Service]
 Type=simple
-WorkingDirectory=%h/Projects/RedVoice/apps/server
-EnvironmentFile=%h/Projects/RedVoice/apps/server/.env
+WorkingDirectory=%h/Projects/R3DVoice/apps/server
+EnvironmentFile=%h/Projects/R3DVoice/apps/server/.env
 ExecStart=/usr/bin/node dist/index.js
 Restart=on-failure
 RestartSec=2
 StandardOutput=journal
 StandardError=journal
-SyslogIdentifier=redvoice-server
+SyslogIdentifier=r3dvoice-server
 
 # Hardening (user service — system-level options are best-effort here)
 NoNewPrivileges=true
 PrivateTmp=true
 ProtectSystem=strict
 ProtectHome=read-only
-ReadWritePaths=%h/Projects/RedVoice/apps/server/prisma
+ReadWritePaths=%h/Projects/R3DVoice/apps/server/prisma
 ReadWritePaths=/tmp
 
 [Install]

@@ -8,7 +8,7 @@ This directory vendors and modifies code from:
 Modifications by R3dWolfie (2026):
   - Replaced single-mode CLI entrypoint with --include-pid / --exclude-pid flags
     so the helper can capture system audio while EXCLUDING a process tree
-    (which is what RedVoice needs to keep its own playback out of the
+    (which is what R3DVoice needs to keep its own playback out of the
     screenshare audio mix).
   - Removed the silence-drop optimization in OnAudioSampleRequested so the
     output stream is sample-rate accurate (no gaps when no app is making

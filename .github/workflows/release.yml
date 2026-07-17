@@ -34,13 +34,13 @@ jobs:
         run: pnpm install --frozen-lockfile
 
       - name: Build shared types
-        run: pnpm --filter @redvoice/shared build
+        run: pnpm --filter @r3dvoice/shared build
 
       - name: Generate Prisma client (server typecheck dep)
-        run: pnpm --filter @redvoice/server exec prisma generate
+        run: pnpm --filter @r3dvoice/server exec prisma generate
 
       - name: Build server
-        run: pnpm --filter @redvoice/server build
+        run: pnpm --filter @r3dvoice/server build
 
       - name: Setup MSBuild (Windows)
         if: matrix.os == 'windows-latest'
@@ -57,22 +57,22 @@ jobs:
           Copy-Item x64/Release/system-audio-capture.exe ../../build/native/system-audio-capture.exe -Force
 
       - name: Build client
-        run: pnpm --filter @redvoice/client run build
+        run: pnpm --filter @r3dvoice/client run build
 
       - name: Package + publish (Linux)
         if: matrix.os == 'ubuntu-latest'
-        run: pnpm --filter @redvoice/client exec electron-builder --linux AppImage deb --publish always
+        run: pnpm --filter @r3dvoice/client exec electron-builder --linux AppImage deb --publish always
         env:
           GH_TOKEN: ${{ secrets.GITHUB_TOKEN }}
 
       - name: Package + publish (Windows)
         if: matrix.os == 'windows-latest'
-        run: pnpm --filter @redvoice/client exec electron-builder --win nsis --publish always
+        run: pnpm --filter @r3dvoice/client exec electron-builder --win nsis --publish always
         env:
           GH_TOKEN: ${{ secrets.GITHUB_TOKEN }}
 
       - name: Package + publish (macOS)
         if: matrix.os == 'macos-latest'
-        run: pnpm --filter @redvoice/client exec electron-builder --mac dmg --publish always
+        run: pnpm --filter @r3dvoice/client exec electron-builder --mac dmg --publish always
         env:
           GH_TOKEN: ${{ secrets.GITHUB_TOKEN }}

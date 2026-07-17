@@ -7,15 +7,15 @@ import "./styles.css";
 declare const __APP_VERSION__: string;
 const VERSION = typeof __APP_VERSION__ === "string" ? __APP_VERSION__ : "dev";
 // eslint-disable-next-line no-console
-console.log(`[redvoice] renderer boot — v${VERSION}`);
+console.log(`[r3dvoice] renderer boot — v${VERSION}`);
 
 // Pipe uncaught errors and rejected promises into the main-process crash log
 // so we have a record even when the user can't open DevTools fast enough.
-// `window.redvoice` is exposed via the preload bridge.
+// `window.r3dvoice` is exposed via the preload bridge.
 type Bridge = { logError?: (line: string) => unknown };
 function bridgeLog(line: string): void {
   try {
-    const b = (window as unknown as { redvoice?: Bridge }).redvoice;
+    const b = (window as unknown as { r3dvoice?: Bridge }).r3dvoice;
     void b?.logError?.(`[renderer v${VERSION}] ${line}`);
   } catch { /* */ }
 }

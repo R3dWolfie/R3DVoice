@@ -18,7 +18,7 @@ const DEFAULTS: WindowState = { width: 1200, height: 800 };
 const SAVE_DEBOUNCE_MS = 500;
 
 function statePath(): string {
-  const userData = process.env["REDVOICE_USER_DATA_DIR"] ?? app.getPath("userData");
+  const userData = process.env["R3DVOICE_USER_DATA_DIR"] ?? app.getPath("userData");
   return join(userData, "window-state.json");
 }
 

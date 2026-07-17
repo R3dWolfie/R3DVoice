@@ -193,6 +193,6 @@ export function createPrefsStore(storage: PrefsStorage): StoreApi<PrefsState> {
 }
 
 export const localStorageAdapter: PrefsStorage = {
-  read: () => globalThis.localStorage?.getItem("redvoice.prefs") ?? null,
-  write: (v) => globalThis.localStorage?.setItem("redvoice.prefs", v),
+  read: () => globalThis.localStorage?.getItem("r3dvoice.prefs") ?? null,
+  write: (v) => globalThis.localStorage?.setItem("r3dvoice.prefs", v),
 };

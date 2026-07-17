@@ -24,7 +24,7 @@ import type {
   InviteDTO,
   UnreadCountsResponse,
   MuteLevel,
-} from "@redvoice/shared";
+} from "@r3dvoice/shared";
 
 export class ApiError extends Error {
   readonly code: string;

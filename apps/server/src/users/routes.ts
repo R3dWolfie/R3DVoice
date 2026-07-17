@@ -1,5 +1,5 @@
 import type { FastifyInstance } from "fastify";
-import { userHandleSchema } from "@redvoice/shared";
+import { userHandleSchema } from "@r3dvoice/shared";
 import { z } from "zod";
 import { prisma } from "../db.js";
 import { Prisma } from "@prisma/client";

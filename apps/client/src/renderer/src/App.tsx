@@ -55,7 +55,7 @@ function Router(): ReactElement {
 
   // Listen for invite deep links from the main process.
   useEffect(() => {
-    const off = window.redvoice.onInviteCode((code: string) => setPendingInviteCode(code));
+    const off = window.r3dvoice.onInviteCode((code: string) => setPendingInviteCode(code));
     return off;
   }, []);
 
@@ -128,12 +128,12 @@ function Chrome(): ReactElement {
   const serverUrl = useAuthStore((s) => s.serverUrl);
   const chromeTitle =
     status === "authenticated"
-      ? "REDVOICE · LOBBY"
+      ? "R3DVOICE · LOBBY"
       : status === "loading"
-        ? "REDVOICE · LOADING"
+        ? "R3DVOICE · LOADING"
         : status === "totp-required"
-          ? "REDVOICE · 2FA"
-          : "REDVOICE · LOGIN";
+          ? "R3DVOICE · 2FA"
+          : "R3DVOICE · LOGIN";
   let serverLabel: string | undefined;
   try {
     serverLabel = new URL(serverUrl).host;
@@ -153,7 +153,7 @@ function Chrome(): ReactElement {
 export function App(): ReactElement {
   useEffect(() => {
     const k = prefsActions().pttKeybind;
-    if (k) void window.redvoice.setPttKeybind(k);
+    if (k) void window.r3dvoice.setPttKeybind(k);
   }, []);
 
   return (

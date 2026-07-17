@@ -1,5 +1,5 @@
 import { useCallback, useEffect, useMemo, useState, type ReactElement } from "react";
-import { userHandleSchema } from "@redvoice/shared";
+import { userHandleSchema } from "@r3dvoice/shared";
 import { Modal } from "./Modal.js";
 import { useAuthStore } from "../lib/auth-context.js";
 import { ApiClient } from "../lib/api.js";

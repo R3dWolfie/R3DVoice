@@ -1,5 +1,5 @@
 {
-  "name": "redvoice",
+  "name": "r3dvoice",
   "private": true,
   "version": "0.9.0",
   "description": "Open-source, self-hostable voice + screenshare for friends (Electron + LiveKit)",
@@ -7,7 +7,7 @@
   "author": "R3dWolfie",
   "repository": {
     "type": "git",
-    "url": "https://github.com/R3dWolfie/RedVoice.git"
+    "url": "https://github.com/R3dWolfie/R3DVoice.git"
   },
   "engines": {
     "node": ">=20"
@@ -18,7 +18,7 @@
     "test": "pnpm -r test",
     "lint": "pnpm -r lint",
     "typecheck": "pnpm -r typecheck",
-    "server:dev": "pnpm --filter @redvoice/server dev",
-    "server:test": "pnpm --filter @redvoice/server test"
+    "server:dev": "pnpm --filter @r3dvoice/server dev",
+    "server:test": "pnpm --filter @r3dvoice/server test"
   }
 }

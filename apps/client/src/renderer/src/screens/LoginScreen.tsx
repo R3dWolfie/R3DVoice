@@ -44,7 +44,7 @@ export function LoginScreen(): ReactElement {
       const text = typeof reader.result === "string" ? reader.result : "";
       const kp = parseKeyBackup(text);
       if (!kp) {
-        setKeyImportMessage("Couldn't parse — make sure it's the redvoice-key-*.json file you downloaded at registration.");
+        setKeyImportMessage("Couldn't parse — make sure it's the r3dvoice-key-*.json file you downloaded at registration.");
         return;
       }
       saveKeyPair(kp);
@@ -112,7 +112,7 @@ export function LoginScreen(): ReactElement {
               fontWeight: 600,
             }}
           >
-            REDVOICE
+            R3DVOICE
           </span>
         </div>
 

@@ -1,8 +1,8 @@
 import type { AuthStorageAdapter } from "./auth-store.js";
 
-/** Bridges window.redvoice (exposed by preload) to AuthStorageAdapter. */
+/** Bridges window.r3dvoice (exposed by preload) to AuthStorageAdapter. */
 export const bridgeStorageAdapter: AuthStorageAdapter = {
-  saveToken: (t) => window.redvoice.saveToken(t),
-  getToken: () => window.redvoice.getToken(),
-  clearToken: () => window.redvoice.clearToken(),
+  saveToken: (t) => window.r3dvoice.saveToken(t),
+  getToken: () => window.r3dvoice.getToken(),
+  clearToken: () => window.r3dvoice.clearToken(),
 };

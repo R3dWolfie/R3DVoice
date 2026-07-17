@@ -1,7 +1,7 @@
 import { generateKeyPair, isPlausibleKey, type KeyPair } from "./crypto.js";
 
-const SECRET_KEY_LS = "redvoice.e2ee.secretKey";
-const PUBLIC_KEY_LS = "redvoice.e2ee.publicKey";
+const SECRET_KEY_LS = "r3dvoice.e2ee.secretKey";
+const PUBLIC_KEY_LS = "r3dvoice.e2ee.publicKey";
 
 /**
  * Per-user E2EE keypair store. We keep the keys in localStorage for now —
@@ -55,7 +55,7 @@ export function ensureKeyPair(): KeyPair {
  */
 export interface KeyBackup {
   v: 1;
-  redvoice: "e2ee-key-backup";
+  r3dvoice: "e2ee-key-backup";
   email: string;
   publicKey: string;
   secretKey: string;
@@ -65,7 +65,7 @@ export interface KeyBackup {
 export function buildKeyBackup(email: string, kp: KeyPair): KeyBackup {
   return {
     v: 1,
-    redvoice: "e2ee-key-backup",
+    r3dvoice: "e2ee-key-backup",
     email,
     publicKey: kp.publicKey,
     secretKey: kp.secretKey,
@@ -80,7 +80,7 @@ export function downloadKeyBackup(email: string, kp: KeyPair): void {
   const url = URL.createObjectURL(blob);
   const a = document.createElement("a");
   a.href = url;
-  a.download = `redvoice-key-${email.replace(/[^a-z0-9]+/gi, "-")}.json`;
+  a.download = `r3dvoice-key-${email.replace(/[^a-z0-9]+/gi, "-")}.json`;
   document.body.appendChild(a);
   a.click();
   document.body.removeChild(a);
@@ -92,7 +92,7 @@ export function parseKeyBackup(json: string): KeyPair | null {
     const parsed: unknown = JSON.parse(json);
     if (typeof parsed !== "object" || parsed === null) return null;
     const obj = parsed as Record<string, unknown>;
-    if (obj.redvoice !== "e2ee-key-backup") return null;
+    if (obj.r3dvoice !== "e2ee-key-backup") return null;
     if (typeof obj.publicKey !== "string" || typeof obj.secretKey !== "string") return null;
     if (!isPlausibleKey(obj.publicKey) || !isPlausibleKey(obj.secretKey)) return null;
     return { publicKey: obj.publicKey, secretKey: obj.secretKey };

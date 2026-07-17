@@ -1,5 +1,5 @@
 import { useEffect, useMemo, useRef, useState, type ReactElement } from "react";
-import type { ChatMessageDTO } from "@redvoice/shared";
+import type { ChatMessageDTO } from "@r3dvoice/shared";
 import { ApiClient } from "../lib/api.js";
 import { ensureTransport, setCurrentlyViewingThread, type ChatTransport } from "../lib/chat-transport.js";
 import { useAuthStore } from "../lib/auth-context.js";

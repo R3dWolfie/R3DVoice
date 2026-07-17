@@ -1,7 +1,7 @@
 import { useEffect, useState, type ReactElement } from "react";
 import { useAuthStore } from "../lib/auth-context.js";
 import { ApiClient } from "../lib/api.js";
-import type { InviteFullMetadataDTO } from "@redvoice/shared";
+import type { InviteFullMetadataDTO } from "@r3dvoice/shared";
 
 interface Props {
   code: string;

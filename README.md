@@ -1,8 +1,8 @@
-# RedVoice
+# R3DVoice
 
 Open-source, self-hostable voice + screenshare for friends, raid nights, and the people you actually want to hear.
 
-**Status:** v0.3.0 shipped. Persistent chat, DMs, friend list with online presence, 2FA, webcam alongside screenshare, picture-in-picture, deep links (`redvoice://join/<id>`), public-server picker, auto-update, splash window, opt-in crash reporting. Self-host via Cloudflare Tunnel — see [docs/SELF_HOSTING.md](docs/SELF_HOSTING.md).
+**Status:** v0.3.0 shipped. Persistent chat, DMs, friend list with online presence, 2FA, webcam alongside screenshare, picture-in-picture, deep links (`r3dvoice://join/<id>`), public-server picker, auto-update, splash window, opt-in crash reporting. Self-host via Cloudflare Tunnel — see [docs/SELF_HOSTING.md](docs/SELF_HOSTING.md).
 
 ## Features
 
@@ -43,7 +43,7 @@ cd ../..
 pnpm server:dev
 
 # Terminal 3: Electron client
-pnpm --filter @redvoice/client dev
+pnpm --filter @r3dvoice/client dev
 ```
 
 ## Try it with two users
@@ -59,8 +59,8 @@ Screenshare: tick "Share a screen" in the pre-join check, click "Join now", pick
 | `DATABASE_URL` | Prisma SQLite URL | `file:./dev.db` |
 | `JWT_SECRET` | ≥32-char secret for session JWTs | random 32+ bytes |
 | `LIVEKIT_URL` | WebSocket URL of the LiveKit server | `ws://localhost:7880` |
-| `LIVEKIT_API_KEY` | LiveKit API key (matches `infra/livekit.yaml`) | `devkey-redvoice` |
-| `LIVEKIT_API_SECRET` | ≥32-char LiveKit API secret | `devsecret-redvoice-devsecret-redvoice-32` |
+| `LIVEKIT_API_KEY` | LiveKit API key (matches `infra/livekit.yaml`) | `devkey-r3dvoice` |
+| `LIVEKIT_API_SECRET` | ≥32-char LiveKit API secret | `devsecret-r3dvoice-devsecret-r3dvoice-32` |
 | `PORT` | HTTP port (optional) | `3000` |
 | `HOST` | Bind address (optional) | `0.0.0.0` |
 
@@ -103,7 +103,7 @@ All non-auth endpoints require `Authorization: Bearer <jwt>`.
 | POST | `/friends/:id/accept` | Accept |
 | POST | `/friends/:id/reject` | Reject / cancel / unfriend |
 | GET  | `/health` | Liveness check |
-| WS   | `/ws` | Live chat events (auth via `Sec-WebSocket-Protocol: redvoice.bearer.<jwt>`) |
+| WS   | `/ws` | Live chat events (auth via `Sec-WebSocket-Protocol: r3dvoice.bearer.<jwt>`) |
 
 ## License
 

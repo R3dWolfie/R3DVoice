@@ -1,4 +1,4 @@
-// Typed interface for the window.redvoice bridge exposed to the renderer.
+// Typed interface for the window.r3dvoice bridge exposed to the renderer.
 // Kept in shared/ so both preload (exposes it) and renderer (consumes it) agree.
 
 export type SplashPhase =
@@ -22,7 +22,7 @@ export interface SplashStatus {
 export type MediaPermissionKind = "microphone" | "camera" | "screen";
 export type MediaPermissionStatus = "not-determined" | "granted" | "denied" | "restricted" | "unknown";
 
-export interface RedVoiceBridge {
+export interface R3DVoiceBridge {
   /** Store a session token encrypted at rest via Electron safeStorage. */
   saveToken(token: string): Promise<void>;
   /** Retrieve the stored session token, or null if none/undecryptable. */
@@ -47,7 +47,7 @@ export interface RedVoiceBridge {
    */
   onSplashStatus(cb: (status: SplashStatus) => void): () => void;
   /**
-   * Subscribe to deep-link events from the OS (redvoice://…).
+   * Subscribe to deep-link events from the OS (r3dvoice://…).
    * Returns an unsubscribe function.
    */
   onDeepLink(cb: (link: DeepLinkEvent) => void): () => void;
@@ -68,7 +68,7 @@ export interface RedVoiceBridge {
   /**
    * Start the native system-audio capture helper (Windows-only). Pass
    * `includePid` to capture only that process's audio (per-app share);
-   * otherwise the helper captures system mix excluding RedVoice itself.
+   * otherwise the helper captures system mix excluding R3DVoice itself.
    * Resolves to "started" when PCM is flowing, or "unsupported" if the
    * binary isn't bundled / OS build doesn't support PROCESS_LOOPBACK_MODE /
    * activation failed.
@@ -86,7 +86,7 @@ export interface RedVoiceBridge {
   onSystemAudioEnded(cb: () => void): () => void;
   /**
    * Linux-only: set up routing so screenshare audio capture excludes
-   * RedVoice's own playback. Pass `includeProcessId` to capture only one
+   * R3DVoice's own playback. Pass `includeProcessId` to capture only one
    * specific app instead of the system-wide-minus-self default.
    */
   enableLinuxAudioRouting(
@@ -97,7 +97,7 @@ export interface RedVoiceBridge {
   /** Linux-only: list audio-producing apps for the share-audio source picker. */
   listLinuxAudioSources(): Promise<LinuxAudioSourceSummary[]>;
   /**
-   * Subscribe to invite deep-link events (redvoice://invite/<code>).
+   * Subscribe to invite deep-link events (r3dvoice://invite/<code>).
    * Returns an unsubscribe function.
    */
   onInviteCode(cb: (code: string) => void): () => void;

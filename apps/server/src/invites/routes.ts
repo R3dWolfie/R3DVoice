@@ -1,7 +1,7 @@
 import type { FastifyInstance } from "fastify";
 import { z } from "zod";
 import { Prisma } from "@prisma/client";
-import { createInviteSchema, type InviteDTO } from "@redvoice/shared";
+import { createInviteSchema, type InviteDTO } from "@r3dvoice/shared";
 import { prisma } from "../db.js";
 import { requireAuth } from "../auth/middleware.js";
 import { ForbiddenError, NotFoundError, ValidationError } from "../errors.js";

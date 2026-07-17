@@ -3,7 +3,7 @@ import type {
   ChatThreadType,
   ChatWsCommand,
   ChatWsEvent,
-} from "@redvoice/shared";
+} from "@r3dvoice/shared";
 import type { ApiClient } from "./api.js";
 import { routeNotification } from "./notification-router.js";
 import { useUnreadStore } from "./unread-store.js";
@@ -47,7 +47,7 @@ type Listener = (event: ChatWsEvent) => void;
 
 /**
  * Manages a single WebSocket connection for chat events. Auth via the
- * Sec-WebSocket-Protocol subprotocol "redvoice.bearer.<jwt>" — the only
+ * Sec-WebSocket-Protocol subprotocol "r3dvoice.bearer.<jwt>" — the only
  * browser-WebSocket way to ship a token without leaking it in the URL.
  *
  * Owns reconnect on transient drops with exponential backoff.
@@ -141,7 +141,7 @@ export class ChatTransport {
     const wsUrl = httpToWs(this.serverUrl) + "/ws";
     let ws: WebSocket;
     try {
-      ws = new WebSocket(wsUrl, [`redvoice.bearer.${this.token}`]);
+      ws = new WebSocket(wsUrl, [`r3dvoice.bearer.${this.token}`]);
     } catch {
       this.scheduleReconnect();
       return;
@@ -204,7 +204,7 @@ export class ChatTransport {
           dndUntil: me.dndUntil ? new Date(me.dndUntil) : null,
           getMuteLevel: async (threadType, threadId) => this.getMuteLevel(threadType, threadId),
           fireOSNotification: async (p) => {
-            try { await window.redvoice.notify({ title: p.title, body: p.body }); } catch { /* */ }
+            try { await window.r3dvoice.notify({ title: p.title, body: p.body }); } catch { /* */ }
           },
         });
       } catch {

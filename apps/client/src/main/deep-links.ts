@@ -6,7 +6,8 @@ const INVITE_CODE_RE = /^[A-Za-z2-9]{8}$/;
 
 let pending: DeepLinkEvent | null = null;
 
-/** Parse a redvoice:// URL into a typed event, or null if it doesn't match a known shape. */
+/** Parse a r3dvoice:// URL into a typed event, or null if it doesn't match a known shape.
+ * Legacy redvoice:// links (pre-rename) are accepted forever — they exist in old chats. */
 export function parseDeepLink(raw: string): DeepLinkEvent | null {
   let url: URL;
   try {
@@ -14,15 +15,15 @@ export function parseDeepLink(raw: string): DeepLinkEvent | null {
   } catch {
     return null;
   }
-  if (url.protocol !== "redvoice:") return null;
+  if (url.protocol !== "r3dvoice:" && url.protocol !== "redvoice:") return null;
 
-  // redvoice://join/<uuid> — `host` is "join", pathname is "/<uuid>"
+  // r3dvoice://join/<uuid> — `host` is "join", pathname is "/<uuid>"
   if (url.host === "join") {
     const id = url.pathname.replace(/^\/+/, "").replace(/\/+$/, "");
     if (UUID_RE.test(id)) return { type: "join-room", roomId: id };
   }
 
-  // redvoice://invite/<code> — `host` is "invite", pathname is "/<code>"
+  // r3dvoice://invite/<code> — `host` is "invite", pathname is "/<code>"
   if (url.host === "invite") {
     const code = url.pathname.replace(/^\/+/, "").replace(/\/+$/, "");
     if (INVITE_CODE_RE.test(code)) return { type: "invite-code", code };
@@ -31,10 +32,10 @@ export function parseDeepLink(raw: string): DeepLinkEvent | null {
   return null;
 }
 
-/** Scan argv (process argv or second-instance argv) for a redvoice:// URL. */
+/** Scan argv (process argv or second-instance argv) for a r3dvoice:// URL. */
 export function extractDeepLinkFromArgv(argv: string[]): DeepLinkEvent | null {
   for (const arg of argv) {
-    if (arg.startsWith("redvoice://")) {
+    if (arg.startsWith("r3dvoice://") || arg.startsWith("redvoice://")) {
       const link = parseDeepLink(arg);
       if (link) return link;
     }
@@ -51,16 +52,19 @@ export function dispatchDeepLink(link: DeepLinkEvent, mainWin: BrowserWindow | n
   }
 }
 
-/** Register the redvoice:// scheme as a protocol handler + IPC for the renderer to poll pending. */
+/** Register the r3dvoice:// scheme as a protocol handler + IPC for the renderer to poll pending. */
 export function registerDeepLinkHandlers(): void {
   // Electron's protocol-client API handles cross-platform plumbing.
   // In dev (unpackaged), we must pass execPath + the script path so the OS knows how to relaunch.
-  if (process.defaultApp) {
-    if (process.argv.length >= 2 && typeof process.argv[1] === "string") {
-      app.setAsDefaultProtocolClient("redvoice", process.execPath, [process.argv[1]]);
+  // Both schemes register: r3dvoice:// is canonical, redvoice:// keeps old links alive.
+  for (const scheme of ["r3dvoice", "redvoice"]) {
+    if (process.defaultApp) {
+      if (process.argv.length >= 2 && typeof process.argv[1] === "string") {
+        app.setAsDefaultProtocolClient(scheme, process.execPath, [process.argv[1]]);
+      }
+    } else {
+      app.setAsDefaultProtocolClient(scheme);
     }
-  } else {
-    app.setAsDefaultProtocolClient("redvoice");
   }
 
   ipcMain.handle("deep-link:consume-pending", () => {

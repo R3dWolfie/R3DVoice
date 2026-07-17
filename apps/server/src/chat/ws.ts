@@ -31,7 +31,7 @@ const incomingSchema = z.union([
 
 /**
  * WebSocket gateway for live chat events. Auth: client connects with the
- * Sec-WebSocket-Protocol subprotocol header set to "redvoice.bearer.<jwt>".
+ * Sec-WebSocket-Protocol subprotocol header set to "r3dvoice.bearer.<jwt>".
  * Subprotocol is the only browser-WebSocket way to ship a token without
  * exposing it in the URL. We require ws/ws.heartbeat ping every 30s.
  */
@@ -44,7 +44,7 @@ export async function chatWsRoutes(app: FastifyInstance): Promise<void> {
     const sock = (connection as unknown as { socket?: import("ws").WebSocket })
       .socket ?? (connection as unknown as import("ws").WebSocket);
 
-    // Token via subprotocol — Sec-WebSocket-Protocol: "redvoice.bearer.<jwt>".
+    // Token via subprotocol — Sec-WebSocket-Protocol: "r3dvoice.bearer.<jwt>".
     const proto = request.headers["sec-websocket-protocol"];
     const protoStr = Array.isArray(proto) ? proto[0] : proto;
     const token = extractTokenFromSubprotocol(protoStr);
@@ -143,8 +143,8 @@ function extractTokenFromSubprotocol(proto: string | undefined): string | null {
   // Browsers send a comma-separated list. Find the bearer entry.
   const candidates = proto.split(",").map((s) => s.trim());
   for (const c of candidates) {
-    if (c.startsWith("redvoice.bearer.")) {
-      return c.slice("redvoice.bearer.".length);
+    if (c.startsWith("r3dvoice.bearer.")) {
+      return c.slice("r3dvoice.bearer.".length);
     }
   }
   return null;

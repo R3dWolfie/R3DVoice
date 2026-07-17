@@ -1,5 +1,5 @@
 import type { FastifyInstance } from "fastify";
-import { markReadSchema, setMuteSchema, setDndSchema } from "@redvoice/shared";
+import { markReadSchema, setMuteSchema, setDndSchema } from "@r3dvoice/shared";
 import { prisma } from "../db.js";
 import { requireAuth } from "../auth/middleware.js";
 import { ValidationError } from "../errors.js";

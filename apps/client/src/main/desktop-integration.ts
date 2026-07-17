@@ -1,4 +1,4 @@
-import { writeFileSync, mkdirSync, copyFileSync, existsSync, readdirSync } from "node:fs";
+import { writeFileSync, mkdirSync, copyFileSync, existsSync, readdirSync, unlinkSync } from "node:fs";
 import { join } from "node:path";
 import { homedir } from "node:os";
 
@@ -10,7 +10,7 @@ import { homedir } from "node:os";
  * Returns undefined if nothing resolves — caller should treat as "no icon."
  */
 export function resolveIconPath(): string | undefined {
-  const userIcon = join(homedir(), ".local/share/icons/hicolor/512x512/apps/redvoice.png");
+  const userIcon = join(homedir(), ".local/share/icons/hicolor/512x512/apps/r3dvoice.png");
   if (existsSync(userIcon)) return userIcon;
   // Dev fallback. import.meta.dirname = apps/client/out/main at runtime.
   try {
@@ -25,7 +25,7 @@ export function resolveIconPath(): string | undefined {
 /**
  * electron-builder stores the icon inside the AppImage at
  * `usr/share/icons/hicolor/<size>/apps/<sanitized-package-name>.png`.
- * For scoped names like @redvoice/client it becomes `@redvoiceclient.png`.
+ * For scoped names like @r3dvoice/client it becomes `@r3dvoiceclient.png`.
  * Find whatever's there without hardcoding the sanitized name.
  */
 function findAppIcon(appDir: string): string | null {
@@ -68,7 +68,7 @@ export function writeDesktopEntry(): void {
       if (sourceIcon) {
         const iconDir = join(home, ".local/share/icons/hicolor/512x512/apps");
         mkdirSync(iconDir, { recursive: true });
-        copyFileSync(sourceIcon, join(iconDir, "redvoice.png"));
+        copyFileSync(sourceIcon, join(iconDir, "r3dvoice.png"));
       }
     }
   } catch {
@@ -82,19 +82,30 @@ export function writeDesktopEntry(): void {
     mkdirSync(appsDir, { recursive: true });
     const desktopContent = [
       "[Desktop Entry]",
-      "Name=RedVoice",
+      "Name=R3DVoice",
       "GenericName=Voice Chat",
       "Comment=Open-source screenshare + voice chat",
       `Exec="${appImagePath}" %U`,
-      `Icon=${join(home, ".local/share/icons/hicolor/512x512/apps/redvoice.png")}`,
+      `Icon=${join(home, ".local/share/icons/hicolor/512x512/apps/r3dvoice.png")}`,
       "Type=Application",
       "Categories=Network;Chat;AudioVideo;",
-      "StartupWMClass=RedVoice",
+      "StartupWMClass=R3DVoice",
       "X-AppImage-Integrate=false",
-      "MimeType=x-scheme-handler/redvoice;",
+      "MimeType=x-scheme-handler/r3dvoice;x-scheme-handler/redvoice;",
       "",
     ].join("\n");
-    writeFileSync(join(appsDir, "redvoice.desktop"), desktopContent, { mode: 0o644 });
+    writeFileSync(join(appsDir, "r3dvoice.desktop"), desktopContent, { mode: 0o644 });
+    // Clean up the pre-rename entry so launchers don't show two apps.
+    for (const stale of [
+      join(appsDir, "redvoice.desktop"),
+      join(home, ".local/share/icons/hicolor/512x512/apps/redvoice.png"),
+    ]) {
+      try {
+        unlinkSync(stale);
+      } catch {
+        /* absent — fine */
+      }
+    }
   } catch {
     // Desktop entry is a convenience — if writing fails, app still runs.
   }

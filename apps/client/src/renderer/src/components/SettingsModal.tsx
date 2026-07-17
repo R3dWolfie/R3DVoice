@@ -449,7 +449,7 @@ function KeybindsTab(): ReactElement {
       ))}
       <div style={{ fontSize: "var(--t-xs)", color: "var(--text-faint)", marginTop: "var(--s-2)", lineHeight: 1.5 }}>
         Push-to-talk uses a system-wide hotkey (works when the app is unfocused).
-        The rest only fire when the RedVoice window is focused.
+        The rest only fire when the R3DVoice window is focused.
       </div>
     </div>
   );
@@ -495,7 +495,7 @@ function KeybindRow({ spec }: { spec: KeybindRowSpec }): ReactElement {
     prefsActions()[setter](next);
     if (spec.global) {
       // PTT goes through globalShortcut in main; others stay in renderer.
-      await window.redvoice.setPttKeybind(next);
+      await window.r3dvoice.setPttKeybind(next);
     }
   };
 
@@ -556,11 +556,11 @@ function CompatTab(): ReactElement {
   async function toggleX11(): Promise<void> {
     const next = !enabled;
     prefsActions().setCompatibilityMode(next);
-    await window.redvoice.setCompatibilityEnv(next);
+    await window.r3dvoice.setCompatibilityEnv(next);
   }
 
   async function relaunch(): Promise<void> {
-    await window.redvoice.relaunch();
+    await window.r3dvoice.relaunch();
   }
 
   return (
@@ -674,7 +674,7 @@ function CrashReportingRow(): ReactElement {
   const toggle = async (): Promise<void> => {
     const next = !enabled;
     prefsActions().setCrashReporting(next);
-    await window.redvoice.setCrashReporting(next);
+    await window.r3dvoice.setCrashReporting(next);
   };
   return (
     <>
@@ -734,7 +734,7 @@ function CrashReportingRow(): ReactElement {
           className="rv-btn"
           data-variant="ghost"
           style={{ height: "1.8rem", fontSize: "var(--t-xs)" }}
-          onClick={() => void window.redvoice.openCrashDumps()}
+          onClick={() => void window.r3dvoice.openCrashDumps()}
         >
           View dump folder
         </button>
@@ -747,13 +747,13 @@ function PermissionRows(): ReactElement {
   const [mic, setMic] = useState<MediaPermissionStatus>("unknown");
   const [cam, setCam] = useState<MediaPermissionStatus>("unknown");
   const [scr, setScr] = useState<MediaPermissionStatus>("unknown");
-  const isMac = window.redvoice.platform() === "darwin";
+  const isMac = window.r3dvoice.platform() === "darwin";
 
   const refresh = async (): Promise<void> => {
     const [m, c, s] = await Promise.all([
-      window.redvoice.getMediaPermission("microphone"),
-      window.redvoice.getMediaPermission("camera"),
-      window.redvoice.getMediaPermission("screen"),
+      window.r3dvoice.getMediaPermission("microphone"),
+      window.r3dvoice.getMediaPermission("camera"),
+      window.r3dvoice.getMediaPermission("screen"),
     ]);
     setMic(m);
     setCam(c);
@@ -781,7 +781,7 @@ function PermissionRows(): ReactElement {
               data-variant="ghost"
               style={{ height: "1.6rem", fontSize: "var(--t-xs)" }}
               onClick={() => {
-                void window.redvoice.askMediaPermission("microphone").then(() => void refresh());
+                void window.r3dvoice.askMediaPermission("microphone").then(() => void refresh());
               }}
             >
               Grant
@@ -800,7 +800,7 @@ function PermissionRows(): ReactElement {
               data-variant="ghost"
               style={{ height: "1.6rem", fontSize: "var(--t-xs)" }}
               onClick={() => {
-                void window.redvoice.askMediaPermission("camera").then(() => void refresh());
+                void window.r3dvoice.askMediaPermission("camera").then(() => void refresh());
               }}
             >
               Grant
@@ -818,7 +818,7 @@ function PermissionRows(): ReactElement {
               className="rv-btn"
               data-variant="ghost"
               style={{ height: "1.6rem", fontSize: "var(--t-xs)" }}
-              onClick={() => void window.redvoice.openMacScreenSettings()}
+              onClick={() => void window.r3dvoice.openMacScreenSettings()}
             >
               Open Settings
             </button>
@@ -1370,7 +1370,7 @@ function AboutTab(): ReactElement {
         <I.Logo size={48} />
         <div>
           <div style={{ fontSize: "var(--t-xl)", fontWeight: 700, letterSpacing: "-0.01em" }}>
-            RedVoice
+            R3DVoice
           </div>
           <div className="rv-mono" style={{ fontSize: "var(--t-xs)", color: "var(--text-dim)" }}>
             v0.9.0 · electron 35 · chromium 130
@@ -1390,7 +1390,7 @@ function AboutTab(): ReactElement {
       >
         <a
           className="rv-btn"
-          href="https://github.com/R3dWolfie/RedVoice"
+          href="https://github.com/R3dWolfie/R3DVoice"
           target="_blank"
           rel="noreferrer"
         >
@@ -1398,7 +1398,7 @@ function AboutTab(): ReactElement {
         </a>
         <a
           className="rv-btn"
-          href="https://github.com/R3dWolfie/RedVoice/issues/new"
+          href="https://github.com/R3dWolfie/R3DVoice/issues/new"
           target="_blank"
           rel="noreferrer"
         >
@@ -1406,7 +1406,7 @@ function AboutTab(): ReactElement {
         </a>
         <a
           className="rv-btn"
-          href="https://github.com/R3dWolfie/RedVoice/releases"
+          href="https://github.com/R3dWolfie/R3DVoice/releases"
           target="_blank"
           rel="noreferrer"
           style={{ gridColumn: "span 2" }}

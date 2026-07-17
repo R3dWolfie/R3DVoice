@@ -53,7 +53,7 @@ export interface ScreenShareQuality {
   /**
    * Audio source to share alongside video:
    *   null  → silent share
-   *   "all" → every app's audio except RedVoice's own
+   *   "all" → every app's audio except R3DVoice's own
    *   "<pid>" → only this process's audio
    */
   audioSource: null | "all" | string;
@@ -174,7 +174,7 @@ async function logIceCandidatePair(
  * Linux: capture screenshare audio. Two paths:
  *
  * 1. If `preferLabelContains` matches a virtual venmic device (e.g.
- *    "vencord-screen-share") — capture that. Excludes RedVoice's own playback.
+ *    "vencord-screen-share") — capture that. Excludes R3DVoice's own playback.
  * 2. Otherwise fall back to a PulseAudio/PipeWire "Monitor of …" source
  *    (full system mix; will echo unless user wears headphones).
  */
@@ -756,7 +756,7 @@ export class LiveKitRoom {
 
   /**
    * Publish a screen_share_audio track. Capture order:
-   *   1. Native WASAPI filter (Windows 11+, excludes RedVoice's own playback)
+   *   1. Native WASAPI filter (Windows 11+, excludes R3DVoice's own playback)
    *   2. Linux PipeWire venmic device (per-app or system-mix-minus-self)
    *   3. getDisplayMedia({audio:true, video:false}) — Windows fallback
    *
@@ -769,7 +769,7 @@ export class LiveKitRoom {
       return true;
     }
 
-    const platform = window.redvoice?.platform();
+    const platform = window.r3dvoice?.platform();
 
     let track: MediaStreamTrack | null = null;
     let auxStream: MediaStream | null = null;
@@ -793,14 +793,14 @@ export class LiveKitRoom {
       }
     }
 
-    // 2. Linux: ask main to set up a virtual sink that excludes RedVoice's
+    // 2. Linux: ask main to set up a virtual sink that excludes R3DVoice's
     //    playback, then capture from its monitor. Falls back to the full
     //    system-mix monitor if pactl isn't available.
     if (!track && platform === "linux") {
       let preferLabel: string | undefined;
       let routingEnabled = false;
       try {
-        const routing = await window.redvoice.enableLinuxAudioRouting(
+        const routing = await window.r3dvoice.enableLinuxAudioRouting(
           includeProcessId ? { includeProcessId } : undefined,
         );
         if (routing) {
@@ -815,13 +815,13 @@ export class LiveKitRoom {
         // eslint-disable-next-line no-console
         console.log(
           routingEnabled
-            ? "[screenshare] linux: capturing redvoice_share.monitor — RedVoice playback excluded"
+            ? "[screenshare] linux: capturing r3dvoice_share.monitor — R3DVoice playback excluded"
             : "[screenshare] linux: capturing default monitor (system mix; use headphones to avoid echo)",
         );
       } else if (routingEnabled) {
         // Capture failed even though routing was set up — tear it down so
         // we don't leave the user's audio rerouted.
-        try { await window.redvoice.disableLinuxAudioRouting(); } catch { /* */ }
+        try { await window.r3dvoice.disableLinuxAudioRouting(); } catch { /* */ }
       }
     }
 
@@ -874,7 +874,7 @@ export class LiveKitRoom {
       this.screenAudioAuxStream = null;
     }
     await stopSystemAudioStream();
-    try { await window.redvoice?.disableLinuxAudioRouting?.(); } catch { /* */ }
+    try { await window.r3dvoice?.disableLinuxAudioRouting?.(); } catch { /* */ }
     this.emit();
   }
 

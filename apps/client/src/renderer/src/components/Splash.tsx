@@ -83,7 +83,7 @@ export function Splash(): ReactElement {
   const [status, setStatus] = useState<SplashStatus>({ phase: "initializing" });
 
   useEffect(() => {
-    const off = window.redvoice.onSplashStatus((next) => setStatus(next));
+    const off = window.r3dvoice.onSplashStatus((next) => setStatus(next));
     return off;
   }, []);
 
@@ -95,7 +95,7 @@ export function Splash(): ReactElement {
       <div style={vignetteStyle} aria-hidden />
       <div style={contentStyle}>
         <I.Logo size={96} />
-        <h1 style={titleStyle}>RedVoice</h1>
+        <h1 style={titleStyle}>R3DVoice</h1>
         <div style={statusStyle} aria-live="polite">
           {statusMessage(status)}
         </div>

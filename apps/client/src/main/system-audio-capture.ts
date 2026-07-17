@@ -1,6 +1,6 @@
 // Spawns the bundled `system-audio-capture.exe` helper (Windows only) and
 // pipes its raw PCM stdout into the renderer over IPC. The helper captures
-// the system audio mix EXCLUDING the RedVoice process tree, so screenshare
+// the system audio mix EXCLUDING the R3DVoice process tree, so screenshare
 // audio doesn't include the call voices we're playing back ourselves.
 //
 // Format from the helper: signed 16-bit LE PCM, 48000 Hz, 2 channels, interleaved.
@@ -94,7 +94,7 @@ export function listWindowsAudioSessions(): Promise<AudioSessionInfo[]> {
         const displayName = parts[2] ?? "";
         const pid = Number.parseInt(pidStr, 10);
         if (!Number.isFinite(pid)) continue;
-        // Drop our own process tree so users don't pick RedVoice.
+        // Drop our own process tree so users don't pick R3DVoice.
         if (ourPids.has(pidStr)) continue;
         sessions.push({ pid, imageName, displayName });
       }
@@ -120,7 +120,7 @@ function labelFor(s: AudioSessionInfo): string {
  *     errored before the first packet (Windows build too old, etc.)
  *
  * Pass `includePid` to capture only that process's audio (per-app share).
- * Default is exclude-self (system mix minus RedVoice).
+ * Default is exclude-self (system mix minus R3DVoice).
  */
 export function startSystemAudioCapture(
   webContents: WebContents,

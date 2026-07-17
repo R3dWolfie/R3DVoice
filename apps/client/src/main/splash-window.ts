@@ -31,7 +31,7 @@ export function openSplashWindow(): BrowserWindow {
     alwaysOnTop: true,
     show: true,
     backgroundColor: "#101014",
-    title: "RedVoice",
+    title: "R3DVoice",
     ...(iconPath && { icon: iconPath }),
     webPreferences: {
       preload: join(import.meta.dirname, "../preload/index.mjs"),

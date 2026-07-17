@@ -757,7 +757,7 @@ function ShareAudioControl({
   const [pickerOpen, setPickerOpen] = useState(false);
   const [sources, setSources] = useState<AudioSourceOption[]>([]);
   const [selectedPid, setSelectedPid] = useState<string | null>(null);
-  const platform = window.redvoice?.platform();
+  const platform = window.r3dvoice?.platform();
   const showPicker = platform === "linux" || platform === "win32";
 
   useEffect(() => {
@@ -766,10 +766,10 @@ function ShareAudioControl({
     const load = async (): Promise<void> => {
       let opts: AudioSourceOption[] = [];
       if (platform === "linux") {
-        const list: LinuxAudioSourceSummary[] = await window.redvoice.listLinuxAudioSources();
+        const list: LinuxAudioSourceSummary[] = await window.r3dvoice.listLinuxAudioSources();
         opts = list.map((s) => ({ pid: s.processId, label: s.appName }));
       } else if (platform === "win32") {
-        const list: WindowsAudioSessionInfo[] = await window.redvoice.listWindowsAudioSessions();
+        const list: WindowsAudioSessionInfo[] = await window.r3dvoice.listWindowsAudioSessions();
         opts = list.map((s) => ({
           pid: String(s.pid),
           label: s.displayName?.trim() || s.imageName.replace(/\.exe$/i, ""),
@@ -868,7 +868,7 @@ function ShareAudioControl({
             active={selectedPid === null}
             onClick={() => void pickSource(null)}
           >
-            All apps <span style={{ color: "var(--text-faint)" }}>(except RedVoice)</span>
+            All apps <span style={{ color: "var(--text-faint)" }}>(except R3DVoice)</span>
           </SourceMenuItem>
           {sources.length === 0 ? (
             <div style={{ padding: 10, color: "var(--text-faint)", fontSize: "var(--t-xs)" }}>
@@ -1324,7 +1324,7 @@ export function InRoomScreen(props: InRoomScreenProps): ReactElement {
   }, [prefSpeaker, conn.phase, roomWrapper]);
 
   useEffect(() => {
-    const cleanup = window.redvoice.onPttEvent((pressed) => {
+    const cleanup = window.r3dvoice.onPttEvent((pressed) => {
       void roomWrapper.setMuted(!pressed);
     });
     return cleanup;

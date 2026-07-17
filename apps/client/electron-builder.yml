@@ -1,10 +1,12 @@
-appId: com.r3dwolfie.redvoice
-productName: RedVoice
+appId: com.r3dwolfie.r3dvoice
+productName: R3DVoice
 copyright: Copyright © 2026 R3dWolfie
 
 protocols:
-  - name: RedVoice
+  - name: R3DVoice
     schemes:
+      - r3dvoice
+      # Legacy pre-rename scheme — old invite links in chats keep working.
       - redvoice
 
 directories:
@@ -36,15 +38,15 @@ linux:
   # path forever. Version is still in latest-linux.yml + the release tag.
   artifactName: ${productName}.${ext}
   # Override the executable name away from the sanitized package name
-  # (@redvoiceclient). Affects WMClass matching + .desktop lookups.
-  executableName: redvoice
+  # (@r3dvoiceclient). Affects WMClass matching + .desktop lookups.
+  executableName: r3dvoice
   desktop:
     entry:
-      Name: RedVoice
+      Name: R3DVoice
       Comment: Open-source screenshare + voice chat
       Categories: Network;Chat;AudioVideo;
-      StartupWMClass: RedVoice
-      MimeType: x-scheme-handler/redvoice;
+      StartupWMClass: R3DVoice
+      MimeType: x-scheme-handler/r3dvoice;
 
 win:
   target:
@@ -56,7 +58,7 @@ win:
   extraResources:
     # Native WASAPI process-loopback helper. Built by .github/workflows/release.yml
     # and staged at build/native/ before electron-builder runs. Main process spawns
-    # this binary to capture system audio while EXCLUDING the RedVoice process tree
+    # this binary to capture system audio while EXCLUDING the R3DVoice process tree
     # (so screenshare audio doesn't include voices we're playing back from the call).
     - from: build/native/system-audio-capture.exe
       to: system-audio-capture.exe
@@ -78,5 +80,5 @@ mac:
 publish:
   provider: github
   owner: R3dWolfie
-  repo: RedVoice
+  repo: R3DVoice
   releaseType: release

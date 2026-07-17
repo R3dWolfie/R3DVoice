@@ -1,4 +1,4 @@
-# RedVoice infra
+# R3DVoice infra
 
 Local-dev Docker stack for the LiveKit media server.
 
@@ -17,7 +17,7 @@ Leave it running in its own terminal. LiveKit listens on:
 
 ## Shared dev secrets
 
-`livekit.yaml` contains `devkey-redvoice` / `devsecret-redvoice-...`. The
+`livekit.yaml` contains `devkey-r3dvoice` / `devsecret-r3dvoice-...`. The
 `apps/server/.env` file must use the same pair so token minting works.
 
 **These are DEV ONLY.** Generate fresh keys for any public deployment —

@@ -1,6 +1,6 @@
 // Builds a MediaStream from raw PCM frames produced by the native
 // system-audio-capture helper (Windows). Used as the *audio* source for
-// screenshare publishing so the captured mix excludes RedVoice's own
+// screenshare publishing so the captured mix excludes R3DVoice's own
 // playback (incoming voices) — preventing the "I hear myself through your
 // screenshare" loop.
 //
@@ -92,7 +92,7 @@ let active: ActiveStream | null = null;
  * Returns the MediaStream on success, or null if unavailable.
  *
  * Pass `includePid` to capture only one process (per-app share). Without it,
- * the helper captures system mix excluding RedVoice.
+ * the helper captures system mix excluding R3DVoice.
  */
 export async function startSystemAudioStream(
   options: { includePid?: number } = {},
@@ -101,14 +101,14 @@ export async function startSystemAudioStream(
     return active.destination.stream;
   }
 
-  if (typeof window === "undefined" || !window.redvoice?.startSystemAudioCapture) {
+  if (typeof window === "undefined" || !window.r3dvoice?.startSystemAudioCapture) {
     return null;
   }
 
-  const result = await window.redvoice.startSystemAudioCapture(options);
+  const result = await window.r3dvoice.startSystemAudioCapture(options);
   if (result !== "started") return null;
 
-  const fmt = await window.redvoice.systemAudioFormat();
+  const fmt = await window.r3dvoice.systemAudioFormat();
   // Match the helper's sample rate — otherwise the AudioContext would
   // resample, which adds latency and CPU.
   const ctx = new AudioContext({ sampleRate: fmt.sampleRate, latencyHint: "interactive" });
@@ -133,13 +133,13 @@ export async function startSystemAudioStream(
   // Forward PCM chunks from main → worklet. We pass the ArrayBuffer (zero-
   // copy transfer would need .postMessage(ab, [ab]) but the IPC layer
   // already structured-cloned it once, so a second copy is unavoidable).
-  const unsubscribeChunk = window.redvoice.onSystemAudioChunk((chunk) => {
+  const unsubscribeChunk = window.r3dvoice.onSystemAudioChunk((chunk) => {
     // chunk is a Uint8Array view from IPC; hand the underlying buffer to
     // the worklet so it can read it as Int16Array.
     worklet.port.postMessage(chunk.buffer.slice(chunk.byteOffset, chunk.byteOffset + chunk.byteLength));
   });
 
-  const unsubscribeEnded = window.redvoice.onSystemAudioEnded(() => {
+  const unsubscribeEnded = window.r3dvoice.onSystemAudioEnded(() => {
     void stopSystemAudioStream();
   });
 
@@ -155,5 +155,5 @@ export async function stopSystemAudioStream(): Promise<void> {
   a.unsubscribeEnded();
   try { a.worklet.disconnect(); } catch { /* */ }
   try { await a.ctx.close(); } catch { /* */ }
-  try { await window.redvoice.stopSystemAudioCapture(); } catch { /* */ }
+  try { await window.r3dvoice.stopSystemAudioCapture(); } catch { /* */ }
 }

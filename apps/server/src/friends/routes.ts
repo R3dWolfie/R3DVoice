@@ -5,7 +5,7 @@ import { prisma } from "../db.js";
 import { requireAuth } from "../auth/middleware.js";
 import { AuthError, ConflictError, NotFoundError, ValidationError } from "../errors.js";
 import { isUserOnline, sendToUser } from "../chat/ws-state.js";
-import { userHandleSchema } from "@redvoice/shared";
+import { userHandleSchema } from "@r3dvoice/shared";
 
 const sendBodySchema = z.object({ email: z.string().email() });
 const respondParamsSchema = z.object({ id: z.string().min(1) });

@@ -2,12 +2,12 @@ import { describe, it, expect, beforeEach, afterEach, vi } from "vitest";
 import { render, fireEvent, waitFor, cleanup } from "@testing-library/react";
 import { UpdateToast } from "./UpdateToast.js";
 
-const KEY = "redvoice.lastSeenVersion";
+const KEY = "r3dvoice.lastSeenVersion";
 
 describe("UpdateToast", () => {
   beforeEach(() => {
     localStorage.clear();
-    (window as any).redvoice = {
+    (window as any).r3dvoice = {
       getAppVersion: vi.fn().mockResolvedValue("0.9.0"),
       openExternal: vi.fn(),
     };
@@ -28,7 +28,7 @@ describe("UpdateToast", () => {
     localStorage.setItem(KEY, "0.9.0");
     const { container } = render(<UpdateToast />);
     await waitFor(() => {
-      expect((window as any).redvoice.getAppVersion).toHaveBeenCalled();
+      expect((window as any).r3dvoice.getAppVersion).toHaveBeenCalled();
     });
     expect(container.querySelector("[data-rv='update-toast']")).toBeNull();
   });
@@ -56,8 +56,8 @@ describe("UpdateToast", () => {
     const toast = await findByTestId("update-toast");
     const link = toast.querySelector("[data-rv='whatsnew']") as HTMLButtonElement;
     fireEvent.click(link);
-    expect((window as any).redvoice.openExternal).toHaveBeenCalledWith(
-      "https://github.com/R3dWolfie/RedVoice/releases/tag/v0.9.0",
+    expect((window as any).r3dvoice.openExternal).toHaveBeenCalledWith(
+      "https://github.com/R3dWolfie/R3DVoice/releases/tag/v0.9.0",
     );
     expect(localStorage.getItem(KEY)).toBe("0.9.0");
   });

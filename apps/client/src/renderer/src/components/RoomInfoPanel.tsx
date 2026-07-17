@@ -1,5 +1,5 @@
 import { useEffect, useState, type ReactElement } from "react";
-import type { RoomDTO, RoomMemberDTO } from "@redvoice/shared";
+import type { RoomDTO, RoomMemberDTO } from "@r3dvoice/shared";
 import { ApiClient, ApiError } from "../lib/api.js";
 import { useAuthStore } from "../lib/auth-context.js";
 import { I } from "./Icons.js";

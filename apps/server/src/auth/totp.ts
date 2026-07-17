@@ -1,7 +1,7 @@
 import speakeasy from "speakeasy";
 import qrcode from "qrcode";
 
-const ISSUER = "RedVoice";
+const ISSUER = "R3DVoice";
 
 export function generateTotpSecret(): string {
   // 20 bytes ASCII secret => standard Google Authenticator length.

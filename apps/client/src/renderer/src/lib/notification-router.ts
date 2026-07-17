@@ -1,4 +1,4 @@
-import type { ChatWsEvent, MuteLevel } from "@redvoice/shared";
+import type { ChatWsEvent, MuteLevel } from "@r3dvoice/shared";
 
 type RouteContext = {
   /** Caller's userId — used to suppress self-mentions and self-events. */
