@@ -56,6 +56,7 @@ function Router({ topPage, setTopPage }: { topPage: TopPage; setTopPage: (p: Top
     }
   });
   const [pendingJoinRoomId, setPendingJoinRoomId] = useState<string | null>(null);
+  const [pendingDmUserId, setPendingDmUserId] = useState<string | null>(null);
   const [settingsOpen, setSettingsOpen] = useState(false);
 
   // Listen for invite deep links from the main process.
@@ -129,7 +130,10 @@ function Router({ topPage, setTopPage }: { topPage: TopPage; setTopPage: (p: Top
                 setPendingJoinRoomId(roomId);
                 setTopPage("lobby");
               }}
-              onOpenDms={() => setTopPage("dms")}
+              onOpenDms={(userId) => {
+                setPendingDmUserId(userId ?? null);
+                setTopPage("dms");
+              }}
             />
           ) : (
             <DmsScreen
@@ -137,6 +141,8 @@ function Router({ topPage, setTopPage }: { topPage: TopPage; setTopPage: (p: Top
                 setPendingJoinRoomId(roomId);
                 setTopPage("lobby");
               }}
+              openUserId={pendingDmUserId}
+              onOpenUserConsumed={() => setPendingDmUserId(null)}
             />
           )}
         </div>

@@ -7,6 +7,7 @@ import { decryptDM, encryptDM, type EncryptedDMPayload } from "../lib/crypto.js"
 import { loadKeyPair } from "../lib/key-storage.js";
 import { Avatar } from "./Avatar.js";
 import { useDismiss } from "../lib/use-dismiss.js";
+import { pushToast } from "../lib/toast-store.js";
 
 /** Render @handle tokens as tinted pills when the message mentions people. */
 function bodyWithMentions(body: string, hasMentions: boolean): ReactElement | string {
@@ -165,7 +166,11 @@ export function RoomChatPanel({
         }
       } else if (event.type === "edited") {
         if (event.message.threadType === threadType && event.message.threadId === threadId) {
-          setMessages((prev) => prev.map((m) => (m.id === event.message.id ? event.message : m)));
+          setMessages((prev) =>
+            prev.map((m) =>
+              m.id === event.message.id ? { ...event.message, ...(event.message.reactions ?? m.reactions ? { reactions: event.message.reactions ?? m.reactions ?? [] } : {}) } : m,
+            ),
+          );
         }
       } else if (event.type === "deleted") {
         if (event.threadType === threadType && event.threadId === threadId) {
@@ -180,7 +185,12 @@ export function RoomChatPanel({
         }
       } else if (event.type === "pinned") {
         if (event.message.threadType === threadType && event.message.threadId === threadId) {
-          setMessages((prev) => prev.map((m) => (m.id === event.message.id ? event.message : m)));
+          // Broadcast DTOs carry no reaction aggregate — keep what we have.
+          setMessages((prev) =>
+            prev.map((m) =>
+              m.id === event.message.id ? { ...event.message, ...(event.message.reactions ?? m.reactions ? { reactions: event.message.reactions ?? m.reactions ?? [] } : {}) } : m,
+            ),
+          );
           setPins(null); // refetch on next open
         }
       } else if (event.type === "unpinned") {
@@ -790,6 +800,7 @@ export function RoomChatPanel({
             icon="⧉"
             label="Copy text"
             onClick={() => {
+                  pushToast({ kind: "success", text: "Message copied" });
               void navigator.clipboard.writeText(msgMenu.body).catch(() => {});
               setMsgMenu(null);
             }}

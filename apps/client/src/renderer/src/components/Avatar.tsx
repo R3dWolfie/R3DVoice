@@ -44,7 +44,7 @@ export function Avatar({
     );
   }
 
-  const letter = (fallbackInitials.charAt(0) || "?").toUpperCase();
+  const letter = (fallbackInitials.replace(/[^\p{L}\p{N}]/gu, "").charAt(0) || "?").toUpperCase();
   const bg = colorForSeed(fallbackColorSeed);
 
   return (

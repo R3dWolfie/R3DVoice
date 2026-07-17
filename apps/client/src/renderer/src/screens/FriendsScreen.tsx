@@ -13,10 +13,11 @@ import { MyInvitesList } from "../components/MyInvitesList.js";
 import { Modal } from "../components/Modal.js";
 import { PeerProfilePopover } from "../components/PeerProfilePopover.js";
 import { UserContextMenu } from "../components/UserContextMenu.js";
+import { useNotificationsStore } from "../lib/notifications-store.js";
 
 type Props = {
   onJoinRoom?: (roomId: string) => void;
-  onOpenDms?: () => void;
+  onOpenDms?: (userId?: string) => void;
 };
 
 // Friends page per WireFrames 2.2: top bar (title + counts, Add friend
@@ -76,6 +77,7 @@ export function FriendsScreen({ onJoinRoom, onOpenDms }: Props = {}): ReactEleme
       if (
         event.type === "friend.request" ||
         event.type === "friend.accepted" ||
+        event.type === "friend.removed" ||
         event.type === "presence.update"
       ) {
         void refresh();
@@ -126,6 +128,7 @@ export function FriendsScreen({ onJoinRoom, onOpenDms }: Props = {}): ReactEleme
   const accept = async (id: string): Promise<void> => {
     try {
       await apiFor().friendAccept(id);
+      void useNotificationsStore.getState().refresh();
       await refresh();
     } catch (e) {
       setError(e instanceof Error ? e.message : "failed");
@@ -605,7 +608,7 @@ export function FriendsScreen({ onJoinRoom, onOpenDms }: Props = {}): ReactEleme
           meId={me.id}
           onClose={() => setUserMenu(null)}
           onViewProfile={() => setProfilePeer(userMenu.user)}
-          onSendDm={() => onOpenDms?.()}
+          onSendDm={() => onOpenDms?.(userMenu.user.id)}
           onChanged={() => void refresh()}
         />
       )}

@@ -207,6 +207,7 @@ export type ChatWsEvent =
   | { type: "pinned"; message: ChatMessageDTO }
   | { type: "unpinned"; id: string; threadType: ChatThreadType; threadId: string }
   | { type: "invite.direct"; invite: DirectInviteDTO }
+  | { type: "friend.removed"; userId: string }
   | { type: "reaction"; op: "add" | "remove"; messageId: string; threadType: ChatThreadType; threadId: string; emoji: string; userId: string };
 
 /** Client → server WebSocket frames. */

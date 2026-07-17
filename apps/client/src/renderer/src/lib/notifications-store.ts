@@ -96,6 +96,7 @@ export function wireNotificationsToTransport(): void {
       event.type === "chat.mention" ||
       event.type === "invite.direct" ||
       event.type === "friend.request" ||
+      event.type === "friend.removed" ||
       event.type === "friend.accepted"
     ) {
       void useNotificationsStore.getState().refresh();

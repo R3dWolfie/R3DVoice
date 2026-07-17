@@ -6,6 +6,7 @@ import { dmThreadId } from "../lib/dm-thread-id.js";
 import { Avatar } from "./Avatar.js";
 import { ContextMenu, MenuItem, MenuDivider, MenuSection } from "./ContextMenu.js";
 import { MutePopover } from "./MutePopover.js";
+import { pushToast } from "../lib/toast-store.js";
 
 // Full user menu per WireFrames 2.4d — right-click / ⋮ on a person:
 // View profile · Send DM · [Notifications] Mute (2.4b popover) ·
@@ -127,6 +128,7 @@ export function UserContextMenu({
         icon="⧉"
         label="Copy handle"
         onClick={() => {
+            pushToast({ kind: "success", text: "Handle copied" });
           void navigator.clipboard.writeText(handleText).catch(() => {});
           onClose();
         }}

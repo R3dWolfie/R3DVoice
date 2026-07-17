@@ -18,12 +18,15 @@ import { useUnreadStore } from "../lib/unread-store.js";
 
 type DmsScreenProps = {
   onJoinRoom?: (roomId: string) => void;
+  /** Open (or start) the thread with this user on mount — "Send DM" entry. */
+  openUserId?: string | null | undefined;
+  onOpenUserConsumed?: (() => void) | undefined;
 };
 
 /** Presence snapshot for a DM peer, sourced from the friends list (2.4). */
 type PeerPresence = { isOnline: boolean; currentRoom: { id: string; name: string } | null };
 
-export function DmsScreen({ onJoinRoom }: DmsScreenProps = {}): ReactElement {
+export function DmsScreen({ onJoinRoom, openUserId, onOpenUserConsumed }: DmsScreenProps = {}): ReactElement {
   const me = useAuthStore((s) => s.user);
   const serverUrl = useAuthStore((s) => s.serverUrl);
   const token = useAuthStore((s) => s.token);
@@ -74,6 +77,7 @@ export function DmsScreen({ onJoinRoom }: DmsScreenProps = {}): ReactElement {
       if (
         event.type === "friend.request" ||
         event.type === "friend.accepted" ||
+        event.type === "friend.removed" ||
         event.type === "presence.update"
       ) {
         void refreshFriends();
@@ -134,6 +138,22 @@ export function DmsScreen({ onJoinRoom }: DmsScreenProps = {}): ReactElement {
     const t = threads.find((x) => x.threadId === active);
     if (t) setActivePeer(t.otherParticipant);
   }, [active, threads]);
+
+  // "Send DM" from the Friends page: resolve the friend, open (or start)
+  // the pair thread (live QA finding — it used to dead-end on the empty state).
+  useEffect(() => {
+    if (!openUserId || !me) return;
+    onOpenUserConsumed?.();
+    const api = new ApiClient(serverUrl);
+    api.setToken(token);
+    void api.friends().then((r) => {
+      const f = r.friends.find((x) => x.user.id === openUserId);
+      if (!f) return;
+      setActive(dmThreadId(me.id, f.user.id));
+      setActivePeer({ id: f.user.id, handle: f.user.handle ?? null, displayName: f.user.displayName });
+    }).catch(() => {});
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [openUserId, me?.id]);
 
   const onPick = useCallback((threadId: string, peer: { id: string; handle: string | null; displayName: string }) => {
     setActive(threadId);
@@ -540,6 +560,9 @@ function DmPane({
   borderRight?: boolean;
   onClose: () => void;
   onJoinRoom?: (roomId: string) => void;
+  /** Open (or start) the thread with this user on mount — "Send DM" entry. */
+  openUserId?: string | null | undefined;
+  onOpenUserConsumed?: (() => void) | undefined;
   actions?: ReactElement;
 }): ReactElement {
   const [profileOpen, setProfileOpen] = useState(false);

@@ -87,3 +87,20 @@ speaker test; keybind populated
 defaults; Account sign-out+clear-keys + always-visible backup button;
 settings nav-foot identity card; monochrome-icon sweep (remaining emoji
 glyphs).
+
+
+## Agentic QA pass (task #13) — 2026-07-17, two CDP agents vs prod
+Round 1+2 fixes ALL DEPLOYED: modal portal (backdrop-filter trap), capture-phase
+menu dismissal + data-rv-pop, modal body padding (invite/DM picker), delete-account
+case trap + inline hint, stale rooms after delete/join (phase-flip refetch),
+modal-above-popover z, corner card syncs with bell, create-room disabled state,
+login field survival, mention pills, named typing, armed delete, Unlisted label,
+truthful keychain divider, Send-DM opens thread, pin/edit keeps reactions,
+copy toasts, friend.removed push on block, dm-thread preview skips deleted,
+CF beacon allowed in CSP, dynamic About versions, avatar initials sanitized,
+accept clears bell badge.
+Known-open (minor): profile-rename live push, hover quick-strip alignment,
+keybinds reset-to-defaults, post-delete 401 noise, by-handle 404 console noise,
+DM sidebar shows handle not display name, Escape on profile popovers.
+Not-a-bug: sound pickers (pointer-events:none; QA's JS click bypassed it),
+clipboard toast (harness lacked main-process wiring).

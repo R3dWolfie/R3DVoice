@@ -305,6 +305,9 @@ export async function friendsRoutes(app: FastifyInstance): Promise<void> {
           },
         });
       });
+      // The other side's friend list changed under them — push, don't wait
+      // for a reload (QA: blocked user kept seeing the friendship live).
+      sendToUser(targetId, { type: "friend.removed", userId });
       reply.status(204).send();
     },
   );

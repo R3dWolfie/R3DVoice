@@ -340,8 +340,12 @@ export async function chatRoutes(app: FastifyInstance): Promise<void> {
 
       const seen = new Map<string, MessageDTO>();
       for (const m of rows) {
-        if (seen.has(m.threadId)) continue;
-        seen.set(m.threadId, toDTO(m));
+        const existing = seen.get(m.threadId);
+        // Rows arrive newest-first: first non-deleted wins; a deleted row
+        // only stands in until a surviving message shows up (QA: sidebar
+        // previews read "(deleted)" after deleting the newest message).
+        if (existing && existing.deletedAt === null) continue;
+        if (!existing || m.deletedAt === null) seen.set(m.threadId, toDTO(m));
       }
 
       // Resolve the OTHER half of each canonical-pair threadId in a single batch.

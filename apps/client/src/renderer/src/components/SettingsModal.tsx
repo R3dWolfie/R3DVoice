@@ -3048,7 +3048,7 @@ function AboutTab(): ReactElement {
             R3DVoice
           </div>
           <div className="rv-mono" style={{ fontSize: "var(--t-xs)", color: "var(--text-dim)" }}>
-            v{APP_VERSION} · electron 35 · chromium 130
+            v{APP_VERSION} · electron {/Electron\/(\d+)/.exec(navigator.userAgent)?.[1] ?? "?"} · chromium {/Chrome\/(\d+)/.exec(navigator.userAgent)?.[1] ?? "?"}
           </div>
         </div>
       </div>
