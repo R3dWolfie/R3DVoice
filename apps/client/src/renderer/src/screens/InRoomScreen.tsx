@@ -20,7 +20,7 @@ import {
   type RemoteParticipant,
   type RoomStateSnapshot,
 } from "../lib/livekit-room.js";
-import type { PreJoinSelection } from "./PreJoinScreen.js";
+import type { JoinSelection } from "../lib/join-selection.js";
 import { SettingsModal } from "../components/SettingsModal.js";
 import { usePrefs, prefsActions } from "../lib/prefs-singleton.js";
 import type { LinuxAudioSourceSummary, WindowsAudioSessionInfo } from "../../../shared/bridge-types.js";
@@ -36,7 +36,7 @@ import { useKeybind } from "../lib/keybinds.js";
 
 export interface InRoomScreenProps {
   roomId: string;
-  selection: PreJoinSelection;
+  selection: JoinSelection;
   onLeave(): void;
 }
 
@@ -51,6 +51,7 @@ interface ParticipantView {
   isSpeaking: boolean;
   isLocal: boolean;
   muted: boolean;
+  ghost: boolean;
   screenTrack: Track | null;
   cameraTrack: Track | null;
   /** LiveKit ConnectionQuality string: "unknown"|"poor"|"good"|"excellent"|"lost". */
@@ -927,6 +928,93 @@ function SourceMenuItem({
   );
 }
 
+// Audio-only participant circle (2.5 audio-only-strip / 2.5b voice-only):
+// dark plate, mono initials, mute-strike + ghost badge, speaking ring.
+function AudioCircle({
+  tile,
+  size,
+  callbacks,
+}: {
+  tile: ParticipantView;
+  size: number;
+  callbacks: TileCallbacks;
+}): ReactElement {
+  const initials =
+    tile.name
+      .split(" ")
+      .map((s) => s[0] ?? "")
+      .slice(0, 2)
+      .join("")
+      .toUpperCase() || "?";
+  return (
+    <div
+      title={`${tile.name}${tile.isLocal ? " (you)" : ""}`}
+      onContextMenu={(e) => {
+        e.preventDefault();
+        callbacks.onContextMenu(tile.id, e.clientX, e.clientY);
+      }}
+      style={{
+        width: size,
+        height: size,
+        borderRadius: "50%",
+        background: "var(--tile-bg)",
+        border: "2px solid rgba(255,255,255,0.10)",
+        display: "grid",
+        placeItems: "center",
+        fontFamily: "var(--font-mono)",
+        fontSize: Math.round(size * 0.25),
+        fontWeight: 700,
+        color: "rgba(255,255,255,0.92)",
+        position: "relative",
+        flexShrink: 0,
+        ...(tile.ghost ? { opacity: 0.55, filter: "saturate(0.4)" } : null),
+        ...(tile.isSpeaking ? { boxShadow: "0 0 0 2px var(--rv-live)", borderColor: "transparent" } : null),
+      }}
+    >
+      {initials}
+      {tile.ghost ? (
+        <span
+          style={{
+            position: "absolute",
+            top: -4,
+            right: -4,
+            width: Math.max(18, size * 0.3),
+            height: Math.max(18, size * 0.3),
+            borderRadius: "50%",
+            background: "var(--rv-amber)",
+            color: "#fff",
+            display: "grid",
+            placeItems: "center",
+            fontSize: Math.max(10, size * 0.16),
+            border: "2px solid var(--bg-elev-2)",
+            lineHeight: 1,
+          }}
+        >
+          👻
+        </span>
+      ) : tile.muted ? (
+        <span
+          style={{
+            position: "absolute",
+            top: -3,
+            right: -3,
+            width: Math.max(16, size * 0.26),
+            height: Math.max(16, size * 0.26),
+            borderRadius: "50%",
+            background: "color-mix(in srgb, var(--danger) 95%, transparent)",
+            color: "#fff",
+            display: "grid",
+            placeItems: "center",
+            border: "2px solid var(--bg-elev-2)",
+          }}
+        >
+          <I.MicOff size={Math.max(9, Math.round(size * 0.15))} />
+        </span>
+      ) : null}
+    </div>
+  );
+}
+
 function ControlButton({
   icon,
   label,
@@ -946,54 +1034,67 @@ function ControlButton({
   onClick?: () => void;
   title?: string;
 }): ReactElement {
-  // `active` is decorative-only here; designer uses it for hover affordance —
-  // current visual relies on bg/border combinations below.
-  void active;
+  // Deck control bar (2.5): 48px circles, tiny mono label underneath.
+  // active = filled ink · danger = red-tinted outline · leave = filled --leave.
   const bg = leave
-    ? "linear-gradient(180deg, var(--accent-hover), var(--accent))"
-    : emphasis
-      ? "color-mix(in oklch, var(--accent) 20%, var(--bg-elev-2))"
-      : danger
-        ? "color-mix(in oklch, var(--accent) 14%, var(--bg-elev-2))"
-        : "var(--bg-elev-2)";
+    ? "var(--leave)"
+    : danger
+      ? "color-mix(in srgb, var(--danger) 10%, transparent)"
+      : active || emphasis
+        ? "var(--text)"
+        : "var(--bg-elev)";
   const br = leave
-    ? "color-mix(in oklch, var(--accent) 70%, black)"
-    : emphasis
-      ? "color-mix(in oklch, var(--accent) 50%, var(--border))"
-      : danger
-        ? "color-mix(in oklch, var(--accent) 30%, var(--border))"
+    ? "var(--leave)"
+    : danger
+      ? "var(--danger)"
+      : active || emphasis
+        ? "var(--text)"
         : "var(--border)";
-  const co = leave ? "var(--on-accent)" : danger ? "var(--accent-glow)" : "var(--text)";
+  const co = leave ? "#fff" : danger ? "var(--danger)" : active || emphasis ? "var(--bg)" : "var(--text)";
   return (
     <button
       onClick={onClick}
       title={title}
       style={{
+        appearance: "none",
         display: "flex",
         flexDirection: "column",
         alignItems: "center",
-        gap: 3,
-        padding: "10px 18px",
-        background: bg,
-        border: `1px solid ${br}`,
-        borderRadius: "var(--r-lg)",
-        color: co,
+        gap: 4,
+        padding: 0,
+        background: "transparent",
+        border: 0,
         cursor: "pointer",
-        transition: "all var(--d-base) var(--ease-out)",
-        minWidth: 84,
-        boxShadow: leave
-          ? "var(--shadow-1), 0 8px 24px -8px color-mix(in oklch, var(--accent) 60%, transparent)"
-          : "var(--shadow-1)",
-      }}
-      onMouseEnter={(e) => {
-        if (!leave) e.currentTarget.style.background = "var(--bg-elev-3)";
-      }}
-      onMouseLeave={(e) => {
-        if (!leave) e.currentTarget.style.background = bg;
+        minWidth: "3.5rem",
       }}
     >
-      {icon}
-      <span style={{ fontSize: "var(--t-xs)", fontWeight: 500, letterSpacing: ".01em" }}>{label}</span>
+      <span
+        style={{
+          width: "3rem",
+          height: "3rem",
+          borderRadius: "50%",
+          background: bg,
+          border: `1px solid ${br}`,
+          color: co,
+          display: "grid",
+          placeItems: "center",
+          transition: "all var(--d-base) var(--ease-out)",
+        }}
+      >
+        {icon}
+      </span>
+      <span
+        style={{
+          fontFamily: "var(--font-mono)",
+          fontSize: 9,
+          letterSpacing: ".08em",
+          textTransform: "uppercase",
+          color: leave ? "var(--leave)" : "var(--text-dim)",
+          whiteSpace: "nowrap",
+        }}
+      >
+        {label}
+      </span>
     </button>
   );
 }
@@ -1013,7 +1114,7 @@ export function InRoomScreen(props: InRoomScreenProps): ReactElement {
   const [menu, setMenu] = useState<VolumeMenu | null>(null);
   const [settingsOpen, setSettingsOpen] = useState(false);
   const [chatOpen, setChatOpen] = useState(false);
-  const [deafened, setDeafened] = useState(false);
+  const [roomName, setRoomName] = useState<string | null>(null);
   const [dmTarget, setDmTarget] = useState<{ id: string; name: string } | null>(null);
   const [elapsed, setElapsed] = useState(0);
   const [netStats, setNetStats] = useState<{
@@ -1024,6 +1125,7 @@ export function InRoomScreen(props: InRoomScreenProps): ReactElement {
   const [layout, setLayout] = useState<LayoutMode>("auto");
   const [focusedId, setFocusedId] = useState<string | null>(null);
   const [roomInfoOpen, setRoomInfoOpen] = useState(false);
+  const [psearch, setPsearch] = useState("");
 
   const snapshot: RoomStateSnapshot = useSyncExternalStore(
     (cb) => roomWrapper.subscribe(() => cb()),
@@ -1097,6 +1199,12 @@ export function InRoomScreen(props: InRoomScreenProps): ReactElement {
           screenQuality: props.selection.screenQuality,
         });
 
+        // Deck rule (4.5 removed): every join starts muted. Mute right after
+        // publish so no audio frames leave before the user opts in.
+        if (props.selection.startMuted && !cancelled) {
+          await roomWrapper.setMuted(true);
+        }
+
         // Kick off E2EE key distribution. Owner generates the room key;
         // members request it from peers. Best-effort: if our keypair is
         // missing or the server/owner hasn't authorized us, the room
@@ -1151,7 +1259,6 @@ export function InRoomScreen(props: InRoomScreenProps): ReactElement {
       const el = track.attach() as HTMLAudioElement;
       el.autoplay = true;
       (el as HTMLElement & { playsInline?: boolean }).playsInline = true;
-      el.muted = deafened;
       mount.appendChild(el);
     };
     const onTrackUnsubscribed = (track: Track): void => {
@@ -1165,17 +1272,23 @@ export function InRoomScreen(props: InRoomScreenProps): ReactElement {
       room.off(RoomEvent.TrackSubscribed, onTrackSubscribed);
       room.off(RoomEvent.TrackUnsubscribed, onTrackUnsubscribed);
     };
-  }, [roomWrapper, deafened]);
+  }, [roomWrapper]);
 
-  // Deafen toggle: mute every <audio> currently mounted. New tracks pick up
-  // the state via the attach handler above.
+  // Room name for the deck top bar (2.5: title, click for room panel).
   useEffect(() => {
-    const mount = audioMountRef.current;
-    if (!mount) return;
-    mount.querySelectorAll("audio").forEach((el) => {
-      (el as HTMLAudioElement).muted = deafened;
-    });
-  }, [deafened]);
+    let cancelled = false;
+    const api = new ApiClient(serverUrl);
+    api.setToken(token);
+    api
+      .getRoom(props.roomId)
+      .then((r) => {
+        if (!cancelled) setRoomName(r.name);
+      })
+      .catch(() => {});
+    return () => {
+      cancelled = true;
+    };
+  }, [props.roomId, serverUrl, token]);
 
   const pttKeybind = usePrefs((s) => s.pttKeybind);
   const muteKeybind = usePrefs((s) => s.muteKeybind);
@@ -1295,7 +1408,8 @@ export function InRoomScreen(props: InRoomScreenProps): ReactElement {
   useKeybind(muteKeybind, () => {
     void roomWrapper.setMuted(!(snapshot.local?.isMicrophoneEnabled ?? true));
   });
-  useKeybind(deafenKeybind, () => setDeafened((d) => !d));
+  // Deck: Ghost replaces Deafen — the old deafen keybind now toggles ghost.
+  useKeybind(deafenKeybind, () => void roomWrapper.setGhost(!(snapshot.local?.attributes?.["ghost"] === "1")));
   useKeybind(shareScreenKeybind, () => void handleToggleScreen());
   useKeybind(openSettingsKeybind, () => setSettingsOpen(true));
   useKeybind(leaveRoomKeybind, () => void handleLeave());
@@ -1382,6 +1496,7 @@ export function InRoomScreen(props: InRoomScreenProps): ReactElement {
   };
 
   const muted = !(snapshot.local?.isMicrophoneEnabled ?? true);
+  const localGhost = snapshot.local?.attributes?.["ghost"] === "1";
 
   const tiles: ParticipantView[] = [];
   if (snapshot.local) {
@@ -1391,6 +1506,7 @@ export function InRoomScreen(props: InRoomScreenProps): ReactElement {
       isSpeaking: snapshot.local.isSpeaking,
       isLocal: true,
       muted,
+      ghost: localGhost,
       screenTrack: findScreenTrack(snapshot.local),
       cameraTrack: findCameraTrack(snapshot.local),
       quality: snapshot.local.connectionQuality ?? "unknown",
@@ -1403,6 +1519,7 @@ export function InRoomScreen(props: InRoomScreenProps): ReactElement {
       isSpeaking: remote.isSpeaking,
       isLocal: false,
       muted: isRemoteMuted(remote),
+      ghost: remote.attributes?.["ghost"] === "1",
       screenTrack: findScreenTrack(remote),
       cameraTrack: findCameraTrack(remote),
       quality: remote.connectionQuality ?? "unknown",
@@ -1411,6 +1528,10 @@ export function InRoomScreen(props: InRoomScreenProps): ReactElement {
 
   const sharing = hasScreenShare(snapshot.local);
   const cameraOn = snapshot.local?.isCameraEnabled ?? false;
+  // Deck 2.5: only participants with a live video/share go in the tile grid;
+  // everyone else renders as a compact audio circle (names live in the sidebar).
+  const videoTiles = tiles.filter((t) => t.screenTrack !== null || t.cameraTrack !== null);
+  const audioOnlyTiles = tiles.filter((t) => t.screenTrack === null && t.cameraTrack === null);
   const sharingParticipants = tiles.filter((t) => t.screenTrack !== null);
   const maximizedTile = maximizedId ? tiles.find((t) => t.id === maximizedId) : null;
   const menuParticipant = menu ? tiles.find((t) => t.id === menu.participantId) : null;
@@ -1520,119 +1641,131 @@ export function InRoomScreen(props: InRoomScreenProps): ReactElement {
       style={{ display: "grid", gridTemplateRows: "auto 1fr auto", height: "100%" }}
       onClick={() => setMenu(null)}
     >
-      {/* Top bar */}
+      {/* Top bar (2.5): room title ▾ opens the room panel; live + E2EE pills */}
       <header
         style={{
           display: "flex",
           alignItems: "center",
-          justifyContent: "space-between",
-          padding: "var(--s-3) var(--s-5)",
+          gap: "var(--s-4)",
+          height: "3.25rem",
+          padding: "0 var(--s-4) 0 var(--s-5)",
           borderBottom: "1px solid var(--border-soft)",
-          background: "color-mix(in oklch, var(--rv-ink-0) 30%, transparent)",
+          background: "var(--bg)",
         }}
       >
-        <div style={{ display: "flex", alignItems: "center", gap: "var(--s-3)" }}>
-          <I.Logo size={20} />
-          <span className="rv-label">IN ROOM</span>
-          <span className="rv-badge" data-tone="live">
-            <span className="pip" /> LIVE · {fmtTime(elapsed)}
+        <button
+          type="button"
+          onMouseDown={(e) => e.stopPropagation()}
+          onClick={() => setRoomInfoOpen((v) => !v)}
+          title="Room info + settings"
+          style={{
+            appearance: "none",
+            background: "transparent",
+            border: 0,
+            padding: 0,
+            cursor: "pointer",
+            display: "inline-flex",
+            alignItems: "center",
+            gap: 6,
+            fontSize: "var(--t-base)",
+            fontWeight: 600,
+            color: "var(--text)",
+            letterSpacing: "-0.005em",
+          }}
+        >
+          {roomName ?? "Room"}
+          <span style={{ fontSize: 9, color: "var(--text-dim)" }}>▾</span>
+        </button>
+        <span
+          style={{
+            height: "1.4rem",
+            padding: "0 var(--s-3)",
+            borderRadius: "var(--r-pill)",
+            background: "color-mix(in srgb, var(--accent) 10%, transparent)",
+            border: "1px solid color-mix(in srgb, var(--accent) 45%, transparent)",
+            color: "var(--accent)",
+            fontFamily: "var(--font-mono)",
+            fontSize: 10,
+            letterSpacing: ".14em",
+            textTransform: "uppercase",
+            display: "inline-flex",
+            alignItems: "center",
+            gap: 6,
+          }}
+        >
+          <span style={{ width: 6, height: 6, borderRadius: "50%", background: "var(--accent)" }} />
+          Live · {fmtTime(elapsed)}
+        </span>
+        {snapshot.e2eeEnabled && (
+          <span
+            title="Calls in this room are end-to-end encrypted. The server can't read them."
+            style={{
+              height: "1.25rem",
+              padding: "0 var(--s-2)",
+              borderRadius: "var(--r-pill)",
+              background: "color-mix(in srgb, var(--ok) 8%, transparent)",
+              border: "1px solid color-mix(in srgb, var(--ok) 40%, transparent)",
+              color: "var(--ok)",
+              fontFamily: "var(--font-mono)",
+              fontSize: 9,
+              letterSpacing: ".14em",
+              textTransform: "uppercase",
+              display: "inline-flex",
+              alignItems: "center",
+              gap: 4,
+            }}
+          >
+            <I.Lock size={10} />
+            E2EE
           </span>
-          <button
-            className="rv-btn rv-btn-icon"
-            data-variant="ghost"
-            onMouseDown={(e) => e.stopPropagation()}
-            onClick={() => prefsActions().toggleFavoriteRoom(props.roomId)}
-            title={isFavorite ? "Unfavorite this room" : "Favorite this room"}
-            data-active={isFavorite}
-            style={{ padding: "0 var(--s-2)" }}
-          >
-            {isFavorite ? (
-              <I.StarFilled size={14} style={{ color: "var(--rv-amber)" }} />
-            ) : (
-              <I.Star size={14} style={{ color: "var(--text-mid)" }} />
-            )}
-          </button>
-          <button
-            className="rv-btn rv-btn-icon"
-            data-variant="ghost"
-            onMouseDown={(e) => e.stopPropagation()}
-            onClick={() => setRoomInfoOpen((v) => !v)}
-            title="Room details"
-            data-active={roomInfoOpen}
-            style={{ padding: "0 var(--s-2)" }}
-          >
-            <I.Info size={14} style={{ color: "var(--text-mid)" }} />
-          </button>
-          {snapshot.e2eeEnabled && (
-            <span
-              title="Calls in this room are end-to-end encrypted. The server can't read them."
-              style={{
-                display: "inline-flex",
-                alignItems: "center",
-                gap: 4,
-                padding: "2px 6px",
-                borderRadius: "var(--r-pill)",
-                background: "color-mix(in oklch, var(--rv-live) 18%, transparent)",
-                border: "1px solid color-mix(in oklch, var(--rv-live) 40%, transparent)",
-                color: "var(--rv-live)",
-                fontSize: 10,
-                letterSpacing: ".1em",
-                textTransform: "uppercase",
-                fontFamily: "var(--font-mono)",
-              }}
-            >
-              <I.Lock size={11} />
-              E2EE
-            </span>
+        )}
+        <button
+          className="rv-btn rv-btn-icon"
+          data-variant="ghost"
+          onMouseDown={(e) => e.stopPropagation()}
+          onClick={() => prefsActions().toggleFavoriteRoom(props.roomId)}
+          title={isFavorite ? "Unfavorite this room" : "Favorite this room"}
+          data-active={isFavorite}
+          style={{ padding: "0 var(--s-2)", height: "1.75rem", width: "1.75rem" }}
+        >
+          {isFavorite ? (
+            <I.StarFilled size={14} style={{ color: "var(--rv-amber)" }} />
+          ) : (
+            <I.Star size={14} style={{ color: "var(--text-mid)" }} />
           )}
-        </div>
+        </button>
 
-        <div style={{ display: "flex", alignItems: "center", gap: "var(--s-2)" }}>
-          {conn.phase === "connecting" ? (
-            <span
-              style={{
-                display: "inline-flex",
-                alignItems: "center",
-                gap: "var(--s-2)",
-                color: "var(--text-mid)",
-                fontFamily: "var(--font-mono)",
-                fontSize: "var(--t-2xs)",
-                letterSpacing: ".06em",
-                textTransform: "uppercase",
-              }}
-            >
-              <Spinner /> Connecting…
-            </span>
-          ) : conn.phase === "error" ? (
-            <span
-              className="rv-mono"
-              style={{
-                color: "var(--accent-glow)",
-                fontSize: "var(--t-2xs)",
-              }}
-            >
-              Error: {conn.message}
-            </span>
-          ) : null}
-          <CopyLinkButton roomId={props.roomId} serverUrl={serverUrl} />
-          <button
-            className="rv-btn rv-btn-icon"
-            data-variant="ghost"
-            onClick={() => setChatOpen((c) => !c)}
-            title="Toggle chat"
-            data-active={chatOpen}
+        <span style={{ flex: 1 }} />
+
+        {conn.phase === "connecting" ? (
+          <span
+            style={{
+              display: "inline-flex",
+              alignItems: "center",
+              gap: "var(--s-2)",
+              color: "var(--text-mid)",
+              fontFamily: "var(--font-mono)",
+              fontSize: "var(--t-2xs)",
+              letterSpacing: ".06em",
+              textTransform: "uppercase",
+            }}
           >
-            <I.Chat size={16} />
-          </button>
-          <button
-            className="rv-btn rv-btn-icon"
-            data-variant="ghost"
-            onClick={() => setSettingsOpen(true)}
-            title="Settings"
-          >
-            <I.Settings size={16} />
-          </button>
-        </div>
+            <Spinner /> Connecting…
+          </span>
+        ) : conn.phase === "error" ? (
+          <span className="rv-mono" style={{ color: "var(--danger)", fontSize: "var(--t-2xs)" }}>
+            Error: {conn.message}
+          </span>
+        ) : null}
+        <CopyLinkButton roomId={props.roomId} serverUrl={serverUrl} />
+        <button
+          className="rv-btn rv-btn-icon"
+          data-variant="ghost"
+          onClick={() => setSettingsOpen(true)}
+          title="Settings"
+        >
+          <I.Settings size={16} />
+        </button>
       </header>
 
       {/* Body */}
@@ -1644,116 +1777,135 @@ export function InRoomScreen(props: InRoomScreenProps): ReactElement {
           position: "relative",
         }}
       >
-        {/* Sidebar */}
+        {/* Participant sidebar (2.5 pside) */}
         <aside
-          className="rv-scroll"
           style={{
             borderRight: "1px solid var(--border-soft)",
-            padding: "var(--s-5)",
-            overflow: "auto",
-            background: "color-mix(in oklch, var(--rv-ink-0) 25%, transparent)",
+            background: "var(--bg)",
+            display: "flex",
+            flexDirection: "column",
+            minHeight: 0,
           }}
         >
-          <div className="rv-section-head">
-            <span className="rv-label">Participants</span>
-            <span
-              className="rv-mono"
-              style={{ fontSize: "var(--t-2xs)", color: "var(--text-faint)" }}
-            >
-              {tiles.length}
-            </span>
+          <div style={{ padding: "var(--s-3)", borderBottom: "1px solid var(--border-soft)", flexShrink: 0 }}>
+            <input
+              className="rv-input"
+              placeholder="Find participant…"
+              value={psearch}
+              onChange={(e) => setPsearch(e.target.value)}
+              style={{ height: "1.9rem", fontSize: "var(--t-xs)" }}
+            />
           </div>
-          <div className="rv-list">
-            {tiles.map((tile) => {
-              const tileSharing = tile.screenTrack !== null;
-              return (
-                <div
-                  key={tile.id}
-                  className="rv-list-item"
-                  data-active={tileSharing}
-                  onContextMenu={(e) => {
-                    e.preventDefault();
-                    setMenu({ participantId: tile.id, x: e.clientX, y: e.clientY });
-                  }}
-                >
-                  <div style={{ position: "relative" }}>
-                    <Avatar
-                      src={null}
-                      fallbackInitials={tile.name}
-                      fallbackColorSeed={tile.id}
-                      size={28}
-                    />
-                    {tile.isSpeaking && (
-                      <span className="rv-speaking-ring" style={{ inset: -2 }} />
-                    )}
-                  </div>
-                  <div
-                    style={{
-                      display: "flex",
-                      flexDirection: "column",
-                      gap: 1,
-                      minWidth: 0,
-                    }}
-                  >
-                    <span
+          <div className="rv-scroll" style={{ flex: 1, overflow: "auto", padding: "var(--s-3) var(--s-2)" }}>
+            <div
+              className="rv-label"
+              style={{
+                padding: "var(--s-1) var(--s-2) var(--s-2)",
+                fontSize: "var(--t-2xs)",
+                display: "flex",
+                justifyContent: "space-between",
+              }}
+            >
+              <span>Participants</span>
+              <span style={{ color: "var(--text-faint)", fontWeight: 500 }}>{tiles.length}</span>
+            </div>
+            <div className="rv-list">
+              {tiles
+                .filter((t) => t.name.toLowerCase().includes(psearch.trim().toLowerCase()))
+                .map((tile) => {
+                  const tileSharing = tile.screenTrack !== null;
+                  const rtt = snapshot.rttByParticipant[tile.id];
+                  const metaBits: string[] = [];
+                  if (tileSharing) metaBits.push("sharing");
+                  if (tile.ghost) metaBits.push("ghost");
+                  if (rtt !== undefined) metaBits.push(`${Math.round(rtt)}ms`);
+                  return (
+                    <div
+                      key={tile.id}
+                      className="rv-list-item"
                       style={{
-                        fontSize: "var(--t-sm)",
-                        display: "flex",
-                        alignItems: "center",
-                        gap: 6,
+                        gridTemplateColumns: "30px 1fr auto",
+                        ...(tile.ghost ? { opacity: 0.65 } : null),
+                        ...(tile.isSpeaking ? { background: "var(--bg-elev-2)" } : null),
+                      }}
+                      onContextMenu={(e) => {
+                        e.preventDefault();
+                        setMenu({ participantId: tile.id, x: e.clientX, y: e.clientY });
                       }}
                     >
-                      {tile.name}
-                      {tile.isLocal && <span style={{ color: "var(--text-faint)" }}>(you)</span>}
-                      {tileSharing && (
-                        <I.Screen size={10} style={{ color: "var(--accent-glow)" }} />
-                      )}
-                    </span>
-                    <span
-                      className="rv-mono"
-                      style={{
-                        fontSize: 10,
-                        color: "var(--text-faint)",
-                      }}
-                    >
-                      {tileSharing ? "sharing" : tile.isSpeaking ? "speaking" : "idle"}
-                      {snapshot.rttByParticipant[tile.id] !== undefined && (
+                      <div style={{ position: "relative" }}>
+                        <Avatar
+                          src={null}
+                          fallbackInitials={tile.name}
+                          fallbackColorSeed={tile.id}
+                          size={28}
+                        />
+                        {tile.isSpeaking && (
+                          <span
+                            style={{
+                              position: "absolute",
+                              inset: -2,
+                              borderRadius: "50%",
+                              boxShadow: "0 0 0 2px var(--rv-live)",
+                              pointerEvents: "none",
+                            }}
+                          />
+                        )}
+                      </div>
+                      <div style={{ display: "flex", flexDirection: "column", gap: 1, minWidth: 0 }}>
                         <span
                           style={{
-                            marginLeft: 6,
-                            color:
-                              snapshot.rttByParticipant[tile.id]! < 150
-                                ? "var(--text-faint)"
-                                : snapshot.rttByParticipant[tile.id]! < 400
-                                  ? "var(--rv-amber)"
-                                  : "var(--accent-glow)",
+                            fontSize: "var(--t-sm)",
+                            display: "flex",
+                            alignItems: "baseline",
+                            gap: 4,
+                            whiteSpace: "nowrap",
+                            overflow: "hidden",
+                            textOverflow: "ellipsis",
                           }}
                         >
-                          · {Math.round(snapshot.rttByParticipant[tile.id]!)}ms
+                          {tile.name}
+                          {tile.isLocal && (
+                            <span style={{ color: "var(--text-dim)", fontSize: "var(--t-xs)" }}>(you)</span>
+                          )}
                         </span>
-                      )}
-                    </span>
-                  </div>
-                  {tile.muted ? (
-                    <I.MicOff size={12} style={{ color: "var(--text-faint)" }} />
-                  ) : (
-                    <MiniVu active={tile.isSpeaking} />
-                  )}
-                </div>
-              );
-            })}
+                        {metaBits.length > 0 && (
+                          <span className="rv-mono" style={{ fontSize: 9, color: "var(--text-faint)" }}>
+                            {metaBits.join(" · ")}
+                          </span>
+                        )}
+                      </div>
+                      <span style={{ display: "inline-flex", alignItems: "center", gap: 4 }}>
+                        {tile.ghost ? (
+                          <span title="Ghost" style={{ fontSize: 11, color: "var(--rv-amber)" }}>👻</span>
+                        ) : tileSharing ? (
+                          <I.Screen size={11} style={{ color: "var(--ok)" }} />
+                        ) : null}
+                        {tile.muted ? (
+                          <I.MicOff size={12} style={{ color: "var(--text-faint)" }} />
+                        ) : (
+                          <MiniVu active={tile.isSpeaking} />
+                        )}
+                      </span>
+                    </div>
+                  );
+                })}
+            </div>
           </div>
-
         </aside>
 
-        {/* Tiles */}
+        {/* Tiles (2.5): video/share tiles in the grid, audio-only as circles */}
         <main
           className="rv-scroll"
           style={{
-            padding: "var(--s-5)",
+            padding: "var(--s-4)",
             overflow: "auto",
             minHeight: 0,
             containerType: "inline-size",
+            background: "var(--bg-elev-2)",
+            display: "grid",
+            gridTemplateRows: "1fr auto",
+            gap: "var(--s-3)",
           }}
         >
           {useSpeaker ? (
@@ -1763,8 +1915,41 @@ export function InRoomScreen(props: InRoomScreenProps): ReactElement {
               focusedId={effectiveFocusedId}
               callbacks={tileCallbacks}
             />
+          ) : videoTiles.length > 0 ? (
+            <GridLayout people={videoTiles} callbacks={tileCallbacks} />
           ) : (
-            <GridLayout people={tiles} callbacks={tileCallbacks} />
+            /* Voice-only room (2.5b): centered large circles */
+            <div
+              style={{
+                display: "flex",
+                flexWrap: "wrap",
+                gap: "var(--s-5)",
+                alignItems: "center",
+                justifyContent: "center",
+                alignContent: "center",
+              }}
+            >
+              {audioOnlyTiles.map((t) => (
+                <AudioCircle key={t.id} tile={t} size={72} callbacks={tileCallbacks} />
+              ))}
+            </div>
+          )}
+
+          {!useSpeaker && videoTiles.length > 0 && audioOnlyTiles.length > 0 && (
+            <div
+              className="rv-scroll"
+              style={{
+                display: "flex",
+                gap: "var(--s-3)",
+                alignItems: "center",
+                overflowX: "auto",
+                padding: "2px",
+              }}
+            >
+              {audioOnlyTiles.map((t) => (
+                <AudioCircle key={t.id} tile={t} size={52} callbacks={tileCallbacks} />
+              ))}
+            </div>
           )}
         </main>
 
@@ -1844,74 +2029,102 @@ export function InRoomScreen(props: InRoomScreenProps): ReactElement {
         />
       )}
 
-      {/* Control bar */}
+      {/* Control bar (2.5): three clusters — [mic·cam·ghost] | [share·audio] | [chat·leave] */}
       <footer
         style={{
-          padding: "var(--s-4) var(--s-5)",
+          height: "5.5rem",
+          padding: "0 var(--s-5)",
           borderTop: "1px solid var(--border-soft)",
-          background: "color-mix(in oklch, var(--rv-ink-0) 50%, transparent)",
-          backdropFilter: "blur(8px)",
+          background: "var(--bg)",
           display: "grid",
           gridTemplateColumns: "1fr auto 1fr",
           alignItems: "center",
         }}
       >
         <div style={{ display: "flex", alignItems: "center" }}>
-          {muted && (
+          {muted && !localGhost && (
             <span
               className="rv-mono"
               style={{
                 fontSize: 10,
                 letterSpacing: ".12em",
                 textTransform: "uppercase",
-                color: "var(--accent-glow)",
+                color: "var(--danger)",
                 padding: "3px 8px",
-                border: "1px solid color-mix(in oklch, var(--accent) 35%, transparent)",
+                border: "1px solid color-mix(in srgb, var(--danger) 45%, transparent)",
                 borderRadius: 999,
-                background: "color-mix(in oklch, var(--accent) 8%, transparent)",
+                background: "color-mix(in srgb, var(--danger) 10%, transparent)",
               }}
             >
               ● muted
             </span>
           )}
+          {localGhost && (
+            <span
+              className="rv-mono"
+              style={{
+                fontSize: 10,
+                letterSpacing: ".12em",
+                textTransform: "uppercase",
+                color: "var(--rv-amber)",
+                padding: "3px 8px",
+                border: "1px solid color-mix(in srgb, var(--rv-amber) 45%, transparent)",
+                borderRadius: 999,
+                background: "color-mix(in srgb, var(--rv-amber) 10%, transparent)",
+              }}
+            >
+              👻 ghost
+            </span>
+          )}
         </div>
 
-        <div style={{ display: "flex", gap: "var(--s-3)" }}>
-          <ControlButton
-            icon={muted ? <I.MicOff size={20} /> : <I.Mic size={20} />}
-            label={muted ? "Unmute" : "Mute"}
-            active={!muted}
-            danger={muted}
-            onClick={() => void roomWrapper.setMuted(!muted)}
-          />
-          <ControlButton
-            icon={sharing ? <I.ScreenOff size={20} /> : <I.Screen size={20} />}
-            label={sharing ? "Stop share" : "Share screen"}
-            active={sharing}
-            emphasis={sharing}
-            onClick={() => void handleToggleScreen()}
-          />
-          {sharing && (
-            <ShareAudioControl
-              enabled={snapshot.screenShareAudioEnabled}
-              roomWrapper={roomWrapper}
+        <div style={{ display: "flex", gap: "var(--s-4)", alignItems: "center" }}>
+          <div style={{ display: "flex", gap: "var(--s-3)" }}>
+            <ControlButton
+              icon={muted ? <I.MicOff size={20} /> : <I.Mic size={20} />}
+              label={muted ? "Unmute" : "Mute"}
+              danger={muted}
+              onClick={() => void roomWrapper.setMuted(!muted)}
             />
-          )}
-          <CameraControl cameraOn={cameraOn} roomWrapper={roomWrapper} />
-          <ControlButton
-            icon={<I.Headphones size={20} />}
-            label={deafened ? "Undeafen" : "Deafen"}
-            active={!deafened}
-            danger={deafened}
-            onClick={() => setDeafened((d) => !d)}
-          />
-          <div style={{ width: 1, background: "var(--border-soft)", margin: "0 var(--s-2)" }} />
-          <ControlButton
-            icon={<I.Leave size={20} />}
-            label="Leave"
-            leave
-            onClick={() => void handleLeave()}
-          />
+            <CameraControl cameraOn={cameraOn} roomWrapper={roomWrapper} />
+            <ControlButton
+              icon={<span style={{ fontSize: 20, lineHeight: 1 }}>👻</span>}
+              label="Ghost"
+              danger={localGhost}
+              title="Ghost — mic and camera off together"
+              onClick={() => void roomWrapper.setGhost(!localGhost)}
+            />
+          </div>
+          <span style={{ width: 1, height: "2rem", background: "var(--border)" }} />
+          <div style={{ display: "flex", gap: "var(--s-3)" }}>
+            <ControlButton
+              icon={sharing ? <I.ScreenOff size={20} /> : <I.Screen size={20} />}
+              label={sharing ? "Stop share" : "Share"}
+              active={sharing}
+              onClick={() => void handleToggleScreen()}
+            />
+            {sharing && (
+              <ShareAudioControl
+                enabled={snapshot.screenShareAudioEnabled}
+                roomWrapper={roomWrapper}
+              />
+            )}
+          </div>
+          <span style={{ width: 1, height: "2rem", background: "var(--border)" }} />
+          <div style={{ display: "flex", gap: "var(--s-3)" }}>
+            <ControlButton
+              icon={<I.Chat size={20} />}
+              label="Chat"
+              active={chatOpen}
+              onClick={() => setChatOpen((c) => !c)}
+            />
+            <ControlButton
+              icon={<I.Leave size={20} />}
+              label="Leave"
+              leave
+              onClick={() => void handleLeave()}
+            />
+          </div>
         </div>
 
         <div

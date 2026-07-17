@@ -9,7 +9,7 @@ import { ContextMenu, MenuItem, MenuDivider, MenuSection } from "../components/C
 import { CreateRoomModal } from "../components/CreateRoomModal.js";
 import { InviteCreateModal } from "../components/InviteCreateModal.js";
 import { InRoomScreen } from "./InRoomScreen.js";
-import { PreJoinScreen, type PreJoinSelection } from "./PreJoinScreen.js";
+import { buildJoinSelection, type JoinSelection } from "../lib/join-selection.js";
 import { InvitePreviewScreen } from "./InvitePreviewScreen.js";
 
 function useRoomsStore<T>(store: ReturnType<typeof createRoomsStore>, selector: (s: RoomsState) => T): T {
@@ -19,8 +19,7 @@ function useRoomsStore<T>(store: ReturnType<typeof createRoomsStore>, selector: 
 type Phase =
   | { kind: "lobby" }
   | { kind: "invite"; code: string }
-  | { kind: "prejoin"; roomId: string }
-  | { kind: "inroom"; roomId: string; selection: PreJoinSelection };
+  | { kind: "inroom"; roomId: string; selection: JoinSelection };
 
 function initialsFromName(name: string): string {
   return name.split(" ").map((s) => s[0] ?? "").slice(0, 2).join("").toUpperCase() || "?";
@@ -115,11 +114,26 @@ export function LobbyScreen({ pendingInviteCode, pendingJoinRoomId, onInviteCode
     }
   }, [pendingInviteCode, phase.kind]);
 
+  // Deck rule: no pre-join screen (4.5 removed) — joins go straight in,
+  // muted, with the persisted device/quality prefs.
+  const joinMicDeviceId = usePrefs((s) => s.micDeviceId);
+  const joinSpeakerDeviceId = usePrefs((s) => s.speakerDeviceId);
+  const joinResolution = usePrefs((s) => s.resolution);
+  const joinFrameRate = usePrefs((s) => s.frameRate);
   useEffect(() => {
     if (activeRoomId && phase.kind === "lobby") {
-      setPhase({ kind: "prejoin", roomId: activeRoomId });
+      setPhase({
+        kind: "inroom",
+        roomId: activeRoomId,
+        selection: buildJoinSelection({
+          micDeviceId: joinMicDeviceId,
+          speakerDeviceId: joinSpeakerDeviceId,
+          resolution: joinResolution,
+          frameRate: joinFrameRate,
+        }),
+      });
     }
-  }, [activeRoomId, phase.kind]);
+  }, [activeRoomId, phase.kind, joinMicDeviceId, joinSpeakerDeviceId, joinResolution, joinFrameRate]);
 
   // Deep-link consumer: redvoice://join/<uuid> → auto-open the prejoin flow.
   // Preload replays any queued event on subscribe, so cold-start with a
@@ -201,19 +215,6 @@ export function LobbyScreen({ pendingInviteCode, pendingJoinRoomId, onInviteCode
         }}
         onCancel={() => {
           onInviteCodeConsumed?.();
-          setPhase({ kind: "lobby" });
-        }}
-      />
-    );
-  }
-
-  if (phase.kind === "prejoin") {
-    return (
-      <PreJoinScreen
-        roomId={phase.roomId}
-        onJoin={(selection) => setPhase({ kind: "inroom", roomId: phase.roomId, selection })}
-        onCancel={() => {
-          store.getState().clearActive();
           setPhase({ kind: "lobby" });
         }}
       />

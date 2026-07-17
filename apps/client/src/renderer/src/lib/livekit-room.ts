@@ -415,6 +415,9 @@ export class LiveKitRoom {
     this.room.on(RoomEvent.TrackMuted, () => this.emit());
     this.room.on(RoomEvent.TrackUnmuted, () => this.emit());
     this.room.on(RoomEvent.ActiveSpeakersChanged, () => this.emit());
+    // Ghost state travels as a participant attribute (deck: Ghost replaces
+    // Deafen — mic+cam off together, visible to everyone as 👻).
+    this.room.on(RoomEvent.ParticipantAttributesChanged, () => this.emit());
     this.room.on(RoomEvent.LocalTrackPublished, (pub) => {
       // pub.mimeType is empty at publish time — SDP negotiation hasn't
       // settled. Poll the RTCRtpSender's getParameters() after a beat
@@ -877,6 +880,20 @@ export class LiveKitRoom {
 
   async setMuted(muted: boolean): Promise<void> {
     await this.room.localParticipant.setMicrophoneEnabled(!muted);
+    this.emit();
+  }
+
+  /** Ghost = mic + cam off together, advertised to peers via attributes. */
+  async setGhost(on: boolean): Promise<void> {
+    if (on) {
+      await this.room.localParticipant.setMicrophoneEnabled(false);
+      if (this.room.localParticipant.isCameraEnabled) {
+        await this.room.localParticipant.setCameraEnabled(false);
+      }
+    } else {
+      await this.room.localParticipant.setMicrophoneEnabled(true);
+    }
+    await this.room.localParticipant.setAttributes({ ghost: on ? "1" : "" });
     this.emit();
   }
 
