@@ -1,4 +1,4 @@
-import { useState, type ReactElement, type ReactNode } from "react";
+import { useEffect, useState, type ReactElement, type ReactNode } from "react";
 import { useAuthStore } from "../lib/auth-context.js";
 import { Avatar } from "./Avatar.js";
 import { I } from "./Icons.js";
@@ -6,6 +6,13 @@ import { UserPanelPopover } from "./UserPanelPopover.js";
 import { NotificationsPanel } from "./NotificationsPanel.js";
 import { UnreadDot } from "./UnreadDot.js";
 import { useUnreadStore } from "../lib/unread-store.js";
+import {
+  useNotificationsStore,
+  unseenCount,
+  wireNotificationsToTransport,
+  configureNotificationsApi,
+} from "../lib/notifications-store.js";
+import { ApiClient } from "../lib/api.js";
 
 export type TopPage = "lobby" | "dms" | "friends";
 
@@ -13,6 +20,8 @@ type Props = {
   active: TopPage;
   onNavigate(page: TopPage): void;
   onOpenSettings(): void;
+  /** Directed-invite Join action (4.15): route into a room via the lobby. */
+  onJoinRoom?(roomId: string): void;
 };
 
 function NavIcon({
@@ -48,12 +57,28 @@ function NavIcon({
   );
 }
 
-export function LeftIconColumn({ active, onNavigate, onOpenSettings }: Props): ReactElement {
+export function LeftIconColumn({ active, onNavigate, onOpenSettings, onJoinRoom }: Props): ReactElement {
   const me = useAuthStore((s) => s.user);
+  const serverUrl = useAuthStore((s) => s.serverUrl);
+  const token = useAuthStore((s) => s.token);
   const logout = useAuthStore((s) => s.logout);
   const [userPanelOpen, setUserPanelOpen] = useState(false);
   const [bellOpen, setBellOpen] = useState(false);
   const totalUnread = useUnreadStore((s) => s.totalUnread);
+  const bellCount = useNotificationsStore((s) => unseenCount(s));
+  const notifLoaded = useNotificationsStore((s) => s.loaded);
+  const notifRefresh = useNotificationsStore((s) => s.refresh);
+
+  // Badge must be live before the panel is ever opened.
+  useEffect(() => {
+    configureNotificationsApi(() => {
+      const api = new ApiClient(serverUrl);
+      api.setToken(token);
+      return api;
+    });
+    wireNotificationsToTransport();
+    if (!notifLoaded) void notifRefresh();
+  }, [serverUrl, token, notifLoaded, notifRefresh]);
 
   return (
     <nav
@@ -91,11 +116,18 @@ export function LeftIconColumn({ active, onNavigate, onOpenSettings }: Props): R
         <NavIcon active={bellOpen} onClick={() => setBellOpen((v) => !v)} ariaLabel="Notifications">
           <I.Bell size={16} />
         </NavIcon>
+        {bellCount > 0 && (
+          <span style={{ position: "absolute", top: -4, right: -4, pointerEvents: "none" }}>
+            <UnreadDot count={bellCount} />
+          </span>
+        )}
         <NotificationsPanel
           open={bellOpen}
           onClose={() => setBellOpen(false)}
           onOpenDms={() => onNavigate("dms")}
           onOpenFriends={() => onNavigate("friends")}
+          onJoinRoom={onJoinRoom}
+          onOpenSettings={onOpenSettings}
         />
       </div>
 

@@ -40,7 +40,7 @@ interface MessageDTO {
   mentions?: string[];
 }
 
-function toDTO(m: {
+export function toDTO(m: {
   id: string;
   threadType: string;
   threadId: string;

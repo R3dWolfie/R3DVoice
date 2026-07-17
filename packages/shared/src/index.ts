@@ -162,6 +162,32 @@ export interface DmThreadsResponse {
   threads: DmThreadEntry[];
 }
 
+/** One row of the bell's Mentions tab (4.15): a message that @-mentioned the caller. */
+export interface MentionFeedItemDTO {
+  message: ChatMessageDTO;
+  /** Room context when the mention happened in room chat; null for DMs. */
+  roomId: string | null;
+  roomName: string | null;
+}
+
+/** Person-to-person room invite (4.15 Invites tab / 4.16 invite-friends). */
+export interface DirectInviteDTO {
+  id: string;
+  room: { id: string; name: string };
+  from: { id: string; displayName: string; handle: string | null; avatarUrl: string | null };
+  /** Users currently in the room's call when the feed was built. */
+  membersLive: number;
+  createdAt: string;
+  expiresAt: string;
+}
+
+export interface NotificationsFeedDTO {
+  /** "Mark all read" watermark; mention rows newer than this are unseen. */
+  seenAt: string | null;
+  mentions: MentionFeedItemDTO[];
+  invites: DirectInviteDTO[];
+}
+
 /** Server → client WebSocket events. */
 export type ChatWsEvent =
   | { type: "ready"; userId: string }
@@ -178,6 +204,7 @@ export type ChatWsEvent =
   | { type: "chat.typing"; threadType: ChatThreadType; threadId: string; userId: string }
   | { type: "pinned"; message: ChatMessageDTO }
   | { type: "unpinned"; id: string; threadType: ChatThreadType; threadId: string }
+  | { type: "invite.direct"; invite: DirectInviteDTO }
   | { type: "reaction"; op: "add" | "remove"; messageId: string; threadType: ChatThreadType; threadId: string; emoji: string; userId: string };
 
 /** Client → server WebSocket frames. */

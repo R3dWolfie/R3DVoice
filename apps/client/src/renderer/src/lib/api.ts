@@ -25,6 +25,8 @@ import type {
   InviteDTO,
   UnreadCountsResponse,
   MuteLevel,
+  NotificationsFeedDTO,
+  DirectInviteDTO,
 } from "@r3dvoice/shared";
 
 export class ApiError extends Error {
@@ -194,6 +196,21 @@ export class ApiClient {
   }
   listPublicRooms(): Promise<PublicRoomsResponse> {
     return this.request("GET", "/rooms/public");
+  }
+  notificationsFeed(): Promise<NotificationsFeedDTO> {
+    return this.request("GET", "/notifications/feed");
+  }
+  notificationsReadAll(): Promise<void> {
+    return this.request("POST", "/notifications/read-all");
+  }
+  roomInviteUser(roomId: string, userId: string): Promise<{ invite: DirectInviteDTO }> {
+    return this.request("POST", `/rooms/${encodeURIComponent(roomId)}/invite-user`, { userId });
+  }
+  directInviteAccept(id: string): Promise<{ roomId: string }> {
+    return this.request("POST", `/invites/direct/${encodeURIComponent(id)}/accept`);
+  }
+  directInviteDecline(id: string): Promise<void> {
+    return this.request("POST", `/invites/direct/${encodeURIComponent(id)}/decline`);
   }
   listRoomMembers(id: string): Promise<RoomMemberDTO[]> {
     return this.request("GET", `/rooms/${encodeURIComponent(id)}/members`);

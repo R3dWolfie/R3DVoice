@@ -53,7 +53,7 @@ spots; the app deliberately runs `--accent` = Cherry (#e11d48) at
 4. TOTP backup codes → 3.3b
 5. Pins (pin/unpin/list) → 2.5p
 6. Message reactions → completes 2.5k
-7. Mentions history + directed room invites → completes 4.15 bell tabs
+7. ~~Mentions history + directed room invites~~ DONE — 4.15 bell tabs live (feed endpoint, DirectInvite table, count-badged tabs, day groups, Join/Later, Mark-all-read watermark, bell badge, 4.16 invite-friends rows)
 
 ## C — blocked on decisions
 1. SMTP provider (Migadu available) → 1.5, 1.6, 1.7 email flows

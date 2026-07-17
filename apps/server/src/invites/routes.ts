@@ -1,10 +1,11 @@
 import type { FastifyInstance } from "fastify";
 import { z } from "zod";
 import { Prisma } from "@prisma/client";
-import { createInviteSchema, type InviteDTO } from "@r3dvoice/shared";
+import { createInviteSchema, type InviteDTO, type DirectInviteDTO } from "@r3dvoice/shared";
 import { prisma } from "../db.js";
 import { requireAuth } from "../auth/middleware.js";
 import { ForbiddenError, NotFoundError, ValidationError } from "../errors.js";
+import { isBlockedPair } from "../friends/routes.js";
 import { generateInviteCode } from "./code.js";
 import { renderInvitePreview, renderInviteNotFound } from "./preview-html.js";
 import { sendToUser } from "../chat/ws-state.js";
@@ -312,4 +313,120 @@ export async function inviteRoutes(app: FastifyInstance): Promise<void> {
       reply.type("text/html").send(html);
     },
   );
+}
+
+const inviteUserSchema = z.object({ userId: z.string().uuid() });
+
+const DIRECT_INVITE_TTL_MS = 24 * 3_600_000;
+
+async function directInviteDTO(inv: {
+  id: string; createdAt: Date; expiresAt: Date;
+  room: { id: string; name: string };
+  from: { id: string; displayName: string; handle: string | null; avatarUrl: string | null };
+}): Promise<DirectInviteDTO> {
+  const live = await prisma.user.count({ where: { currentRoomId: inv.room.id } });
+  return {
+    id: inv.id,
+    room: { id: inv.room.id, name: inv.room.name },
+    from: {
+      id: inv.from.id,
+      displayName: inv.from.displayName,
+      handle: inv.from.handle,
+      avatarUrl: inv.from.avatarUrl,
+    },
+    membersLive: live,
+    createdAt: inv.createdAt.toISOString(),
+    expiresAt: inv.expiresAt.toISOString(),
+  };
+}
+
+/** Person-to-person room invites (4.15 bell Invites tab / 4.16). */
+export async function directInviteRoutes(app: FastifyInstance): Promise<void> {
+  // POST /rooms/:id/invite-user — invite one specific user to a room.
+  app.post<{ Params: { id: string } }>(
+    "/rooms/:id/invite-user",
+    { preHandler: requireAuth },
+    async (request, reply) => {
+      const userId = request.auth!.userId;
+      const roomId = request.params.id;
+      const parsed = inviteUserSchema.safeParse(request.body);
+      if (!parsed.success) throw new ValidationError("invalid input");
+      const targetId = parsed.data.userId;
+      if (targetId === userId) throw new ValidationError("cannot invite yourself");
+
+      const room = await prisma.room.findUnique({ where: { id: roomId } });
+      if (!room) throw new NotFoundError("room not found");
+      // Sender must have standing in the room: owner or member.
+      if (room.ownerId !== userId) {
+        const member = await prisma.roomMembership.findUnique({
+          where: { userId_roomId: { userId, roomId } },
+        });
+        if (!member && !room.isPublic) throw new ForbiddenError("not a member of this room");
+      }
+
+      const target = await prisma.user.findUnique({ where: { id: targetId }, select: { id: true } });
+      if (!target) throw new NotFoundError("user not found");
+      if (await isBlockedPair(userId, targetId)) throw new ForbiddenError("cannot invite this user");
+
+      // One pending invite per (room, target) — replace, don't stack.
+      await prisma.directInvite.deleteMany({
+        where: { roomId, toUserId: targetId, status: "pending" },
+      });
+      const created = await prisma.directInvite.create({
+        data: {
+          roomId,
+          fromUserId: userId,
+          toUserId: targetId,
+          expiresAt: new Date(Date.now() + DIRECT_INVITE_TTL_MS),
+        },
+        include: {
+          room: { select: { id: true, name: true } },
+          from: { select: { id: true, displayName: true, handle: true, avatarUrl: true } },
+        },
+      });
+      const dto = await directInviteDTO(created);
+      sendToUser(targetId, { type: "invite.direct", invite: dto });
+      reply.status(201).send({ invite: dto });
+    },
+  );
+
+  // POST /invites/direct/:id/accept — join path: membership is granted here so
+  // the LiveKit token mint passes even for private rooms.
+  app.post("/invites/direct/:id/accept", { preHandler: requireAuth }, async (request) => {
+    const parsed = idParamSchema.safeParse(request.params);
+    if (!parsed.success) throw new ValidationError("invalid id");
+    const userId = request.auth!.userId;
+    const inv = await prisma.directInvite.findUnique({ where: { id: parsed.data.id } });
+    if (!inv || inv.toUserId !== userId) throw new NotFoundError("invite not found");
+    if (inv.status !== "pending") throw new ValidationError("invite already handled");
+    if (inv.expiresAt.getTime() < Date.now()) throw new ValidationError("invite expired");
+
+    await prisma.$transaction([
+      prisma.directInvite.update({
+        where: { id: inv.id },
+        data: { status: "accepted", respondedAt: new Date() },
+      }),
+      prisma.roomMembership.upsert({
+        where: { userId_roomId: { userId, roomId: inv.roomId } },
+        create: { userId, roomId: inv.roomId },
+        update: { lastJoined: new Date() },
+      }),
+    ]);
+    return { roomId: inv.roomId };
+  });
+
+  // POST /invites/direct/:id/decline
+  app.post("/invites/direct/:id/decline", { preHandler: requireAuth }, async (request, reply) => {
+    const parsed = idParamSchema.safeParse(request.params);
+    if (!parsed.success) throw new ValidationError("invalid id");
+    const userId = request.auth!.userId;
+    const inv = await prisma.directInvite.findUnique({ where: { id: parsed.data.id } });
+    if (!inv || inv.toUserId !== userId) throw new NotFoundError("invite not found");
+    if (inv.status !== "pending") throw new ValidationError("invite already handled");
+    await prisma.directInvite.update({
+      where: { id: inv.id },
+      data: { status: "declined", respondedAt: new Date() },
+    });
+    reply.status(204).send();
+  });
 }

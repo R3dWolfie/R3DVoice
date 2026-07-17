@@ -43,6 +43,12 @@ model User {
   backupCodes   TotpBackupCode[]
   threadReads     ThreadReadState[]
   threadMutes     ThreadMuteState[]
+  directInvitesSent     DirectInvite[] @relation("DirectInviteFrom")
+  directInvitesReceived DirectInvite[] @relation("DirectInviteTo")
+
+  // 4.15 bell "Mark all read" watermark — mention rows older than this are
+  // counted as seen. Null = never marked (everything is fresh).
+  notificationsSeenAt DateTime?
 }
 
 model Session {
@@ -72,6 +78,7 @@ model Room {
   owner       User             @relation("RoomOwner", fields: [ownerId], references: [id], onDelete: Cascade)
   memberships RoomMembership[]
   invites     Invite[]
+  directInvites   DirectInvite[]
   presentUsers    User[]   @relation("UserCurrentRoom")
 
   @@index([ownerId])
@@ -209,4 +216,27 @@ model ThreadMuteState {
 
   @@id([userId, threadType, threadId])
   @@index([userId])
+}
+
+// Directed room invite (4.15 bell / 4.16 invite-friends): one specific user
+// invites another specific user to a room. Distinct from Invite (shareable
+// codes) — these are person-to-person, expire in 24h, and feed the bell's
+// Invites tab. At most one *pending* row per (room, target) — enforced in the
+// handler by deleting prior pending rows before create.
+model DirectInvite {
+  id          String    @id @default(uuid())
+  roomId      String
+  fromUserId  String
+  toUserId    String
+  status      String    @default("pending") // "pending" | "accepted" | "declined"
+  createdAt   DateTime  @default(now())
+  expiresAt   DateTime
+  respondedAt DateTime?
+
+  room Room @relation(fields: [roomId], references: [id], onDelete: Cascade)
+  from User @relation("DirectInviteFrom", fields: [fromUserId], references: [id], onDelete: Cascade)
+  to   User @relation("DirectInviteTo", fields: [toUserId], references: [id], onDelete: Cascade)
+
+  @@index([toUserId, status, createdAt])
+  @@index([roomId, status])
 }

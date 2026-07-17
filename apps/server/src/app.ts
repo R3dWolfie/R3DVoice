@@ -13,7 +13,7 @@ import { chatWsRoutes } from "./chat/ws.js";
 import { friendsRoutes } from "./friends/routes.js";
 import { landingRoutes } from "./landing.js";
 import { userRoutes } from "./users/routes.js";
-import { inviteRoutes } from "./invites/routes.js";
+import { inviteRoutes, directInviteRoutes } from "./invites/routes.js";
 import { notificationRoutes } from "./notifications/routes.js";
 import { presenceRoutes } from "./presence/routes.js";
 
@@ -101,6 +101,7 @@ export async function buildApp(options: BuildAppOptions = {}): Promise<FastifyIn
   await app.register(friendsRoutes);
   await app.register(userRoutes);
   await app.register(inviteRoutes);
+  await app.register(directInviteRoutes);
   await app.register(notificationRoutes);
   await app.register(presenceRoutes);
 

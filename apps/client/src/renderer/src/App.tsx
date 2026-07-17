@@ -88,6 +88,10 @@ function Router({ topPage, setTopPage }: { topPage: TopPage; setTopPage: (p: Top
           active={topPage}
           onNavigate={setTopPage}
           onOpenSettings={() => setSettingsOpen(true)}
+          onJoinRoom={(roomId) => {
+            setPendingJoinRoomId(roomId);
+            setTopPage("lobby");
+          }}
         />
         <div style={{ flex: 1, minWidth: 0 }}>
           {topPage === "lobby" ? (
