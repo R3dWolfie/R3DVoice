@@ -57,6 +57,7 @@ export interface PrefsState {
   leaveRoomKeybind: string | null;
   compatibilityMode: boolean;
   crashReporting: boolean;
+  showDiagnostics: boolean;
   noiseSuppression: NoiseSuppressionLevel;
   echoCancellation: boolean;
   autoGainControl: boolean;
@@ -102,6 +103,7 @@ export interface PrefsState {
   setLeaveRoomKeybind(k: string | null): void;
   setCompatibilityMode(v: boolean): void;
   setCrashReporting(v: boolean): void;
+  setShowDiagnostics(v: boolean): void;
   setNoiseSuppression(v: NoiseSuppressionLevel): void;
   setEchoCancellation(v: boolean): void;
   setAutoGainControl(v: boolean): void;
@@ -143,6 +145,7 @@ const DEFAULTS = {
   leaveRoomKeybind: null as string | null,
   compatibilityMode: false,
   crashReporting: false,
+  showDiagnostics: false,
   noiseSuppression: "high" as NoiseSuppressionLevel,
   echoCancellation: true,
   // Fresh installs land on the "Voice Isolation" profile (strong NS + AEC +
@@ -230,6 +233,7 @@ export function createPrefsStore(storage: PrefsStorage): StoreApi<PrefsState> {
       leaveRoomKeybind: state.leaveRoomKeybind,
       compatibilityMode: state.compatibilityMode,
       crashReporting: state.crashReporting,
+      showDiagnostics: state.showDiagnostics,
       noiseSuppression: state.noiseSuppression,
       echoCancellation: state.echoCancellation,
       autoGainControl: state.autoGainControl,
@@ -285,6 +289,7 @@ export function createPrefsStore(storage: PrefsStorage): StoreApi<PrefsState> {
     setLeaveRoomKeybind: (v) => { set({ leaveRoomKeybind: v }); persistFromState(get()); },
     setCompatibilityMode: (v) => { set({ compatibilityMode: v }); persistFromState(get()); },
     setCrashReporting: (v) => { set({ crashReporting: v }); persistFromState(get()); },
+    setShowDiagnostics: (v) => { set({ showDiagnostics: v }); persistFromState(get()); },
     setNoiseSuppression: (v) => { set({ noiseSuppression: v }); persistFromState(get()); },
     setEchoCancellation: (v) => { set({ echoCancellation: v }); persistFromState(get()); },
     setAutoGainControl: (v) => { set({ autoGainControl: v }); persistFromState(get()); },

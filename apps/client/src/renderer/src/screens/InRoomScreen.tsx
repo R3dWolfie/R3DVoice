@@ -1,4 +1,5 @@
 import {
+  memo,
   useEffect,
   useMemo,
   useRef,
@@ -36,6 +37,7 @@ import { RoomChatPanel } from "../components/RoomChatPanel.js";
 import { useKeybind } from "../lib/keybinds.js";
 import { routeElement, setMonoOutput, setMonoOutputSink } from "../lib/mono-output.js";
 import { pushToast } from "../lib/toast-store.js";
+import { setCallStats } from "../lib/telemetry.js";
 
 // True when the event started inside an element marked data-rv-pop — a menu,
 // picker, or panel (or its trigger) that must survive the capture-phase
@@ -305,7 +307,7 @@ function CtxItem({
   );
 }
 
-function Tile({
+function TileImpl({
   tile,
   fill = false,
   big,
@@ -979,7 +981,7 @@ function SourceMenuItem({
 
 // Audio-only participant circle (2.5 audio-only-strip / 2.5b voice-only):
 // dark plate, mono initials, mute-strike + ghost badge, speaking ring.
-function AudioCircle({
+function AudioCircleImpl({
   tile,
   size,
   callbacks,
@@ -1100,10 +1102,22 @@ function ControlButton({
         ? "var(--text)"
         : "var(--border)";
   const co = leave ? "#fff" : danger ? "var(--danger)" : active || emphasis ? "var(--bg)" : "var(--text)";
+  // Instant hover + press feedback. Without this the buttons looked dead —
+  // their state only changed after the LiveKit event round-tripped, so a click
+  // felt like nothing happened. The press transform registers on pointerdown.
+  const [hover, setHover] = useState(false);
+  const [pressed, setPressed] = useState(false);
   return (
     <button
       onClick={onClick}
       title={title}
+      onMouseEnter={() => setHover(true)}
+      onMouseLeave={() => {
+        setHover(false);
+        setPressed(false);
+      }}
+      onMouseDown={() => setPressed(true)}
+      onMouseUp={() => setPressed(false)}
       style={{
         appearance: "none",
         display: "flex",
@@ -1127,7 +1141,10 @@ function ControlButton({
           color: co,
           display: "grid",
           placeItems: "center",
-          transition: "all var(--d-base) var(--ease-out)",
+          transition: "transform 80ms var(--ease-out), box-shadow 120ms var(--ease-out), filter 120ms var(--ease-out)",
+          transform: pressed ? "scale(0.9)" : hover ? "scale(1.06)" : "scale(1)",
+          filter: hover && !active && !emphasis && !leave && !danger ? "brightness(1.08)" : "none",
+          boxShadow: hover ? "0 2px 10px rgba(0,0,0,0.18)" : "none",
         }}
       >
         {icon}
@@ -1147,6 +1164,34 @@ function ControlButton({
     </button>
   );
 }
+
+// Memoized tile boundaries — the fix for the in-call re-render storm. The
+// parent re-renders many times/sec (speaker/RTT/quality events); without these
+// every tile's large style tree reconciled on each render, starving click
+// handlers. The comparator checks only the fields the tiles read; screenTrack/
+// cameraTrack are stable LiveKit Track refs so === is correct.
+function tilePropsEqual(
+  a: { tile: ParticipantView; callbacks: TileCallbacks; fill?: boolean; big?: boolean; size?: number },
+  b: { tile: ParticipantView; callbacks: TileCallbacks; fill?: boolean; big?: boolean; size?: number },
+): boolean {
+  return (
+    a.callbacks === b.callbacks &&
+    a.fill === b.fill &&
+    a.big === b.big &&
+    a.size === b.size &&
+    a.tile.id === b.tile.id &&
+    a.tile.name === b.tile.name &&
+    a.tile.isSpeaking === b.tile.isSpeaking &&
+    a.tile.isLocal === b.tile.isLocal &&
+    a.tile.muted === b.tile.muted &&
+    a.tile.ghost === b.tile.ghost &&
+    a.tile.quality === b.tile.quality &&
+    a.tile.screenTrack === b.tile.screenTrack &&
+    a.tile.cameraTrack === b.tile.cameraTrack
+  );
+}
+const Tile = memo(TileImpl, tilePropsEqual);
+const AudioCircle = memo(AudioCircleImpl, tilePropsEqual);
 
 export function InRoomScreen(props: InRoomScreenProps): ReactElement {
   const token = useAuthStore((s) => s.token);
@@ -1221,6 +1266,15 @@ export function InRoomScreen(props: InRoomScreenProps): ReactElement {
             jitterMs: stats.jitterMs,
             packetsLost: stats.packetsLost,
           });
+          // Feed the diagnostics HUD (Ctrl+Shift+D).
+          setCallStats({
+            rttMs: stats.rttMs != null ? Math.round(stats.rttMs) : null,
+            packetLossPct: null,
+            videoFps: null,
+            videoRes: null,
+            freezes: null,
+            bitrateKbps: stats.bitrateKbps ?? null,
+          });
         }
       } catch { /* */ }
     };
@@ -1229,6 +1283,7 @@ export function InRoomScreen(props: InRoomScreenProps): ReactElement {
     return () => {
       cancelled = true;
       clearInterval(interval);
+      setCallStats(null);
     };
   }, [roomWrapper, conn.phase]);
 
@@ -1613,39 +1668,42 @@ export function InRoomScreen(props: InRoomScreenProps): ReactElement {
     }
   }
 
-  const tileCallbacks: TileCallbacks = {
-    onClick: (id) => {
-      // Clicking your OWN tile minimizes your self-view out of the grid
-      // (Discord behaviour) rather than focusing it on yourself.
-      if (id === snapshot.local?.identity) {
-        setSelfMinimized((v) => !v);
-        return;
-      }
-      // Single-click focuses a tile in speaker layout. Click the same tile
-      // again to clear focus and let the auto-pick (sharer/speaker) take over.
-      setFocusedId((current) => (current === id ? null : id));
-    },
-    onDoubleClick: (id, videoEl) => {
-      // If the tile has a <video> element and isn't already fullscreen,
-      // request true OS-level fullscreen on it. Otherwise toggle the in-app
-      // maximize (useful for avatar-only tiles).
-      if (videoEl && !document.fullscreenElement) {
-        setMaximizedId(id);
-        void videoEl.requestFullscreen().catch(() => {
-          // Fallback to in-app maximize if OS fullscreen refused
-        });
-        return;
-      }
-      if (document.fullscreenElement) {
-        void document.exitFullscreen();
-        return;
-      }
-      setMaximizedId((current) => (current === id ? null : id));
-    },
-    onContextMenu: (id, x, y) => {
-      setMenu({ participantId: id, x, y });
-    },
-  };
+  // Stable callbacks — required for the Tile memo comparator to skip renders.
+  // The only render-varying read (our own identity) goes through a ref so the
+  // object itself can be built once ([] deps; setState updaters are stable).
+  const localIdentityRef = useRef<string | undefined>(undefined);
+  localIdentityRef.current = snapshot.local?.identity;
+  const tileCallbacks: TileCallbacks = useMemo(
+    () => ({
+      onClick: (id) => {
+        // Clicking your OWN tile minimizes your self-view out of the grid
+        // (Discord behaviour) rather than focusing it on yourself.
+        if (id === localIdentityRef.current) {
+          setSelfMinimized((v) => !v);
+          return;
+        }
+        // Single-click focuses a tile in speaker layout. Click the same tile
+        // again to clear focus and let the auto-pick take over.
+        setFocusedId((current) => (current === id ? null : id));
+      },
+      onDoubleClick: (id, videoEl) => {
+        if (videoEl && !document.fullscreenElement) {
+          setMaximizedId(id);
+          void videoEl.requestFullscreen().catch(() => {});
+          return;
+        }
+        if (document.fullscreenElement) {
+          void document.exitFullscreen();
+          return;
+        }
+        setMaximizedId((current) => (current === id ? null : id));
+      },
+      onContextMenu: (id, x, y) => {
+        setMenu({ participantId: id, x, y });
+      },
+    }),
+    [],
+  );
 
   const muted = !(snapshot.local?.isMicrophoneEnabled ?? true);
   const localGhost = snapshot.local?.attributes?.["ghost"] === "1";

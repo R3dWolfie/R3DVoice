@@ -17,6 +17,8 @@ import { UpdateToast } from "./components/UpdateToast.js";
 import { ToastHost } from "./components/ToastHost.js";
 import { ConnectionBanner } from "./components/ConnectionBanner.js";
 import { InviteQueue } from "./components/InviteQueue.js";
+import { DiagnosticsOverlay } from "./components/DiagnosticsOverlay.js";
+import { startTelemetry } from "./lib/telemetry.js";
 import { PasswordResetScreen } from "./screens/PasswordResetScreen.js";
 import { VerifyEmailGate } from "./components/VerifyEmailGate.js";
 
@@ -234,6 +236,21 @@ export function App(): ReactElement {
     if (k) void window.r3dvoice.setPttKeybind(k);
   }, []);
 
+  // UX telemetry (measure "laggy / unresponsive" as numbers). Start the
+  // collectors once; toggle the live HUD with Ctrl+Shift+D or Settings.
+  const showDiagnostics = usePrefs((s) => s.showDiagnostics);
+  useEffect(() => {
+    startTelemetry();
+    const onKey = (e: KeyboardEvent): void => {
+      if (e.ctrlKey && e.shiftKey && (e.key === "D" || e.key === "d")) {
+        e.preventDefault();
+        prefsActions().setShowDiagnostics(!prefsActions().showDiagnostics);
+      }
+    };
+    window.addEventListener("keydown", onKey);
+    return () => window.removeEventListener("keydown", onKey);
+  }, []);
+
   // Theme (3.6): light is the deck default; dark/grey apply via
   // data-theme on <html>; "system" tracks the OS live.
   const theme = usePrefs((s) => s.theme);
@@ -261,6 +278,7 @@ export function App(): ReactElement {
   return (
     <AuthProvider>
       <Chrome />
+      <DiagnosticsOverlay open={showDiagnostics} />
     </AuthProvider>
   );
 }

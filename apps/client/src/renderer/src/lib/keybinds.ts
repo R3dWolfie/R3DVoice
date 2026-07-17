@@ -1,4 +1,4 @@
-import { useEffect } from "react";
+import { useEffect, useRef } from "react";
 
 /**
  * Match a KeyboardEvent against an Electron-Accelerator-style string like
@@ -33,6 +33,14 @@ export function useKeybind(
   options: { enabled?: boolean } = {},
 ): void {
   const enabled = options.enabled ?? true;
+  // Hold the handler in a ref so callers can pass a fresh inline arrow each
+  // render WITHOUT re-binding the global listener. Previously `handler` was in
+  // the dep array, so all five in-room keybinds tore down + re-added a window
+  // keydown listener on every render (5-15×/sec during a call) — pure churn.
+  const handlerRef = useRef(handler);
+  useEffect(() => {
+    handlerRef.current = handler;
+  });
   useEffect(() => {
     if (!enabled || !accelerator) return;
     function onKey(e: KeyboardEvent): void {
@@ -45,9 +53,9 @@ export function useKeybind(
         if (tag === "INPUT" || tag === "TEXTAREA" || target.isContentEditable) return;
       }
       e.preventDefault();
-      handler();
+      handlerRef.current();
     }
     window.addEventListener("keydown", onKey);
     return () => window.removeEventListener("keydown", onKey);
-  }, [accelerator, handler, enabled]);
+  }, [accelerator, enabled]);
 }

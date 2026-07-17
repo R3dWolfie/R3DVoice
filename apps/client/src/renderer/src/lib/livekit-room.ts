@@ -520,11 +520,23 @@ export class LiveKitRoom {
     return this.cachedSnapshot;
   }
 
+  private cachedRemotes: RemoteParticipant[] = [];
+  private remotesKey = "\u0000";
+
   private computeSnapshot(): RoomStateSnapshot {
+    // Only rebuild the remotes array when the participant SET changes — a new
+    // array reference on every emit needlessly re-runs the volume effects
+    // (which loop all remotes) on every speaker/RTT/quality tick.
+    const rs = Array.from(this.room.remoteParticipants.values());
+    const key = rs.map((r) => r.identity).join(",");
+    if (key !== this.remotesKey) {
+      this.remotesKey = key;
+      this.cachedRemotes = rs;
+    }
     return {
       connected: this.connected,
       local: this.room.localParticipant,
-      remotes: Array.from(this.room.remoteParticipants.values()),
+      remotes: this.cachedRemotes,
       error: this.err,
       screenShareAudioEnabled: this.room.localParticipant.getTrackPublication(
         Track.Source.ScreenShareAudio,
@@ -576,9 +588,20 @@ export class LiveKitRoom {
     this.emit();
   }
 
+  private emitScheduled = false;
   private emit(): void {
-    this.cachedSnapshot = this.computeSnapshot();
-    for (const l of this.listeners) l(this.cachedSnapshot);
+    // Coalesce bursts of LiveKit events (speaker/RTT/quality can fire many
+    // times per second) into at most one snapshot + notify per animation
+    // frame, so subscribers re-render ≤60 Hz instead of per-event.
+    if (this.emitScheduled) return;
+    this.emitScheduled = true;
+    const flush = (): void => {
+      this.emitScheduled = false;
+      this.cachedSnapshot = this.computeSnapshot();
+      for (const l of this.listeners) l(this.cachedSnapshot);
+    };
+    if (typeof requestAnimationFrame === "function") requestAnimationFrame(flush);
+    else setTimeout(flush, 16);
   }
 
   async join(options: JoinOptions): Promise<void> {
