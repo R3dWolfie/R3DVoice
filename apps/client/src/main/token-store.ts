@@ -3,31 +3,50 @@ import { promises as fs } from "node:fs";
 import { join } from "node:path";
 
 const FILENAME = "session.enc";
+// Plaintext fallback for systems with no OS keyring (common on minimal Linux
+// without gnome-keyring/kwallet, where safeStorage.isEncryptionAvailable() is
+// false). Without this the app was UNUSABLE there — login succeeded on the
+// server but saveToken threw, surfacing as "Incorrect email or password".
+const PLAIN_FILENAME = "session.token";
 
 function tokenPath(): string {
   return join(app.getPath("userData"), FILENAME);
 }
+function plainTokenPath(): string {
+  return join(app.getPath("userData"), PLAIN_FILENAME);
+}
 
 export async function saveToken(token: string): Promise<void> {
-  if (!safeStorage.isEncryptionAvailable()) {
-    throw new Error("OS keychain unavailable; cannot persist session securely");
+  if (safeStorage.isEncryptionAvailable()) {
+    const encrypted = safeStorage.encryptString(token);
+    await fs.writeFile(tokenPath(), encrypted, { mode: 0o600 });
+    // Drop any stale plaintext fallback once encryption is available again.
+    await fs.rm(plainTokenPath(), { force: true }).catch(() => {});
+    return;
   }
-  const encrypted = safeStorage.encryptString(token);
-  await fs.writeFile(tokenPath(), encrypted);
+  // No keyring: persist to a user-private (0600) plaintext file. The value is
+  // a short-lived session JWT (not a password) and userData is per-user, so
+  // this is an acceptable degraded mode — the alternative is a broken app.
+  await fs.writeFile(plainTokenPath(), token, { mode: 0o600 });
 }
 
 export async function getToken(): Promise<string | null> {
+  // Prefer the encrypted store; fall back to the plaintext file.
   try {
     const bytes = await fs.readFile(tokenPath());
-    if (!safeStorage.isEncryptionAvailable()) return null;
-    return safeStorage.decryptString(bytes);
-  } catch (err: unknown) {
-    // File missing or decryption failed — treat as "no session"
-    if ((err as NodeJS.ErrnoException).code === "ENOENT") return null;
+    if (safeStorage.isEncryptionAvailable()) return safeStorage.decryptString(bytes);
+  } catch {
+    /* fall through to plaintext */
+  }
+  try {
+    const plain = await fs.readFile(plainTokenPath(), "utf8");
+    return plain.trim() || null;
+  } catch {
     return null;
   }
 }
 
 export async function clearToken(): Promise<void> {
   await fs.rm(tokenPath(), { force: true });
+  await fs.rm(plainTokenPath(), { force: true });
 }

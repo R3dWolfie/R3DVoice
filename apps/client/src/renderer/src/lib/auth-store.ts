@@ -57,7 +57,15 @@ export function createAuthStore(
         }
         const { token, user } = res;
         api.setToken(token);
-        await storage.saveToken(token);
+        // Persisting the session must never fail the login: on Linux without a
+        // keyring, safeStorage is unavailable — the token still works in-memory
+        // for this run (token-store also falls back to a private file).
+        try {
+          await storage.saveToken(token);
+        } catch (persistErr) {
+          // eslint-disable-next-line no-console
+          console.warn("[auth] session not persisted:", persistErr);
+        }
         set({ status: "authenticated", token, user, error: null, twoFactorToken: null });
       } catch (err) {
         // For 401 (bad creds), don't leak the server's specific phrasing —
@@ -69,7 +77,9 @@ export function createAuthStore(
             ? "Incorrect email or password"
             : err instanceof ApiError
               ? err.message
-              : "Incorrect email or password";
+              : err instanceof Error
+                ? `Couldn't reach the server — ${err.message}`
+                : "Couldn't sign in — please try again";
         set({ status: "unauthenticated", error: message });
       }
     },
@@ -84,7 +94,15 @@ export function createAuthStore(
       try {
         const { token, user } = await api.loginTotp({ twoFactorToken, code });
         api.setToken(token);
-        await storage.saveToken(token);
+        // Persisting the session must never fail the login: on Linux without a
+        // keyring, safeStorage is unavailable — the token still works in-memory
+        // for this run (token-store also falls back to a private file).
+        try {
+          await storage.saveToken(token);
+        } catch (persistErr) {
+          // eslint-disable-next-line no-console
+          console.warn("[auth] session not persisted:", persistErr);
+        }
         set({ status: "authenticated", token, user, error: null, twoFactorToken: null });
       } catch (err) {
         const message = err instanceof ApiError ? err.message : "two-factor verification failed";
@@ -113,7 +131,15 @@ export function createAuthStore(
           e2eePublicKey: kp.publicKey,
         });
         api.setToken(token);
-        await storage.saveToken(token);
+        // Persisting the session must never fail the login: on Linux without a
+        // keyring, safeStorage is unavailable — the token still works in-memory
+        // for this run (token-store also falls back to a private file).
+        try {
+          await storage.saveToken(token);
+        } catch (persistErr) {
+          // eslint-disable-next-line no-console
+          console.warn("[auth] session not persisted:", persistErr);
+        }
         set({ status: "authenticated", token, user, error: null });
         // Trigger the backup download. User decides whether to save it; if
         // they don't, losing this device = losing DM history. Wrapped in a
