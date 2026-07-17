@@ -74,7 +74,7 @@ export function InviteCreateModal({ open, onClose, roomId }: Props): ReactElemen
             <input type="checkbox" checked={oneTime} onChange={(e) => setOneTime(e.target.checked)} />
             <span>One-time use</span>
           </label>
-          {error && <p style={{ color: "var(--accent)" }}>{error}</p>}
+          {error && <p style={{ color: "var(--danger)" }}>{error}</p>}
           <button
             className="rv-btn"
             data-variant="primary"

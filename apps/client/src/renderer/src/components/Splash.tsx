@@ -43,8 +43,8 @@ const vignetteStyle: CSSProperties = {
   inset: 0,
   pointerEvents: "none",
   background:
-    "radial-gradient(120% 90% at 18% 12%, color-mix(in oklch, var(--rv-red-700) 38%, transparent) 0%, transparent 55%), " +
-    "radial-gradient(80% 70% at 100% 100%, color-mix(in oklch, var(--rv-red-950) 50%, transparent) 0%, transparent 55%)",
+    "radial-gradient(120% 90% at 18% 12%, color-mix(in oklch, var(--rv-red-600) 22%, transparent) 0%, transparent 55%), " +
+    "radial-gradient(80% 70% at 100% 100%, color-mix(in oklch, var(--rv-red-900) 30%, transparent) 0%, transparent 55%)",
 };
 
 const contentStyle: CSSProperties = {

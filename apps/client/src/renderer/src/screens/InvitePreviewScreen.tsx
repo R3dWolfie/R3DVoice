@@ -78,7 +78,7 @@ export function InvitePreviewScreen({ code, onRedirect, onCancel }: Props): Reac
             {meta.targetRoom.memberCount} member{meta.targetRoom.memberCount === 1 ? "" : "s"}
           </p>
         )}
-        {error && <p style={{ color: "var(--accent)" }}>{error}</p>}
+        {error && <p style={{ color: "var(--danger)" }}>{error}</p>}
         <div style={{ display: "flex", gap: "var(--s-2)", marginTop: "var(--s-5)" }}>
           <button
             className="rv-btn"

@@ -52,23 +52,23 @@ export function ScreenPickerDialog(): ReactElement {
     <div style={{ padding: 20, height: "100vh", display: "flex", flexDirection: "column", gap: 16 }}>
       <div style={{ display: "flex", justifyContent: "space-between", alignItems: "center" }}>
         <strong>Choose what to share</strong>
-        <button className="btn secondary" onClick={() => void cancel()}>Cancel</button>
+        <button className="rv-btn" onClick={() => void cancel()}>Cancel</button>
       </div>
 
       {loading && <div style={{ color: "var(--text-dim)" }}>Loading sources…</div>}
-      {error && <div className="error">{error}</div>}
+      {error && <div className="rv-err-banner" role="alert"><span className="ic">!</span><div>{error}</div></div>}
 
       {!loading && !error && (
         <div style={{ overflowY: "auto", display: "flex", flexDirection: "column", gap: 16 }}>
           {screens.length > 0 && (
             <div>
-              <div className="section-title">Screens</div>
+              <div className="rv-label" style={{ margin: "var(--s-3) 0 var(--s-2)" }}>Screens</div>
               <SourceGrid sources={screens} onPick={(id) => void pick(id)} />
             </div>
           )}
           {windows.length > 0 && (
             <div>
-              <div className="section-title">Windows</div>
+              <div className="rv-label" style={{ margin: "var(--s-3) 0 var(--s-2)" }}>Windows</div>
               <SourceGrid sources={windows} onPick={(id) => void pick(id)} />
             </div>
           )}

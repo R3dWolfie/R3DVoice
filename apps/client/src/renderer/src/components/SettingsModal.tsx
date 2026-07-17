@@ -14,7 +14,7 @@ import { downloadKeyBackup, loadKeyPair } from "../lib/key-storage.js";
 import { Avatar } from "./Avatar.js";
 import { I } from "./Icons.js";
 import { Modal } from "./Modal.js";
-import { Field } from "./Primitives.js";
+import { Field, APP_VERSION } from "./Primitives.js";
 
 type Tab = "devices" | "keybinds" | "account" | "theme" | "notifications" | "compat" | "about";
 
@@ -1696,7 +1696,7 @@ function AboutTab(): ReactElement {
             R3DVoice
           </div>
           <div className="rv-mono" style={{ fontSize: "var(--t-xs)", color: "var(--text-dim)" }}>
-            v0.9.0 · electron 35 · chromium 130
+            v{APP_VERSION} · electron 35 · chromium 130
           </div>
         </div>
       </div>

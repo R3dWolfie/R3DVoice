@@ -52,7 +52,7 @@ export function NewDmPicker({ open, onClose, onPick }: Props): ReactElement {
         disabled={busy}
         onKeyDown={(e) => { if (e.key === "Enter") void submit(); }}
       />
-      {error && <p style={{ color: "var(--accent)", marginTop: "var(--s-2)", fontSize: "var(--t-sm)" }}>{error}</p>}
+      {error && <p style={{ color: "var(--danger)", marginTop: "var(--s-2)", fontSize: "var(--t-sm)" }}>{error}</p>}
       <button
         className="rv-btn"
         data-variant="primary"
