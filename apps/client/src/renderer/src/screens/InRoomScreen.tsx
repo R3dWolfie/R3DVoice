@@ -8,6 +8,7 @@ import {
   type CSSProperties,
   type MouseEvent,
   type ReactElement,
+  type RefObject,
   type ReactNode,
 } from "react";
 import { ApiClient } from "../lib/api.js";
@@ -32,6 +33,7 @@ import { SettingsModal } from "../components/SettingsModal.js";
 import { usePrefs, prefsActions } from "../lib/prefs-singleton.js";
 import type { LinuxAudioSourceSummary, WindowsAudioSessionInfo } from "../../../shared/bridge-types.js";
 import { Avatar } from "../components/Avatar.js";
+import { getPointersForShare, videoContentRect, pointerColor, type RemotePointer } from "../lib/pointer-overlay.js";
 import { CopyLinkButton } from "../components/CopyLinkButton.js";
 import { PeerProfilePopover } from "../components/PeerProfilePopover.js";
 import { RoomInfoPanel } from "../components/RoomInfoPanel.js";
@@ -104,6 +106,66 @@ interface TileCallbacks {
   onClick(id: string): void;
   onDoubleClick(id: string, videoEl: HTMLVideoElement | null): void;
   onContextMenu(id: string, x: number, y: number): void;
+  /** Pointer moved over a share tile — normalized [0..1] within the content. */
+  onPointerMove?(shareId: string, x: number, y: number): void;
+  onPointerLeave?(shareId: string): void;
+}
+
+// Renders remote viewers' pointers over a screenshare (the web version of
+// "remote control"). Reads the pointer store on its own timer so it never
+// re-renders the memoized Tile.
+function PointerLayer({ shareId, videoRef }: { shareId: string; videoRef: RefObject<HTMLVideoElement | null> }): ReactElement | null {
+  const [pointers, setPointers] = useState<RemotePointer[]>([]);
+  const [rect, setRect] = useState<{ x: number; y: number; w: number; h: number }>({ x: 0, y: 0, w: 0, h: 0 });
+  useEffect(() => {
+    const t = setInterval(() => {
+      setPointers(getPointersForShare(shareId));
+      if (videoRef.current) setRect(videoContentRect(videoRef.current));
+    }, 45);
+    return () => clearInterval(t);
+  }, [shareId, videoRef]);
+  if (pointers.length === 0) return null;
+  return (
+    <div style={{ position: "absolute", inset: 0, pointerEvents: "none", zIndex: 6 }}>
+      {pointers.map((p) => {
+        const color = pointerColor(p.id);
+        return (
+          <div
+            key={p.id}
+            style={{
+              position: "absolute",
+              left: rect.x + p.x * rect.w,
+              top: rect.y + p.y * rect.h,
+              transition: "left 45ms linear, top 45ms linear",
+              transform: "translate(-2px, -2px)",
+              display: "flex",
+              alignItems: "flex-start",
+              gap: 3,
+            }}
+          >
+            {/* arrow cursor */}
+            <svg width="16" height="16" viewBox="0 0 16 16" style={{ filter: "drop-shadow(0 1px 1px rgba(0,0,0,.5))" }}>
+              <path d="M1 1 L1 12 L4.5 8.7 L7 14 L9 13 L6.6 7.9 L11 7.7 Z" fill={color} stroke="#fff" strokeWidth="1" />
+            </svg>
+            <span
+              style={{
+                background: color,
+                color: "#fff",
+                fontSize: 10,
+                fontWeight: 600,
+                padding: "1px 5px",
+                borderRadius: 4,
+                whiteSpace: "nowrap",
+                boxShadow: "0 1px 2px rgba(0,0,0,.4)",
+              }}
+            >
+              {p.name}
+            </span>
+          </div>
+        );
+      })}
+    </div>
+  );
 }
 
 interface VolumeMenu {
@@ -411,13 +473,30 @@ function TileImpl({
     callbacks.onClick(tile.id);
   }
 
+  function onPointerMove(e: MouseEvent): void {
+    if (!sharing || !callbacks.onPointerMove) return;
+    const v = videoRef.current;
+    if (!v) return;
+    const box = v.getBoundingClientRect();
+    const cr = videoContentRect(v);
+    if (cr.w <= 0 || cr.h <= 0) return;
+    const x = (e.clientX - box.left - cr.x) / cr.w;
+    const y = (e.clientY - box.top - cr.y) / cr.h;
+    if (x < 0 || x > 1 || y < 0 || y > 1) return; // pointer is in the letterbox
+    callbacks.onPointerMove(tile.id, x, y);
+  }
+
   return (
     <div
       onClick={onClick}
       onDoubleClick={onDoubleClick}
       onContextMenu={onContextMenu}
       onMouseEnter={() => setHover(true)}
-      onMouseLeave={() => setHover(false)}
+      onMouseMove={sharing ? onPointerMove : undefined}
+      onMouseLeave={() => {
+        setHover(false);
+        if (sharing) callbacks.onPointerLeave?.(tile.id);
+      }}
       title="Click to focus · double-click to fullscreen · right-click for volume"
       className={sharing ? "rv-scanlines" : ""}
       style={{
@@ -478,6 +557,7 @@ function TileImpl({
           size={big ? 72 : 48}
         />
       )}
+      {sharing && <PointerLayer shareId={tile.id} videoRef={videoRef} />}
 
       {showCameraOverlay && (
         <video
@@ -1453,6 +1533,13 @@ export function InRoomScreen(props: InRoomScreenProps): ReactElement {
   // Click your own tile to minimize your self-view out of the grid (Discord
   // behaviour); a floating thumbnail restores it.
   const [selfMinimized, setSelfMinimized] = useState(false);
+  // Collaborative pointer ("remote control", web-realistic): show my cursor on
+  // a screenshare to everyone. Ref mirror so the memoized tileCallbacks can read
+  // it without rebuilding; throttle ref caps broadcast to ~25 Hz.
+  const [showMyPointer, setShowMyPointer] = useState(false);
+  const showMyPointerRef = useRef(false);
+  showMyPointerRef.current = showMyPointer;
+  const lastPtrSentRef = useRef(0);
   const persistedParticipantVolumes = usePrefs((s) => s.participantVolumes);
   const persistedScreenVolumes = usePrefs((s) => s.participantScreenVolumes);
   const persistedParticipantGains = usePrefs((s) => s.participantGains);
@@ -2051,9 +2138,27 @@ export function InRoomScreen(props: InRoomScreenProps): ReactElement {
       onContextMenu: (id, x, y) => {
         setMenu({ participantId: id, x, y });
       },
+      onPointerMove: (shareId, x, y) => {
+        if (!showMyPointerRef.current) return;
+        const t = performance.now();
+        if (t - lastPtrSentRef.current < 40) return; // ~25 Hz
+        lastPtrSentRef.current = t;
+        void roomWrapper.broadcastPointer(shareId, x, y);
+      },
+      onPointerLeave: () => {
+        if (showMyPointerRef.current) void roomWrapper.clearPointer();
+      },
     }),
-    [],
+    [roomWrapper],
   );
+
+  // Retract our pointer when the toggle goes off (or we leave).
+  useEffect(() => {
+    if (!showMyPointer) void roomWrapper.clearPointer();
+    return () => {
+      void roomWrapper.clearPointer();
+    };
+  }, [showMyPointer, roomWrapper]);
 
   // Optimistic mic/camera: show the pending state instantly on click; clear
   // the pending flag once the real snapshot reports the same value.
@@ -2577,6 +2682,34 @@ export function InRoomScreen(props: InRoomScreenProps): ReactElement {
             gap: "var(--s-3)",
           }}
         >
+          {showMyPointer && (
+            <button
+              type="button"
+              onClick={() => setShowMyPointer(false)}
+              title="Your cursor is shown on shared screens. Click to stop."
+              style={{
+                position: "absolute",
+                left: "50%",
+                bottom: "var(--s-4)",
+                transform: "translateX(-50%)",
+                zIndex: 20,
+                display: "inline-flex",
+                alignItems: "center",
+                gap: 6,
+                padding: "5px 12px",
+                borderRadius: "var(--r-pill)",
+                border: "1px solid var(--accent)",
+                background: "var(--accent-tint)",
+                color: "var(--accent)",
+                fontSize: "var(--t-xs)",
+                fontWeight: 600,
+                cursor: "pointer",
+                boxShadow: "var(--shadow-2)",
+              }}
+            >
+              ➤ Pointer on — hover a shared screen · click to stop
+            </button>
+          )}
           {selfHidden && localVideoTile && (
             <button
               type="button"
@@ -2915,6 +3048,20 @@ export function InRoomScreen(props: InRoomScreenProps): ReactElement {
           {!menuIsLocal && menuParticipant && (
             <>
               <hr className="rv-rule" />
+              {menuParticipant.screenTrack !== null && (
+                <CtxItem
+                  title="Show your cursor on their shared screen for everyone (a shared laser pointer — no actual control)"
+                  onClick={() => {
+                    setShowMyPointer((v) => !v);
+                    setMenu(null);
+                  }}
+                >
+                  <span style={{ display: "flex", justifyContent: "space-between", alignItems: "center" }}>
+                    {showMyPointer ? "Hide my pointer" : "Show my pointer"}{" "}
+                    <span style={{ color: "var(--text-dim)" }}>➤</span>
+                  </span>
+                </CtxItem>
+              )}
               <CtxItem
                 onClick={() => {
                   setDmTarget({ id: menuParticipant.id, name: menuParticipant.name });

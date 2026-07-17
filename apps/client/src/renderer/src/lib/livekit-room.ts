@@ -16,6 +16,7 @@ import {
 import E2eeWorker from "livekit-client/e2ee-worker?worker";
 import { startSystemAudioStream, stopSystemAudioStream } from "./system-audio-stream.js";
 import { notifyJoinLeave } from "../components/notify-join-leave.js";
+import { setRemotePointer, clearRemotePointer } from "./pointer-overlay.js";
 
 export type DisconnectKind =
   | "removed-by-owner"
@@ -352,7 +353,27 @@ export class LiveKitRoom {
           const msg = JSON.parse(new TextDecoder().decode(payload)) as {
             kind?: string;
             rttMs?: number;
+            share?: string;
+            x?: number;
+            y?: number;
           };
+          if (msg.kind === "rv:ptr" && typeof msg.share === "string" && typeof msg.x === "number" && typeof msg.y === "number") {
+            // Collaborative pointer — kept OUT of the room snapshot so it can't
+            // trigger the in-call re-render storm; the overlay reads the store
+            // on its own rAF.
+            setRemotePointer({
+              id: participant.identity,
+              share: msg.share,
+              x: msg.x,
+              y: msg.y,
+              name: participant.name || participant.identity,
+            });
+            return;
+          }
+          if (msg.kind === "rv:ptr-off") {
+            clearRemotePointer(participant.identity);
+            return;
+          }
           if (msg.kind !== "rv:rtt" || typeof msg.rttMs !== "number") return;
           this.rttByParticipant = {
             ...this.rttByParticipant,
@@ -366,6 +387,7 @@ export class LiveKitRoom {
     );
 
     this.room.on(RoomEvent.ParticipantDisconnected, (p) => {
+      clearRemotePointer(p.identity);
       if (p.identity in this.rttByParticipant) {
         const next = { ...this.rttByParticipant };
         delete next[p.identity];
@@ -592,6 +614,26 @@ export class LiveKitRoom {
       await this.room.localParticipant.publishData(payload, { reliable: false });
     } catch {
       /* mid-disconnect or no peers; harmless */
+    }
+  }
+
+  /** Broadcast our pointer position on a given sharer's screen (lossy, high-freq). */
+  async broadcastPointer(share: string, x: number, y: number): Promise<void> {
+    try {
+      const payload = new TextEncoder().encode(JSON.stringify({ kind: "rv:ptr", share, x, y }));
+      await this.room.localParticipant.publishData(payload, { reliable: false });
+    } catch {
+      /* no peers / mid-disconnect */
+    }
+  }
+
+  /** Tell peers to remove our pointer. */
+  async clearPointer(): Promise<void> {
+    try {
+      const payload = new TextEncoder().encode(JSON.stringify({ kind: "rv:ptr-off" }));
+      await this.room.localParticipant.publishData(payload, { reliable: true });
+    } catch {
+      /* */
     }
   }
 
