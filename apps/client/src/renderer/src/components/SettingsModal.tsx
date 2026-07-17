@@ -229,11 +229,42 @@ function DevicesTab(): ReactElement {
       </div>
 
       <div className="rv-section-head">
+        <span className="rv-label">Mono</span>
+      </div>
+      <MonoControls />
+
+      <div className="rv-section-head">
         <span className="rv-label">Processing</span>
       </div>
       <ProcessingControls />
       <div style={{ fontSize: "var(--t-xs)", color: "var(--text-faint)", marginTop: "var(--s-2)" }}>
         Changes apply on the next mic open (rejoin or PTT cycle).
+      </div>
+    </div>
+  );
+}
+
+// Mono in/out (task #12) — single-channel interfaces publish centered
+// instead of left-ear-only; mono output plays the same mix in both ears.
+function MonoControls(): ReactElement {
+  const monoInput = usePrefs((s) => s.monoInput);
+  const monoOutput = usePrefs((s) => s.monoOutput);
+  return (
+    <div style={{ display: "flex", flexDirection: "column", gap: "var(--s-4)" }}>
+      <SimpleToggle
+        label="Mono microphone"
+        hint="Downmix your mic to one centered channel. Turn on if your interface only feeds one side (listeners hear you in one ear)."
+        value={monoInput}
+        onChange={(v) => prefsActions().setMonoInput(v)}
+      />
+      <SimpleToggle
+        label="Mono output"
+        hint="Play everything the same in both ears — for single-ear headsets or asymmetric hearing. Applies live."
+        value={monoOutput}
+        onChange={(v) => prefsActions().setMonoOutput(v)}
+      />
+      <div style={{ fontSize: "var(--t-xs)", color: "var(--text-faint)" }}>
+        Mono microphone applies on the next mic open (rejoin); mono output applies immediately.
       </div>
     </div>
   );

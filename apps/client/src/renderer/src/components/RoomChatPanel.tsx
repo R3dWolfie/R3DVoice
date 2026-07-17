@@ -207,7 +207,7 @@ export function RoomChatPanel({
   }, [messages]);
 
   const send = async (): Promise<void> => {
-    const text = draft.trim();
+    const text = applySlashCommand(draft.trim());
     if (!text || !apiRef.current) return;
 
     // For DMs, we need both keys before we can encrypt. If they're missing,
@@ -604,6 +604,25 @@ export function RoomChatPanel({
             typing…
           </div>
         )}
+        {draft.startsWith("/") && !draft.includes(" ") && draft.length > 1 &&
+          SLASH_COMMANDS.some((c) => c.cmd.startsWith(draft)) && (
+          <div className="rv-menu" style={{ position: "absolute", bottom: "calc(100% - var(--s-2))", left: "var(--s-3)", right: "var(--s-3)", zIndex: 44 }}>
+            {SLASH_COMMANDS.filter((c) => c.cmd.startsWith(draft)).map((c) => (
+              <button
+                key={c.cmd}
+                type="button"
+                className="rv-menu-item"
+                onClick={() => {
+                  setDraft(c.cmd + " ");
+                  inputRef.current?.focus();
+                }}
+              >
+                <span className="rv-mono" style={{ fontWeight: 600 }}>{c.cmd}</span>
+                <span style={{ marginLeft: "auto", fontSize: "var(--t-2xs)", color: "var(--text-dim)" }}>{c.hint}</span>
+              </button>
+            ))}
+          </div>
+        )}
         {editingId !== null && (
           <div
             style={{
@@ -830,6 +849,23 @@ function DayDivider({ iso }: { iso: string }): ReactElement {
 // the ink bubble, theirs white with a hairline; follow-ups from the same
 // author drop the name/time + avatar and tighten up.
 const QUICK_REACTIONS = ["👍", "❤️", "😂"];
+
+// 2.5o slash commands — text transforms applied at send time.
+const SLASH_COMMANDS: Array<{ cmd: string; hint: string; apply: (rest: string) => string }> = [
+  { cmd: "/shrug", hint: "appends ¯\\_(ツ)_/¯", apply: (rest) => `${rest} ¯\\_(ツ)_/¯`.trim() },
+  { cmd: "/tableflip", hint: "appends (╯°□°)╯︵ ┻━┻", apply: (rest) => `${rest} (╯°□°)╯︵ ┻━┻`.trim() },
+  { cmd: "/unflip", hint: "appends ┬─┬ノ( º _ ºノ)", apply: (rest) => `${rest} ┬─┬ノ( º _ ºノ)`.trim() },
+  { cmd: "/lenny", hint: "appends ( ͡° ͜ʖ ͡°)", apply: (rest) => `${rest} ( ͡° ͜ʖ ͡°)`.trim() },
+];
+
+function applySlashCommand(text: string): string {
+  if (!text.startsWith("/")) return text;
+  const space = text.indexOf(" ");
+  const cmd = space === -1 ? text : text.slice(0, space);
+  const rest = space === -1 ? "" : text.slice(space + 1);
+  const found = SLASH_COMMANDS.find((c) => c.cmd === cmd);
+  return found ? found.apply(rest) : text;
+}
 
 function ChatBubble({
   msg,

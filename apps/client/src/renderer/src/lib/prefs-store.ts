@@ -15,6 +15,10 @@ export interface PrefsState {
   theme: ThemePreset;
   dmBanners: boolean;
   dmPreviews: boolean;
+  /** Mono input: force-mono capture + downmix (left-only interfaces). */
+  monoInput: boolean;
+  /** Mono output: both ears get the same downmixed signal. */
+  monoOutput: boolean;
   micDeviceId: string | null;
   speakerDeviceId: string | null;
   cameraDeviceId: string | null;
@@ -44,6 +48,8 @@ export interface PrefsState {
   setTheme(theme: ThemePreset): void;
   setDmBanners(v: boolean): void;
   setDmPreviews(v: boolean): void;
+  setMonoInput(v: boolean): void;
+  setMonoOutput(v: boolean): void;
   setMicDeviceId(id: string | null): void;
   setSpeakerDeviceId(id: string | null): void;
   setCameraDeviceId(id: string | null): void;
@@ -72,6 +78,8 @@ const DEFAULTS = {
   theme: "light" as ThemePreset,
   dmBanners: true,
   dmPreviews: true,
+  monoInput: false,
+  monoOutput: false,
   micDeviceId: null as string | null,
   speakerDeviceId: null as string | null,
   cameraDeviceId: null as string | null,
@@ -168,6 +176,8 @@ export function createPrefsStore(storage: PrefsStorage): StoreApi<PrefsState> {
       theme: state.theme,
       dmBanners: state.dmBanners,
       dmPreviews: state.dmPreviews,
+      monoInput: state.monoInput,
+      monoOutput: state.monoOutput,
       favoriteRoomIds: state.favoriteRoomIds,
       participantVolumes: state.participantVolumes,
       participantScreenVolumes: state.participantScreenVolumes,
@@ -180,6 +190,8 @@ export function createPrefsStore(storage: PrefsStorage): StoreApi<PrefsState> {
     setTheme: (v) => { set({ theme: v }); persistFromState(get()); },
     setDmBanners: (v) => { set({ dmBanners: v }); persistFromState(get()); },
     setDmPreviews: (v) => { set({ dmPreviews: v }); persistFromState(get()); },
+    setMonoInput: (v) => { set({ monoInput: v }); persistFromState(get()); },
+    setMonoOutput: (v) => { set({ monoOutput: v }); persistFromState(get()); },
     setMicDeviceId: (v) => { set({ micDeviceId: v }); persistFromState(get()); },
     setSpeakerDeviceId: (v) => { set({ speakerDeviceId: v }); persistFromState(get()); },
     setCameraDeviceId: (v) => { set({ cameraDeviceId: v }); persistFromState(get()); },

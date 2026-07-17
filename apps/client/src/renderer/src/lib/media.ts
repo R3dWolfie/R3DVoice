@@ -72,6 +72,13 @@ export interface MicProcessingOptions {
   echoCancellation?: boolean;
   autoGainControl?: boolean;
   /**
+   * Force mono capture + downmix (task #12). Single-channel interfaces
+   * (e.g. a mic wired only to the LEFT input of a stereo USB interface)
+   * otherwise publish stereo with a silent right channel — listeners hear
+   * you in one ear. Mono averages the channels and centers the voice.
+   */
+  mono?: boolean;
+  /**
    * Linear input gain. 1.0 = unity. Anything other than 1 routes the mic
    * through a Web Audio GainNode pipeline; the AudioContext lives for the
    * stream's lifetime (no automatic cleanup, but small/cheap).
@@ -124,6 +131,7 @@ export async function openMicPipeline(
     noiseSuppression: false,
     echoCancellation: false,
     autoGainControl: false,
+    ...(options.mono ? { channelCount: { ideal: 1 } } : {}),
   };
   let stream = await navigator.mediaDevices.getUserMedia({ audio: audioConstraints, video: false });
 
@@ -160,7 +168,16 @@ export async function openMicPipeline(
   const source = ctx.createMediaStreamSource(stream);
   const gainNode = ctx.createGain();
   gainNode.gain.value = options.gain ?? 1;
+  if (options.mono) {
+    // Belt and braces with the capture constraint: force the graph itself
+    // to mix down to one channel (0.5·L + 0.5·R) so a left-only signal
+    // reaches listeners centered instead of half-silent stereo.
+    gainNode.channelCount = 1;
+    gainNode.channelCountMode = "explicit";
+    gainNode.channelInterpretation = "speakers";
+  }
   const dest = ctx.createMediaStreamDestination();
+  if (options.mono) dest.channelCount = 1;
   source.connect(gainNode).connect(dest);
   // eslint-disable-next-line no-console
   console.log(

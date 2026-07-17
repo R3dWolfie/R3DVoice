@@ -33,6 +33,7 @@ import { I } from "../components/Icons.js";
 import { Spinner } from "../components/Primitives.js";
 import { RoomChatPanel } from "../components/RoomChatPanel.js";
 import { useKeybind } from "../lib/keybinds.js";
+import { routeElement, setMonoOutput, setMonoOutputSink } from "../lib/mono-output.js";
 
 export interface InRoomScreenProps {
   roomId: string;
@@ -1260,6 +1261,7 @@ export function InRoomScreen(props: InRoomScreenProps): ReactElement {
       el.autoplay = true;
       (el as HTMLElement & { playsInline?: boolean }).playsInline = true;
       mount.appendChild(el);
+      routeElement(el); // no-op unless mono output has been enabled
     };
     const onTrackUnsubscribed = (track: Track): void => {
       if (track.kind !== Track.Kind.Audio) return;
@@ -1304,9 +1306,10 @@ export function InRoomScreen(props: InRoomScreenProps): ReactElement {
   const echoCancellation = usePrefs((s) => s.echoCancellation);
   const autoGainControl = usePrefs((s) => s.autoGainControl);
   const micGain = usePrefs((s) => s.micGain);
+  const monoInput = usePrefs((s) => s.monoInput);
   const micProcessing = useMemo(
-    () => ({ noiseSuppression, echoCancellation, autoGainControl, gain: micGain }),
-    [noiseSuppression, echoCancellation, autoGainControl, micGain],
+    () => ({ noiseSuppression, echoCancellation, autoGainControl, gain: micGain, mono: monoInput }),
+    [noiseSuppression, echoCancellation, autoGainControl, micGain, monoInput],
   );
   useEffect(() => {
     if (conn.phase === "connected" && prefMic) {
@@ -1315,6 +1318,11 @@ export function InRoomScreen(props: InRoomScreenProps): ReactElement {
   }, [prefMic, conn.phase, roomWrapper]);
 
   const prefSpeaker = usePrefs((s) => s.speakerDeviceId);
+  const monoOutput = usePrefs((s) => s.monoOutput);
+  useEffect(() => {
+    setMonoOutput(monoOutput, audioMountRef.current);
+    if (monoOutput) void setMonoOutputSink(prefSpeaker);
+  }, [monoOutput, prefSpeaker]);
   const favoriteRoomIds = usePrefs((s) => s.favoriteRoomIds);
   const isFavorite = favoriteRoomIds.includes(props.roomId);
   useEffect(() => {
