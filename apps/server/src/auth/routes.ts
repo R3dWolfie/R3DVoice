@@ -100,9 +100,9 @@ export async function authRoutes(app: FastifyInstance): Promise<void> {
         }
         throw err;
       }
-      // Best-effort: a mail hiccup must not fail registration (the user can
-      // resend from the gate). Awaited so token creation is ordered, but errors
-      // are swallowed.
+      // Awaited so the flow is deterministic, but a mail hiccup must never
+      // fail registration — the user can resend from the verify gate. Normal
+      // UX cost is a ~1-2s button spinner, not a full-screen wait.
       try {
         await sendVerification(user);
       } catch (err) {
