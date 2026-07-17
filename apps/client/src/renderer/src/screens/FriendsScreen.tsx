@@ -8,6 +8,8 @@ import { I } from "../components/Icons.js";
 import { InviteCreateModal } from "../components/InviteCreateModal.js";
 import { MyInvitesList } from "../components/MyInvitesList.js";
 import { Modal } from "../components/Modal.js";
+import { PeerProfilePopover } from "../components/PeerProfilePopover.js";
+import { UserContextMenu } from "../components/UserContextMenu.js";
 
 type Props = {
   onJoinRoom?: (roomId: string) => void;
@@ -20,6 +22,7 @@ type Props = {
 export function FriendsScreen({ onJoinRoom, onOpenDms }: Props = {}): ReactElement {
   const serverUrl = useAuthStore((s) => s.serverUrl);
   const token = useAuthStore((s) => s.token);
+  const me = useAuthStore((s) => s.user);
   const [friends, setFriends] = useState<FriendDTO[]>([]);
   const [addOpen, setAddOpen] = useState(false);
   const [addInput, setAddInput] = useState("");
@@ -27,6 +30,13 @@ export function FriendsScreen({ onJoinRoom, onOpenDms }: Props = {}): ReactEleme
   const [error, setError] = useState<string | null>(null);
   const [invitesOpen, setInvitesOpen] = useState(false);
   const [inviteCreateOpen, setInviteCreateOpen] = useState(false);
+  // 2.4d full user menu (right-click / ⋮ on a friend row) + 2.4a profile.
+  const [userMenu, setUserMenu] = useState<{
+    x: number;
+    y: number;
+    user: { id: string; handle: string | null; displayName: string };
+  } | null>(null);
+  const [profilePeer, setProfilePeer] = useState<{ id: string; handle: string | null; displayName: string } | null>(null);
   const addRef = useRef<HTMLDivElement>(null);
 
   const apiFor = useCallback(() => {
@@ -116,7 +126,7 @@ export function FriendsScreen({ onJoinRoom, onOpenDms }: Props = {}): ReactEleme
   const online = accepted.filter((f) => f.isOnline).length;
 
   return (
-    <div style={{ display: "grid", gridTemplateRows: "auto 1fr", height: "100%", minHeight: 0 }}>
+    <div style={{ display: "grid", gridTemplateRows: "auto 1fr", height: "100%", minHeight: 0, position: "relative" }}>
       {/* Top bar */}
       <div
         style={{
@@ -260,6 +270,14 @@ export function FriendsScreen({ onJoinRoom, onOpenDms }: Props = {}): ReactEleme
                 key={f.friendshipId}
                 className="rv-list-item"
                 style={{ gridTemplateColumns: "auto 1fr auto", padding: "var(--s-3) var(--s-3)" }}
+                onContextMenu={(e) => {
+                  e.preventDefault();
+                  setUserMenu({
+                    x: e.clientX,
+                    y: e.clientY,
+                    user: { id: f.user.id, handle: f.user.handle ?? null, displayName: f.user.displayName },
+                  });
+                }}
               >
                 <div style={{ position: "relative" }}>
                   <Avatar
@@ -313,6 +331,22 @@ export function FriendsScreen({ onJoinRoom, onOpenDms }: Props = {}): ReactEleme
                     onClick={() => onOpenDms?.()}
                   >
                     <I.Chat size={13} />
+                  </button>
+                  <button
+                    className="rv-btn rv-btn-icon"
+                    data-variant="ghost"
+                    title="More"
+                    style={{ height: "1.8rem", width: "1.8rem" }}
+                    onClick={(e) => {
+                      const r = e.currentTarget.getBoundingClientRect();
+                      setUserMenu({
+                        x: r.right - 230,
+                        y: r.bottom + 4,
+                        user: { id: f.user.id, handle: f.user.handle ?? null, displayName: f.user.displayName },
+                      });
+                    }}
+                  >
+                    ⋮
                   </button>
                 </div>
               </div>
@@ -376,6 +410,30 @@ export function FriendsScreen({ onJoinRoom, onOpenDms }: Props = {}): ReactEleme
         </div>
       </Modal>
       <InviteCreateModal open={inviteCreateOpen} onClose={() => setInviteCreateOpen(false)} />
+
+      {/* 2.4d full user menu */}
+      {userMenu && me && (
+        <UserContextMenu
+          x={userMenu.x}
+          y={userMenu.y}
+          user={userMenu.user}
+          meId={me.id}
+          onClose={() => setUserMenu(null)}
+          onViewProfile={() => setProfilePeer(userMenu.user)}
+          onSendDm={() => onOpenDms?.()}
+          onChanged={() => void refresh()}
+        />
+      )}
+
+      {/* 2.4a peer profile popover */}
+      {profilePeer && (
+        <PeerProfilePopover
+          peer={profilePeer}
+          onClose={() => setProfilePeer(null)}
+          {...(onJoinRoom ? { onJoinRoom } : {})}
+          onChanged={() => void refresh()}
+        />
+      )}
     </div>
   );
 }

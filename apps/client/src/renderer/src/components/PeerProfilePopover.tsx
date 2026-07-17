@@ -5,20 +5,27 @@ import { ApiClient } from "../lib/api.js";
 import { Avatar } from "./Avatar.js";
 
 // Peer profile popover per WireFrames 2.4a: avatar + identity, live
-// presence when they're a friend, and a Join-their-room shortcut.
+// presence when they're a friend, a Join-their-room shortcut, and the
+// Block / Remove-friend pair. The deck's shared-rooms/shared-friends
+// counts are omitted — they need peer-side data no client API exposes.
 export function PeerProfilePopover({
   peer,
   onClose,
   onJoinRoom,
+  onChanged,
 }: {
   peer: { id: string; handle: string | null; displayName: string };
   onClose: () => void;
   onJoinRoom?: (roomId: string) => void;
+  /** Fires after block / remove-friend so callers can refresh lists. */
+  onChanged?: (() => void) | undefined;
 }): ReactElement {
   const serverUrl = useAuthStore((s) => s.serverUrl);
   const token = useAuthStore((s) => s.token);
   const [friend, setFriend] = useState<FriendDTO | null>(null);
   const [loaded, setLoaded] = useState(false);
+  const [blockArmed, setBlockArmed] = useState(false);
+  const [removeArmed, setRemoveArmed] = useState(false);
 
   const apiFor = useCallback(() => {
     const api = new ApiClient(serverUrl);
@@ -113,6 +120,60 @@ export function PeerProfilePopover({
           >
             Join their room ›
           </button>
+        )}
+
+        {/* 2.4a foot: Block / Remove friend (danger = outline-only) */}
+        {loaded && (
+          <div
+            style={{
+              display: "flex",
+              gap: "var(--s-2)",
+              marginTop: "var(--s-3)",
+              paddingTop: "var(--s-3)",
+              borderTop: "1px solid var(--border-soft)",
+            }}
+          >
+            <button
+              type="button"
+              className="rv-btn"
+              data-variant="danger"
+              style={{ flex: 1, height: "1.9rem", fontSize: "var(--t-xs)" }}
+              onClick={() => {
+                if (!blockArmed) {
+                  setBlockArmed(true);
+                  return;
+                }
+                void apiFor()
+                  .blockUser(peer.id)
+                  .then(() => onChanged?.())
+                  .catch(() => {});
+                onClose();
+              }}
+            >
+              {blockArmed ? "Really block?" : "Block"}
+            </button>
+            {accepted && friend && (
+              <button
+                type="button"
+                className="rv-btn"
+                data-variant="danger"
+                style={{ flex: 1, height: "1.9rem", fontSize: "var(--t-xs)" }}
+                onClick={() => {
+                  if (!removeArmed) {
+                    setRemoveArmed(true);
+                    return;
+                  }
+                  void apiFor()
+                    .friendReject(friend.friendshipId)
+                    .then(() => onChanged?.())
+                    .catch(() => {});
+                  onClose();
+                }}
+              >
+                {removeArmed ? "Really remove?" : "Remove friend"}
+              </button>
+            )}
+          </div>
         )}
       </div>
     </>

@@ -11,6 +11,7 @@ import { NewDmPicker } from "../components/NewDmPicker.js";
 import { PeerProfilePopover } from "../components/PeerProfilePopover.js";
 import { RoomChatPanel } from "../components/RoomChatPanel.js";
 import { ThreadHeader } from "../components/ThreadHeader.js";
+import { UserContextMenu } from "../components/UserContextMenu.js";
 import { I } from "../components/Icons.js";
 import { useUnreadStore } from "../lib/unread-store.js";
 
@@ -406,6 +407,8 @@ function DmPane({
   actions?: ReactElement;
 }): ReactElement {
   const [profileOpen, setProfileOpen] = useState(false);
+  // 2.4d full user menu, anchored under the header's ⋮ button.
+  const [userMenu, setUserMenu] = useState<{ x: number; y: number } | null>(null);
   return (
     <div
       style={{
@@ -422,7 +425,25 @@ function DmPane({
         threadId={threadId}
         title={peer.displayName}
         subtitle={peer.handle ? `@${peer.handle}` : undefined}
-        actions={actions}
+        actions={
+          <>
+            <button
+              type="button"
+              className="rv-btn rv-btn-icon"
+              data-variant="ghost"
+              data-active={userMenu !== null}
+              title={`More — ${peer.handle ? `@${peer.handle}` : peer.displayName}`}
+              onClick={(e) => {
+                const r = e.currentTarget.getBoundingClientRect();
+                setUserMenu({ x: r.right - 230, y: r.bottom + 4 });
+              }}
+              style={{ height: "1.8rem", width: "1.8rem" }}
+            >
+              ⋮
+            </button>
+            {actions}
+          </>
+        }
         onTitleClick={() => setProfileOpen((v) => !v)}
         leading={
           <Avatar src={null} fallbackInitials={peer.displayName} fallbackColorSeed={peer.id} size={34} />
@@ -455,6 +476,19 @@ function DmPane({
           peer={peer}
           onClose={() => setProfileOpen(false)}
           {...(onJoinRoom ? { onJoinRoom } : {})}
+        />
+      )}
+      {userMenu && (
+        <UserContextMenu
+          x={userMenu.x}
+          y={userMenu.y}
+          user={peer}
+          meId={meId}
+          onClose={() => setUserMenu(null)}
+          onViewProfile={() => setProfileOpen(true)}
+          onSendDm={() => {
+            /* already in this DM — nothing to open */
+          }}
         />
       )}
       <div style={{ flex: 1, minHeight: 0 }}>
