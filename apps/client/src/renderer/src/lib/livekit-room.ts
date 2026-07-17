@@ -976,7 +976,18 @@ export class LiveKitRoom {
 
   async setCamera(enabled: boolean, deviceId?: string): Promise<void> {
     const opts = enabled && deviceId ? { deviceId: { exact: deviceId } } : undefined;
-    await this.room.localParticipant.setCameraEnabled(enabled, opts);
+    try {
+      await this.room.localParticipant.setCameraEnabled(enabled, opts);
+    } catch (err) {
+      // Stale/absent exact device id (e.g. the web client's device ids differ
+      // from the desktop app's) rejects without prompting — retry with the
+      // default camera so it actually opens + prompts.
+      if (enabled && opts && err instanceof DOMException && (err.name === "OverconstrainedError" || err.name === "NotFoundError")) {
+        await this.room.localParticipant.setCameraEnabled(true);
+      } else {
+        throw err;
+      }
+    }
     this.emit();
   }
 

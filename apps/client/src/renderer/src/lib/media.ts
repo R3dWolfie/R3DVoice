@@ -151,7 +151,22 @@ export async function openMicPipeline(
     autoGainControl: false,
     ...(options.mono ? { channelCount: { ideal: 1 } } : {}),
   };
-  let stream = await navigator.mediaDevices.getUserMedia({ audio: audioConstraints, video: false });
+  let stream: MediaStream;
+  try {
+    stream = await navigator.mediaDevices.getUserMedia({ audio: audioConstraints, video: false });
+  } catch (err) {
+    // A stale/absent exact deviceId (common when the same account opens the
+    // WEB client, whose device ids differ from the desktop app's, or after a
+    // device is unplugged) makes some browsers reject WITHOUT ever prompting —
+    // which looks like "it won't ask for mic permission". Retry with the
+    // default device so the prompt actually appears.
+    if (deviceId && (err instanceof DOMException) && (err.name === "OverconstrainedError" || err.name === "NotFoundError")) {
+      const { deviceId: _drop, ...rest } = audioConstraints;
+      stream = await navigator.mediaDevices.getUserMedia({ audio: rest, video: false });
+    } else {
+      throw err;
+    }
+  }
 
   const policy = nsPolicy(options.noiseSuppression);
   if (policy.rnnoise) {

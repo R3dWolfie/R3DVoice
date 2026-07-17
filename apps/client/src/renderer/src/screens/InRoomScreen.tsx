@@ -35,6 +35,7 @@ import { Spinner } from "../components/Primitives.js";
 import { RoomChatPanel } from "../components/RoomChatPanel.js";
 import { useKeybind } from "../lib/keybinds.js";
 import { routeElement, setMonoOutput, setMonoOutputSink } from "../lib/mono-output.js";
+import { pushToast } from "../lib/toast-store.js";
 
 // True when the event started inside an element marked data-rv-pop — a menu,
 // picker, or panel (or its trigger) that must survive the capture-phase
@@ -721,7 +722,15 @@ function CameraControl({
         label={cameraOn ? "Stop camera" : "Camera"}
         active={cameraOn}
         emphasis={cameraOn}
-        onClick={() => void roomWrapper.setCamera(!cameraOn, selectedDeviceId ?? undefined)}
+        onClick={() => {
+          void roomWrapper.setCamera(!cameraOn, selectedDeviceId ?? undefined).catch((err) => {
+            if (err instanceof DOMException && err.name === "NotAllowedError") {
+              pushToast({ kind: "error", text: "Camera permission denied", sub: "Allow camera access for this site, then try again." });
+            } else {
+              pushToast({ kind: "error", text: "Couldn't start camera", sub: err instanceof Error ? `${err.name}: ${err.message}` : String(err) });
+            }
+          });
+        }}
       />
       <button
         type="button"
@@ -1179,6 +1188,10 @@ export function InRoomScreen(props: InRoomScreenProps): ReactElement {
     () => roomWrapper.snapshot(),
   );
 
+  // Ghost also deafens (silences all incoming audio). Hoisted here so the
+  // volume-apply effects below can respect it.
+  const deafened = snapshot.local?.attributes?.["ghost"] === "1";
+
   const audioMountRef = useRef<HTMLDivElement | null>(null);
   const e2eeSessionRef = useRef<RoomE2EE | null>(null);
   const micPipelineRef = useRef<MicPipeline | null>(null);
@@ -1484,7 +1497,13 @@ export function InRoomScreen(props: InRoomScreenProps): ReactElement {
 
   async function handleToggleScreen(): Promise<void> {
     const isSharing = hasScreenShare(snapshot.local);
-    await roomWrapper.setScreenShare(!isSharing);
+    try {
+      await roomWrapper.setScreenShare(!isSharing);
+    } catch (err) {
+      // getDisplayMedia rejects on cancel (fine) or a real failure (surface it).
+      if (err instanceof DOMException && err.name === "NotAllowedError") return;
+      pushToast({ kind: "error", text: "Couldn't start screen share", sub: err instanceof Error ? `${err.name}: ${err.message}` : String(err) });
+    }
   }
 
   // Wire prefs-driven keybinds for the in-room actions. PTT remains separate
@@ -1524,6 +1543,7 @@ export function InRoomScreen(props: InRoomScreenProps): ReactElement {
   // user-set volumes sticky across rejoins / new sessions. Participants the
   // user muted-for-me stay at 0 until they unmute them.
   useEffect(() => {
+    if (deafened) return; // ghost/deafen zeroes everything (effect below)
     for (const remote of snapshot.remotes) {
       if (mutedForMe[remote.identity]) continue;
       const raw = persistedParticipantVolumes[remote.identity];
@@ -1532,7 +1552,23 @@ export function InRoomScreen(props: InRoomScreenProps): ReactElement {
       if (v === 1) continue;
       remote.setVolume(v, Track.Source.Microphone);
     }
-  }, [snapshot.remotes, persistedParticipantVolumes, mutedForMe]);
+  }, [snapshot.remotes, persistedParticipantVolumes, mutedForMe, deafened]);
+
+  // Ghost = deafen (Red's ask): silence all incoming mic + screen audio while
+  // ghosted; when un-ghosting, restore saved per-participant volumes (and
+  // full volume for anyone without a saved override), unless muted-for-me.
+  useEffect(() => {
+    for (const remote of snapshot.remotes) {
+      if (deafened) {
+        remote.setVolume(0, Track.Source.Microphone);
+        remote.setVolume(0, Track.Source.ScreenShareAudio);
+      } else if (!mutedForMe[remote.identity]) {
+        remote.setVolume(clampVol(persistedParticipantVolumes[remote.identity] ?? 1), Track.Source.Microphone);
+        remote.setVolume(clampVol(persistedScreenVolumes[remote.identity] ?? 1), Track.Source.ScreenShareAudio);
+      }
+    }
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [deafened, snapshot.remotes]);
 
   function setScreenVolume(id: string, volume: number): void {
     const v = clampVol(volume);
@@ -1547,6 +1583,7 @@ export function InRoomScreen(props: InRoomScreenProps): ReactElement {
 
   // Apply saved screen-audio volumes whenever a remote subscribes.
   useEffect(() => {
+    if (deafened) return;
     for (const remote of snapshot.remotes) {
       if (mutedForMe[remote.identity]) continue;
       const raw = persistedScreenVolumes[remote.identity];
@@ -1555,7 +1592,7 @@ export function InRoomScreen(props: InRoomScreenProps): ReactElement {
       if (v === 1) continue;
       remote.setVolume(v, Track.Source.ScreenShareAudio);
     }
-  }, [snapshot.remotes, persistedScreenVolumes, mutedForMe]);
+  }, [snapshot.remotes, persistedScreenVolumes, mutedForMe, deafened]);
 
   // 2.5g "Mute for me": local-only — zero this participant's audio on our
   // end via RemoteParticipant.setVolume; nothing changes for anyone else.
@@ -1940,7 +1977,10 @@ export function InRoomScreen(props: InRoomScreenProps): ReactElement {
                         setMenu({ participantId: tile.id, x: e.clientX, y: e.clientY });
                       }}
                     >
-                      <div style={{ position: "relative" }}>
+                      {/* Fixed square box so the grid cell can't stretch it
+                          vertically — otherwise the speaking ring (inset:-2 on
+                          a stretched parent) renders as an oval. */}
+                      <div style={{ position: "relative", width: 28, height: 28, flexShrink: 0, alignSelf: "center" }}>
                         <Avatar
                           src={null}
                           fallbackInitials={tile.name}
@@ -1951,7 +1991,7 @@ export function InRoomScreen(props: InRoomScreenProps): ReactElement {
                           <span
                             style={{
                               position: "absolute",
-                              inset: -2,
+                              inset: -3,
                               borderRadius: "50%",
                               boxShadow: "0 0 0 2px var(--rv-live)",
                               pointerEvents: "none",
@@ -2196,7 +2236,15 @@ export function InRoomScreen(props: InRoomScreenProps): ReactElement {
               icon={muted ? <I.MicOff size={20} /> : <I.Mic size={20} />}
               label={muted ? "Unmute" : "Mute"}
               danger={muted}
-              onClick={() => void roomWrapper.setMuted(!muted)}
+              onClick={() => {
+                void roomWrapper.setMuted(!muted).catch((err) => {
+                  if (err instanceof DOMException && err.name === "NotAllowedError") {
+                    pushToast({ kind: "error", text: "Microphone permission denied", sub: "Allow mic access for this site in your browser, then try again." });
+                  } else {
+                    pushToast({ kind: "error", text: "Couldn't open microphone", sub: err instanceof Error ? `${err.name}: ${err.message}` : String(err) });
+                  }
+                });
+              }}
             />
             <CameraControl cameraOn={cameraOn} roomWrapper={roomWrapper} />
             <ControlButton
