@@ -1,8 +1,14 @@
 import React from "react";
 import ReactDOM from "react-dom/client";
+import { installWebBridgeIfNeeded } from "./lib/web-bridge.js";
 import { App } from "./App.js";
 import { ScreenPickerDialog } from "./screens/ScreenPickerDialog.js";
 import "./styles.css";
+
+// In Electron the preload provides window.r3dvoice before any script runs;
+// in a plain browser tab (web client) this installs the browser bridge.
+// Must run before anything touches the bridge.
+installWebBridgeIfNeeded();
 
 declare const __APP_VERSION__: string;
 const VERSION = typeof __APP_VERSION__ === "string" ? __APP_VERSION__ : "dev";

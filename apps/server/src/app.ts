@@ -1,6 +1,9 @@
+import { existsSync } from "node:fs";
+import { join, resolve } from "node:path";
 import Fastify, { type FastifyInstance } from "fastify";
 import cors from "@fastify/cors";
 import rateLimit from "@fastify/rate-limit";
+import fastifyStatic from "@fastify/static";
 import { registerErrorHandler } from "./errors.js";
 import { authRoutes } from "./auth/routes.js";
 import { roomRoutes } from "./rooms/routes.js";
@@ -34,7 +37,29 @@ export async function buildApp(options: BuildAppOptions = {}): Promise<FastifyIn
   registerErrorHandler(app);
 
   app.get("/health", async () => ({ status: "ok" }));
-  await app.register(landingRoutes);
+
+  // Web client: when WEB_CLIENT_DIR points at the built renderer bundle
+  // (apps/client/out/renderer), the SPA takes over "/" and unknown GET
+  // navigations fall back to index.html so client-side routes deep-link.
+  // The marketing landing page only registers when no web client is set.
+  const webClientDir = process.env["WEB_CLIENT_DIR"]
+    ? resolve(process.env["WEB_CLIENT_DIR"])
+    : null;
+  const serveWebClient = webClientDir !== null && existsSync(join(webClientDir, "index.html"));
+  if (serveWebClient && webClientDir) {
+    // wildcard:false enumerates real files at boot instead of a GET /* route,
+    // so unknown paths reach the not-found handler below (SPA fallback).
+    await app.register(fastifyStatic, { root: webClientDir, index: "index.html", wildcard: false });
+    app.setNotFoundHandler((request, reply) => {
+      const accepts = request.headers.accept ?? "";
+      if (request.method === "GET" && accepts.includes("text/html")) {
+        return reply.sendFile("index.html");
+      }
+      return reply.code(404).send({ error: { code: "NOT_FOUND", message: "route not found" } });
+    });
+  } else {
+    await app.register(landingRoutes);
+  }
   await app.register(authRoutes);
   await app.register(roomRoutes);
   await app.register(chatWsRoutes);

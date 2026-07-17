@@ -88,11 +88,20 @@ const DEFAULTS = {
   // (now applies in real time without re-opening the mic).
   autoGainControl: false,
   micGain: 1.0,
-  // Dev/self-host override: VITE_SERVER_URL at build time wins for fresh
-  // profiles; persisted prefs always take precedence after first run.
+  // Server URL default, in priority order:
+  //   1. VITE_SERVER_URL at build time (dev/self-host override, fresh profiles)
+  //   2. web build (no Electron preload bridge at module-eval time): the page's
+  //      own origin — the server serving the SPA IS the API server
+  //   3. Electron: the canonical hosted instance
+  // Persisted prefs always take precedence after first run.
   serverUrl:
     (typeof import.meta !== "undefined" &&
       (import.meta as unknown as { env?: Record<string, string | undefined> }).env?.["VITE_SERVER_URL"]) ||
+    (typeof window !== "undefined" &&
+    (window as { r3dvoice?: unknown }).r3dvoice === undefined &&
+    /^https?:$/.test(window.location.protocol)
+      ? window.location.origin
+      : "") ||
     "https://voice.r3dwolfie.com",
   favoriteRoomIds: [] as string[],
   participantVolumes: {} as Record<string, number>,
