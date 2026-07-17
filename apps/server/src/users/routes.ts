@@ -43,6 +43,7 @@ export async function userRoutes(app: FastifyInstance): Promise<void> {
       .startsWith("https://")
       .nullable()
       .optional(),
+    displayName: z.string().trim().min(1).max(50).optional(),
   });
 
   app.patch("/me", { preHandler: requireAuth }, async (request) => {
@@ -52,9 +53,12 @@ export async function userRoutes(app: FastifyInstance): Promise<void> {
     }
     const userId = request.auth!.userId;
 
-    const data: { avatarUrl?: string | null } = {};
+    const data: { avatarUrl?: string | null; displayName?: string } = {};
     if (parsed.data.avatarUrl !== undefined) {
       data.avatarUrl = parsed.data.avatarUrl;
+    }
+    if (parsed.data.displayName !== undefined) {
+      data.displayName = parsed.data.displayName;
     }
 
     const user = await prisma.user.update({

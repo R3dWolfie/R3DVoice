@@ -292,6 +292,7 @@ export const updateMeSchema = z.object({
     .startsWith("https://")
     .nullable()
     .optional(),
+  displayName: z.string().trim().min(1).max(50).optional(),
 });
 
 export type UpdateMeRequest = z.infer<typeof updateMeSchema>;

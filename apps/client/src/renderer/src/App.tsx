@@ -1,5 +1,6 @@
 import { useEffect, useState, type ReactElement } from "react";
 import { AuthProvider, useAuthStore, useNeedsHandle } from "./lib/auth-context.js";
+import { usePrefs } from "./lib/prefs-singleton.js";
 import { disconnectTransport, ensureTransport, setCurrentUserForNotifications } from "./lib/chat-transport.js";
 import { ApiClient } from "./lib/api.js";
 import { LoginScreen } from "./screens/LoginScreen.js";
@@ -155,6 +156,22 @@ export function App(): ReactElement {
     const k = prefsActions().pttKeybind;
     if (k) void window.r3dvoice.setPttKeybind(k);
   }, []);
+
+  // Theme (3.6): light is the deck default; dark applies via
+  // data-theme="dark" on <html>; "system" tracks the OS live.
+  const theme = usePrefs((s) => s.theme);
+  useEffect(() => {
+    const mq = window.matchMedia("(prefers-color-scheme: dark)");
+    const apply = (): void => {
+      const dark = theme === "dark" || (theme === "system" && mq.matches);
+      if (dark) document.documentElement.setAttribute("data-theme", "dark");
+      else document.documentElement.removeAttribute("data-theme");
+    };
+    apply();
+    if (theme !== "system") return;
+    mq.addEventListener("change", apply);
+    return () => mq.removeEventListener("change", apply);
+  }, [theme]);
 
   return (
     <AuthProvider>

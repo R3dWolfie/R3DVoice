@@ -16,7 +16,7 @@ import { I } from "./Icons.js";
 import { Modal } from "./Modal.js";
 import { Field } from "./Primitives.js";
 
-type Tab = "devices" | "keybinds" | "account" | "compat" | "about";
+type Tab = "devices" | "keybinds" | "account" | "theme" | "compat" | "about";
 
 // Local copy of the designer's kbd inline style. Will be lifted to a shared
 // helper once a third call site appears.
@@ -66,10 +66,16 @@ export function SettingsModal({ onClose }: { onClose: () => void }): ReactElemen
             label="Account"
           />
           <NavButton
+            active={tab === "theme"}
+            onClick={() => setTab("theme")}
+            icon={<I.StarFilled size={14} />}
+            label="Theme"
+          />
+          <NavButton
             active={tab === "compat"}
             onClick={() => setTab("compat")}
             icon={<I.Grid size={14} />}
-            label="Compatibility"
+            label="Advanced"
           />
           <NavButton
             active={tab === "about"}
@@ -84,6 +90,7 @@ export function SettingsModal({ onClose }: { onClose: () => void }): ReactElemen
           {tab === "devices" && <DevicesTab />}
           {tab === "keybinds" && <KeybindsTab />}
           {tab === "account" && <AccountTab onClose={onClose} />}
+          {tab === "theme" && <ThemeTab />}
           {tab === "compat" && <CompatTab />}
           {tab === "about" && <AboutTab />}
         </div>
@@ -872,6 +879,75 @@ function PermRow({
   );
 }
 
+// Theme tab per WireFrames 3.6 — preset picker. The deck also specs a
+// per-token hex editor with live preview; that ships once presets have
+// settled (tracked with the polish backlog).
+function ThemeTab(): ReactElement {
+  const theme = usePrefs((s) => s.theme);
+  const presets = [
+    { key: "light" as const, label: "Light", swatch: "#fafafa", ink: "#1a1a1a" },
+    { key: "dark" as const, label: "Dark", swatch: "#161616", ink: "#e6e6e6" },
+    { key: "system" as const, label: "Match OS", swatch: "linear-gradient(90deg, #fafafa 50%, #161616 50%)", ink: "var(--text)" },
+  ];
+  return (
+    <div style={{ display: "flex", flexDirection: "column", gap: "var(--s-5)", maxWidth: 480 }}>
+      <div className="rv-section-head">
+        <span className="rv-label">Start from preset</span>
+      </div>
+      <div style={{ display: "flex", gap: "var(--s-3)" }}>
+        {presets.map((p) => (
+          <button
+            key={p.key}
+            type="button"
+            onClick={() => prefsActions().setTheme(p.key)}
+            style={{
+              flex: 1,
+              display: "flex",
+              flexDirection: "column",
+              alignItems: "center",
+              gap: "var(--s-2)",
+              padding: "var(--s-4)",
+              borderRadius: "var(--r-md)",
+              background: "var(--bg-elev)",
+              border:
+                theme === p.key
+                  ? "2px solid var(--accent)"
+                  : "1px solid var(--border)",
+              cursor: "pointer",
+              font: "inherit",
+              color: "var(--text)",
+            }}
+          >
+            <span
+              aria-hidden
+              style={{
+                width: "100%",
+                height: "3rem",
+                borderRadius: "var(--r-sm)",
+                background: p.swatch,
+                border: "1px solid var(--border-soft)",
+                display: "grid",
+                placeItems: "center",
+                color: p.ink,
+                fontWeight: 700,
+              }}
+            >
+              Aa
+            </span>
+            <span style={{ fontSize: "var(--t-sm)", fontWeight: theme === p.key ? 600 : 500 }}>
+              {p.label}
+            </span>
+          </button>
+        ))}
+      </div>
+      <p style={{ margin: 0, fontSize: "var(--t-xs)", color: "var(--text-dim)" }}>
+        Applies instantly, everywhere. Custom token editing (per-color tweaks with live
+        preview) is planned — the stylesheet is already token-driven.
+      </p>
+    </div>
+  );
+}
+
 function AccountTab({ onClose }: { onClose: () => void }): ReactElement {
   const user = useAuthStore((s) => s.user);
   const serverUrl = useAuthStore((s) => s.serverUrl);
@@ -925,6 +1001,8 @@ function AccountTab({ onClose }: { onClose: () => void }): ReactElement {
           </span>
         </div>
       </div>
+
+      <ProfileIdentityFields />
 
       <div className="rv-field">
         <label className="rv-label">Profile picture URL</label>
@@ -1065,6 +1143,132 @@ function AccountTab({ onClose }: { onClose: () => void }): ReactElement {
         </div>
       )}
     </div>
+  );
+}
+
+// Display name + handle editing per 3.3 Profile section. The deck's gate
+// copy promises "change it anytime from Settings › Account" — this is that.
+function ProfileIdentityFields(): ReactElement {
+  const user = useAuthStore((s) => s.user);
+  const serverUrl = useAuthStore((s) => s.serverUrl);
+  const token = useAuthStore((s) => s.token);
+  const refreshUser = useAuthStore((s) => s.refreshUser);
+
+  const [nameDraft, setNameDraft] = useState(user?.displayName ?? "");
+  const [handleDraft, setHandleDraft] = useState(user?.handle ?? "");
+  const [busy, setBusy] = useState<"name" | "handle" | null>(null);
+  const [error, setError] = useState<string | null>(null);
+  const [saved, setSaved] = useState<"name" | "handle" | null>(null);
+
+  useEffect(() => setNameDraft(user?.displayName ?? ""), [user?.displayName]);
+  useEffect(() => setHandleDraft(user?.handle ?? ""), [user?.handle]);
+
+  const api = (): ApiClient => {
+    const a = new ApiClient(serverUrl);
+    a.setToken(token);
+    return a;
+  };
+
+  const saveName = async (): Promise<void> => {
+    setBusy("name");
+    setError(null);
+    try {
+      await api().updateMe({ displayName: nameDraft.trim() });
+      await refreshUser();
+      setSaved("name");
+      setTimeout(() => setSaved(null), 1500);
+    } catch (e) {
+      setError(e instanceof Error ? e.message : "failed to save");
+    } finally {
+      setBusy(null);
+    }
+  };
+
+  const saveHandle = async (): Promise<void> => {
+    setBusy("handle");
+    setError(null);
+    try {
+      await api().setMyHandle(handleDraft.trim());
+      await refreshUser();
+      setSaved("handle");
+      setTimeout(() => setSaved(null), 1500);
+    } catch (e) {
+      setError(e instanceof Error ? e.message : "failed to save");
+    } finally {
+      setBusy(null);
+    }
+  };
+
+  return (
+    <>
+      <div className="rv-field">
+        <label className="rv-label">Display name</label>
+        <div style={{ display: "flex", gap: "var(--s-2)" }}>
+          <input
+            className="rv-input"
+            maxLength={50}
+            value={nameDraft}
+            onChange={(e) => setNameDraft(e.target.value)}
+            disabled={busy !== null}
+          />
+          <button
+            type="button"
+            className="rv-btn"
+            data-variant="primary"
+            disabled={busy !== null || !nameDraft.trim() || nameDraft.trim() === user?.displayName}
+            onClick={() => void saveName()}
+          >
+            {busy === "name" ? "Saving…" : saved === "name" ? "Saved ✓" : "Save"}
+          </button>
+        </div>
+      </div>
+
+      <div className="rv-field">
+        <label className="rv-label">Handle</label>
+        <div style={{ display: "flex", gap: "var(--s-2)" }}>
+          <div
+            style={{
+              flex: 1,
+              display: "flex",
+              alignItems: "center",
+              height: "2.5rem",
+              padding: "0 var(--s-3)",
+              border: "1px solid var(--border)",
+              borderRadius: "var(--r-md)",
+              background: "var(--bg-elev-2)",
+              fontFamily: "var(--font-mono)",
+              fontSize: "var(--t-sm)",
+            }}
+          >
+            <span style={{ color: "var(--text-dim)", marginRight: 1 }}>@</span>
+            <input
+              value={handleDraft}
+              onChange={(e) => setHandleDraft(e.target.value)}
+              disabled={busy !== null}
+              spellCheck={false}
+              style={{ flex: 1, minWidth: 0, border: 0, outline: "none", background: "transparent", font: "inherit", color: "var(--text)" }}
+            />
+          </div>
+          <button
+            type="button"
+            className="rv-btn"
+            data-variant="primary"
+            disabled={busy !== null || !handleDraft.trim() || handleDraft.trim() === user?.handle}
+            onClick={() => void saveHandle()}
+          >
+            {busy === "handle" ? "Saving…" : saved === "handle" ? "Saved ✓" : "Save"}
+          </button>
+        </div>
+        <div className="rv-field-help">Used for @mentions. 3–24 characters: letters, digits, underscores.</div>
+      </div>
+
+      {error && (
+        <div className="rv-err-banner" role="alert">
+          <span className="ic">!</span>
+          <div>{error}</div>
+        </div>
+      )}
+    </>
   );
 }
 

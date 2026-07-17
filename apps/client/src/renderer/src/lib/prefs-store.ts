@@ -9,7 +9,10 @@ export type Resolution = "720p" | "1080p" | "1440p" | "4K";
 export type FrameRate = 30 | 60;
 export type NoiseSuppressionLevel = "off" | "low" | "high";
 
+export type ThemePreset = "light" | "dark" | "system";
+
 export interface PrefsState {
+  theme: ThemePreset;
   micDeviceId: string | null;
   speakerDeviceId: string | null;
   cameraDeviceId: string | null;
@@ -36,6 +39,7 @@ export interface PrefsState {
   /** Per-participant screen-audio volume map (1.0 = unity). Persists across sessions. */
   participantScreenVolumes: Record<string, number>;
 
+  setTheme(theme: ThemePreset): void;
   setMicDeviceId(id: string | null): void;
   setSpeakerDeviceId(id: string | null): void;
   setCameraDeviceId(id: string | null): void;
@@ -61,6 +65,7 @@ export interface PrefsState {
 }
 
 const DEFAULTS = {
+  theme: "light" as ThemePreset,
   micDeviceId: null as string | null,
   speakerDeviceId: null as string | null,
   cameraDeviceId: null as string | null,
@@ -145,6 +150,7 @@ export function createPrefsStore(storage: PrefsStorage): StoreApi<PrefsState> {
       autoGainControl: state.autoGainControl,
       micGain: state.micGain,
       serverUrl: state.serverUrl,
+      theme: state.theme,
       favoriteRoomIds: state.favoriteRoomIds,
       participantVolumes: state.participantVolumes,
       participantScreenVolumes: state.participantScreenVolumes,
@@ -154,6 +160,7 @@ export function createPrefsStore(storage: PrefsStorage): StoreApi<PrefsState> {
 
   return createStore<PrefsState>((set, get) => ({
     ...initial,
+    setTheme: (v) => { set({ theme: v }); persistFromState(get()); },
     setMicDeviceId: (v) => { set({ micDeviceId: v }); persistFromState(get()); },
     setSpeakerDeviceId: (v) => { set({ speakerDeviceId: v }); persistFromState(get()); },
     setCameraDeviceId: (v) => { set({ cameraDeviceId: v }); persistFromState(get()); },
