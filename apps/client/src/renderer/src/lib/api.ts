@@ -4,6 +4,7 @@ import type {
   LoginRequest,
   LoginResponse,
   RegisterRequest as _SharedRegisterRequest,
+  PublicRoomsResponse,
   RoomDTO,
   RoomListResponse,
   RoomMemberDTO,
@@ -148,6 +149,9 @@ export class ApiClient {
   }
   transferRoomOwnership(id: string, newOwnerId: string): Promise<RoomDTO> {
     return this.request("POST", `/rooms/${encodeURIComponent(id)}/transfer`, { newOwnerId });
+  }
+  listPublicRooms(): Promise<PublicRoomsResponse> {
+    return this.request("GET", "/rooms/public");
   }
   listRoomMembers(id: string): Promise<RoomMemberDTO[]> {
     return this.request("GET", `/rooms/${encodeURIComponent(id)}/members`);

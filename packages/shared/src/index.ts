@@ -48,11 +48,13 @@ export interface UserDTO {
 export interface CreateRoomRequest {
   name: string;
   isPublic?: boolean;
+  description?: string;
 }
 
 export interface UpdateRoomRequest {
   name?: string;
   isPublic?: boolean;
+  description?: string | null;
 }
 
 export interface InviteMemberRequest {
@@ -66,6 +68,7 @@ export interface TransferOwnershipRequest {
 export interface RoomDTO {
   id: string;
   name: string;
+  description: string | null;
   ownerId: string;
   isPublic: boolean;
   createdAt: string; // ISO 8601
@@ -84,6 +87,18 @@ export interface RoomMemberDTO {
 export interface RoomListResponse {
   owned: RoomDTO[];
   recent: RoomDTO[];
+}
+
+export interface PublicRoomDTO {
+  id: string;
+  name: string;
+  description: string | null;
+  memberCount: number;
+  createdAt: string;
+}
+
+export interface PublicRoomsResponse {
+  rooms: PublicRoomDTO[];
 }
 
 // Token DTOs

@@ -10,7 +10,7 @@ export interface RoomsState {
   error: string | null;
 
   refresh(): Promise<void>;
-  create(name: string, isPublic?: boolean): Promise<RoomDTO>;
+  create(name: string, isPublic?: boolean, description?: string): Promise<RoomDTO>;
   join(idOrUrl: string): Promise<void>;
   clearActive(): void;
 }
@@ -63,8 +63,8 @@ export function createRoomsStore(api: ApiClient): StoreApi<RoomsState> {
       }
     },
 
-    async create(name, isPublic) {
-      const room = await api.createRoom(isPublic === undefined ? { name } : { name, isPublic });
+    async create(name, isPublic, description) {
+      const room = await api.createRoom({ name, ...(isPublic !== undefined && { isPublic }), ...(description !== undefined && { description }) });
       const { owned } = get();
       set({ owned: [room, ...owned] });
       return room;

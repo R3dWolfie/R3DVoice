@@ -2,10 +2,8 @@ import { useState, type ReactElement } from "react";
 import { Modal } from "./Modal.js";
 import { Field } from "./Primitives.js";
 
-// Create-room modal per WireFrames 4.8. The deck also specs Description and
-// a third "Private" (invite-only) privacy level — both need server support
-// (room settings, phase 6), so this ships the real subset: name + the
-// isPublic flag as Public/Unlisted.
+// Create-room modal per WireFrames 4.8: name, description, Public/Unlisted.
+// The third "Private" (invite-only) level lands with the visibility tier.
 export function CreateRoomModal({
   open,
   onClose,
@@ -14,10 +12,11 @@ export function CreateRoomModal({
 }: {
   open: boolean;
   onClose: () => void;
-  onCreate: (name: string, isPublic: boolean) => void;
+  onCreate: (name: string, isPublic: boolean, description?: string) => void;
   busy?: boolean;
 }): ReactElement | null {
   const [name, setName] = useState("");
+  const [description, setDescription] = useState("");
   const [isPublic, setIsPublic] = useState(true);
 
   const canCreate = !busy && name.trim().length > 0;
@@ -39,7 +38,7 @@ export function CreateRoomModal({
             data-variant="primary"
             data-disabled={!canCreate || undefined}
             onClick={() => {
-              if (canCreate) onCreate(name.trim(), isPublic);
+              if (canCreate) onCreate(name.trim(), isPublic, description.trim() || undefined);
             }}
           >
             {busy ? "Creating…" : "Create room"}
@@ -57,8 +56,19 @@ export function CreateRoomModal({
             maxLength={80}
             onChange={(e) => setName(e.target.value)}
             onKeyDown={(e) => {
-              if (e.key === "Enter" && canCreate) onCreate(name.trim(), isPublic);
+              if (e.key === "Enter" && canCreate) onCreate(name.trim(), isPublic, description.trim() || undefined);
             }}
+          />
+        </Field>
+
+        <Field label="Description" hint="Optional — recommended if you list it publicly.">
+          <textarea
+            className="rv-input"
+            value={description}
+            maxLength={500}
+            onChange={(e) => setDescription(e.target.value)}
+            placeholder="What's this room for?"
+            style={{ height: "4rem", padding: "var(--s-2) var(--s-3)", resize: "vertical", fontFamily: "inherit" }}
           />
         </Field>
 

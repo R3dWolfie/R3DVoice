@@ -10,11 +10,13 @@ import type { Room, RoomMembership } from "@prisma/client";
 const createRoomSchema = z.object({
   name: z.string().trim().min(1).max(80),
   isPublic: z.boolean().optional(),
+  description: z.string().trim().max(500).optional(),
 });
 
 const updateRoomSchema = z.object({
   name: z.string().trim().min(1).max(80).optional(),
   isPublic: z.boolean().optional(),
+  description: z.string().trim().max(500).nullable().optional(),
 });
 
 const inviteSchema = z.object({
@@ -28,6 +30,7 @@ const transferSchema = z.object({
 interface RoomResponse {
   id: string;
   name: string;
+  description: string | null;
   ownerId: string;
   isPublic: boolean;
   createdAt: string;
@@ -51,6 +54,7 @@ function toResponse(
   return {
     id: room.id,
     name: room.name,
+    description: room.description ?? null,
     ownerId: room.ownerId,
     isPublic: room.isPublic,
     createdAt: room.createdAt.toISOString(),
@@ -83,6 +87,7 @@ export async function roomRoutes(app: FastifyInstance): Promise<void> {
         name: parsed.data.name,
         ownerId: request.auth!.userId,
         isPublic: parsed.data.isPublic ?? false,
+        description: parsed.data.description ?? null,
       },
     });
     reply.status(201).send(toResponse(room, request.auth!.userId, null));
@@ -104,6 +109,28 @@ export async function roomRoutes(app: FastifyInstance): Promise<void> {
     return {
       owned: owned.map((r) => toResponse(r, userId, null)),
       recent: memberships.map((m) => toResponse(m.room, userId, m)),
+    };
+  });
+
+  // ---------------------------------------------------------------------
+  // Public directory (4.7): rooms that opted into being listed. Includes
+  // member counts for the "rooms with people in them" sort of browsing.
+  // ---------------------------------------------------------------------
+  app.get("/rooms/public", { preHandler: requireAuth }, async () => {
+    const rooms = await prisma.room.findMany({
+      where: { isPublic: true },
+      orderBy: { createdAt: "desc" },
+      take: 100,
+      include: { _count: { select: { memberships: true } } },
+    });
+    return {
+      rooms: rooms.map((r) => ({
+        id: r.id,
+        name: r.name,
+        description: r.description ?? null,
+        memberCount: r._count.memberships,
+        createdAt: r.createdAt.toISOString(),
+      })),
     };
   });
 
@@ -140,9 +167,10 @@ export async function roomRoutes(app: FastifyInstance): Promise<void> {
       if (!parsed.success) {
         throw new ValidationError(parsed.error.issues[0]?.message ?? "invalid input");
       }
-      const data: { name?: string; isPublic?: boolean } = {};
+      const data: { name?: string; isPublic?: boolean; description?: string | null } = {};
       if (parsed.data.name !== undefined) data.name = parsed.data.name;
       if (parsed.data.isPublic !== undefined) data.isPublic = parsed.data.isPublic;
+      if (parsed.data.description !== undefined) data.description = parsed.data.description;
       const updated = await prisma.room.update({ where: { id: room.id }, data });
       return toResponse(updated, userId, null);
     },

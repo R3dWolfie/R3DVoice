@@ -8,6 +8,8 @@ import { I } from "../components/Icons.js";
 import { ContextMenu, MenuItem, MenuDivider, MenuSection } from "../components/ContextMenu.js";
 import { CreateRoomModal } from "../components/CreateRoomModal.js";
 import { InviteCreateModal } from "../components/InviteCreateModal.js";
+import { RoomSettingsModal } from "../components/RoomSettingsModal.js";
+import { PublicRoomsModal } from "../components/PublicRoomsModal.js";
 import { InRoomScreen } from "./InRoomScreen.js";
 import { buildJoinSelection, type JoinSelection } from "../lib/join-selection.js";
 import { InvitePreviewScreen } from "./InvitePreviewScreen.js";
@@ -96,6 +98,8 @@ export function LobbyScreen({ pendingInviteCode, pendingJoinRoomId, onInviteCode
   const [createBusy, setCreateBusy] = useState(false);
   const [ctxMenu, setCtxMenu] = useState<{ x: number; y: number; room: RoomDTO } | null>(null);
   const [inviteFor, setInviteFor] = useState<string | null>(null);
+  const [settingsFor, setSettingsFor] = useState<RoomDTO | null>(null);
+  const [browseOpen, setBrowseOpen] = useState(false);
   const addMenuRef = useRef<HTMLDivElement>(null);
   const favoriteRoomIds = usePrefs((s) => s.favoriteRoomIds);
   useEffect(() => {
@@ -389,9 +393,10 @@ export function LobbyScreen({ pendingInviteCode, pendingJoinRoomId, onInviteCode
                 <button
                   type="button"
                   className="rv-menu-item"
-                  data-disabled="true"
-                  title="Needs the public room directory — coming with room settings."
-                  style={{ opacity: 0.45, cursor: "default" }}
+                  onClick={() => {
+                    setAddMenuOpen(false);
+                    setBrowseOpen(true);
+                  }}
                 >
                   <span style={{ width: 16, textAlign: "center", color: "var(--text-dim)" }}>🧭</span>
                   <span style={{ display: "flex", flexDirection: "column", alignItems: "flex-start" }}>
@@ -669,21 +674,61 @@ export function LobbyScreen({ pendingInviteCode, pendingJoinRoomId, onInviteCode
           <MenuSection label="Notifications" />
           <MenuItem icon="🔕" label="Mute" disabled disabledHint="Coming with the notifications pass." />
           <MenuDivider />
-          <MenuItem icon="⚙" label="Room Settings" disabled disabledHint="Needs server-side room settings — coming." />
+          <MenuItem
+            icon="⚙"
+            label="Room Settings"
+            onClick={() => {
+              setSettingsFor(ctxMenu.room);
+              setCtxMenu(null);
+            }}
+          />
           <MenuDivider />
-          <MenuItem icon="✕" label="Leave room" tone="danger" disabled disabledHint="Needs server-side membership controls — coming." />
+          {ctxMenu.room.isOwner ? (
+            <MenuItem
+              icon="✕"
+              label="Leave room"
+              tone="danger"
+              disabled
+              disabledHint="Owners can't leave — transfer or delete from Room Settings."
+            />
+          ) : (
+            <MenuItem
+              icon="✕"
+              label="Leave room"
+              tone="danger"
+              onClick={() => {
+                const id = ctxMenu.room.id;
+                setCtxMenu(null);
+                const api = new ApiClient(serverUrl);
+                api.setToken(token);
+                void api.leaveRoom(id).then(() => store.getState().refresh());
+              }}
+            />
+          )}
         </ContextMenu>
+      )}
+
+      {settingsFor && (
+        <RoomSettingsModal
+          room={settingsFor}
+          onClose={() => setSettingsFor(null)}
+          onChanged={() => void store.getState().refresh()}
+          onGone={() => {
+            setSettingsFor(null);
+            void store.getState().refresh();
+          }}
+        />
       )}
 
       <CreateRoomModal
         open={createOpen}
         busy={createBusy}
         onClose={() => setCreateOpen(false)}
-        onCreate={(name, isPublic) => {
+        onCreate={(name, isPublic, description) => {
           setCreateBusy(true);
           void store
             .getState()
-            .create(name, isPublic)
+            .create(name, isPublic, description)
             .then(() => setCreateOpen(false))
             .finally(() => setCreateBusy(false));
         }}
@@ -691,6 +736,13 @@ export function LobbyScreen({ pendingInviteCode, pendingJoinRoomId, onInviteCode
 
       {inviteFor && (
         <InviteCreateModal open={true} roomId={inviteFor} onClose={() => setInviteFor(null)} />
+      )}
+
+      {browseOpen && (
+        <PublicRoomsModal
+          onClose={() => setBrowseOpen(false)}
+          onJoin={(roomId) => void store.getState().join(roomId)}
+        />
       )}
     </div>
   );
