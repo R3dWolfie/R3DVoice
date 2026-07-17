@@ -187,34 +187,69 @@ async function logIceCandidatePair(
  * 2. Otherwise fall back to a PulseAudio/PipeWire "Monitor of …" source
  *    (full system mix; will echo unless user wears headphones).
  */
+function linuxAudioDbg(msg: string): void {
+  // Persist to the app log file — AppImages launched from the desktop have a
+  // closed stdout, so console.log alone vanishes. logError appends to a file
+  // in userData the user can read.
+  try { void window.r3dvoice?.logError?.(`[linux-audio-capture] ${msg}`); } catch { /* */ }
+  // eslint-disable-next-line no-console
+  console.log(`[linux-audio-capture] ${msg}`);
+}
+
 async function captureLinuxMonitorSource(
   preferLabelContains?: string,
 ): Promise<MediaStream | null> {
+  const findTarget = (devices: MediaDeviceInfo[]): MediaDeviceInfo | undefined => {
+    if (preferLabelContains) {
+      const needle = preferLabelContains.toLowerCase();
+      const t = devices.find(
+        (d) => d.kind === "audioinput" && d.label.toLowerCase().includes(needle),
+      );
+      if (t) return t;
+    }
+    // Fallback: any monitor source (system mix).
+    const monitors = devices.filter(
+      (d) => d.kind === "audioinput" && /monitor/i.test(d.label),
+    );
+    return monitors.find((m) => /default/i.test(m.label)) ?? monitors[0];
+  };
+
   try {
+    // enumerateDevices() hides labels until this origin has held an audio
+    // capture grant at least once — probe to unlock them.
     let devices = await navigator.mediaDevices.enumerateDevices();
-    if (devices.every((d) => d.label === "")) {
+    if (devices.some((d) => d.kind === "audioinput" && d.label === "")) {
       try {
         const probe = await navigator.mediaDevices.getUserMedia({ audio: true });
         probe.getTracks().forEach((t) => t.stop());
-      } catch { return null; }
+      } catch { /* keep going — some inputs may still be labeled */ }
       devices = await navigator.mediaDevices.enumerateDevices();
     }
 
-    let target: MediaDeviceInfo | undefined;
-    if (preferLabelContains) {
-      const needle = preferLabelContains.toLowerCase();
-      target = devices.find(
-        (d) => d.kind === "audioinput" && d.label.toLowerCase().includes(needle),
-      );
+    // venmic's "vencord-screen-share" node (and any freshly-created virtual
+    // device) shows up in enumerateDevices ASYNCHRONOUSLY after link() — a
+    // single snapshot taken right after routing is enabled almost always
+    // misses it, which is why screenshare audio silently failed (and fell back
+    // to a second portal). Poll for up to ~2.4s, re-enumerating each round,
+    // until the target device appears.
+    let target = findTarget(devices);
+    for (let attempt = 0; attempt < 16 && !target; attempt++) {
+      await new Promise((r) => setTimeout(r, 150));
+      devices = await navigator.mediaDevices.enumerateDevices();
+      target = findTarget(devices);
     }
+
     if (!target) {
-      // Fallback: any monitor source.
-      const monitors = devices.filter(
-        (d) => d.kind === "audioinput" && /monitor/i.test(d.label),
+      const labels = devices
+        .filter((d) => d.kind === "audioinput")
+        .map((d) => d.label || "(unlabeled)")
+        .join(" | ");
+      linuxAudioDbg(
+        `no capturable device (wanted "${preferLabelContains ?? "monitor"}"); audioinputs seen: ${labels}`,
       );
-      if (monitors.length === 0) return null;
-      target = monitors.find((m) => /default/i.test(m.label)) ?? monitors[0]!;
+      return null;
     }
+    linuxAudioDbg(`capturing "${target.label}"`);
 
     return await navigator.mediaDevices.getUserMedia({
       audio: {
@@ -228,7 +263,8 @@ async function captureLinuxMonitorSource(
         sampleRate: 48000,
       },
     });
-  } catch {
+  } catch (err) {
+    linuxAudioDbg(`threw: ${err instanceof Error ? err.message : String(err)}`);
     return null;
   }
 }
@@ -930,16 +966,18 @@ export class LiveKitRoom {
           preferLabel = routing.monitorDeviceDescription;
           routingEnabled = true;
         }
-      } catch { /* */ }
+      } catch (e) {
+        linuxAudioDbg(`enableLinuxAudioRouting threw: ${e instanceof Error ? e.message : String(e)}`);
+      }
+      linuxAudioDbg(`venmic routing ${routingEnabled ? "ok" : "FAILED (falling back to system monitor)"}, target="${preferLabel ?? "monitor"}"`);
 
       auxStream = await captureLinuxMonitorSource(preferLabel);
       track = auxStream?.getAudioTracks()[0] ?? null;
       if (track) {
-        // eslint-disable-next-line no-console
-        console.log(
+        linuxAudioDbg(
           routingEnabled
-            ? "[screenshare] linux: capturing r3dvoice_share.monitor — R3DVoice playback excluded"
-            : "[screenshare] linux: capturing default monitor (system mix; use headphones to avoid echo)",
+            ? "capturing venmic vencord-screen-share — R3DVoice playback excluded"
+            : "capturing default monitor (system mix; use headphones to avoid echo)",
         );
       } else if (routingEnabled) {
         // Capture failed even though routing was set up — tear it down so
