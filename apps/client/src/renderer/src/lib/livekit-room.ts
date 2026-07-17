@@ -15,6 +15,7 @@ import {
 // The E2EE worker is where SFrame encryption/decryption runs off the main thread.
 import E2eeWorker from "livekit-client/e2ee-worker?worker";
 import { startSystemAudioStream, stopSystemAudioStream } from "./system-audio-stream.js";
+import { notifyJoinLeave } from "../components/notify-join-leave.js";
 
 export type DisconnectKind =
   | "removed-by-owner"
@@ -371,8 +372,14 @@ export class LiveKitRoom {
         this.rttByParticipant = next;
       }
     });
-    this.room.on(RoomEvent.ParticipantConnected, () => this.emit());
-    this.room.on(RoomEvent.ParticipantDisconnected, () => this.emit());
+    this.room.on(RoomEvent.ParticipantConnected, (p) => {
+      notifyJoinLeave(p.name || p.identity, "joined");
+      this.emit();
+    });
+    this.room.on(RoomEvent.ParticipantDisconnected, (p) => {
+      notifyJoinLeave(p.name || p.identity, "left");
+      this.emit();
+    });
     this.room.on(RoomEvent.TrackSubscribed, (track, pub, participant) => {
       // Receiver-side stats sampling for remote video tracks. Mirrors the
       // sender-side block in LocalTrackPublished — together they reveal
