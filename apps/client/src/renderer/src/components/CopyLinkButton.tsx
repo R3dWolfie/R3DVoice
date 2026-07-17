@@ -24,8 +24,8 @@ export function CopyLinkButton({
         setMenuOpen(false);
       }
     }
-    window.addEventListener("mousedown", onMouseDown);
-    return () => window.removeEventListener("mousedown", onMouseDown);
+    window.addEventListener("mousedown", onMouseDown, true);
+    return () => window.removeEventListener("mousedown", onMouseDown, true);
   }, [menuOpen]);
 
   async function copy(kind: "link" | "id"): Promise<void> {

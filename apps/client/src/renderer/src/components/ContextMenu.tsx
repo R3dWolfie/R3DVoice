@@ -25,11 +25,11 @@ export function ContextMenu({
     function onKey(e: KeyboardEvent): void {
       if (e.key === "Escape") onClose();
     }
-    window.addEventListener("mousedown", onDown);
+    window.addEventListener("mousedown", onDown, true);
     window.addEventListener("keydown", onKey);
     window.addEventListener("scroll", onClose, true);
     return () => {
-      window.removeEventListener("mousedown", onDown);
+      window.removeEventListener("mousedown", onDown, true);
       window.removeEventListener("keydown", onKey);
       window.removeEventListener("scroll", onClose, true);
     };

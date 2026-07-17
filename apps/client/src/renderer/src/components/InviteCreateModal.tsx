@@ -92,6 +92,7 @@ export function InviteCreateModal({ open, onClose, roomId }: Props): ReactElemen
 
   return (
     <Modal open={open} onClose={reset} title={roomId ? "Invite to this room" : "Invite a friend"} width="min(92vw, 460px)">
+      <div style={{ padding: "var(--s-5) var(--s-6)" }}>
       {!code && roomId && friends.length > 0 && (
         <div style={{ marginBottom: "var(--s-5)" }}>
           <div
@@ -195,7 +196,8 @@ export function InviteCreateModal({ open, onClose, roomId }: Props): ReactElemen
           </button>
         </>
       )}
-      {code && <CopyableInvite code={code} serverUrl={serverUrl} onClose={reset} />}
+        {code && <CopyableInvite code={code} serverUrl={serverUrl} onClose={reset} />}
+      </div>
     </Modal>
   );
 }

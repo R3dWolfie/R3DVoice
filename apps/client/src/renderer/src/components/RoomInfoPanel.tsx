@@ -127,6 +127,7 @@ export function RoomInfoPanel({ roomId, onDeparture, onClose }: Props): ReactEle
 
   return (
     <div
+      data-rv-pop=""
       onClick={(e) => e.stopPropagation()}
       onMouseDown={(e) => e.stopPropagation()}
       style={{
@@ -406,6 +407,7 @@ function ConfirmOverlay({
 }): ReactElement {
   return (
     <div
+      data-rv-pop=""
       onClick={(e) => e.stopPropagation()}
       onMouseDown={(e) => e.stopPropagation()}
       style={{

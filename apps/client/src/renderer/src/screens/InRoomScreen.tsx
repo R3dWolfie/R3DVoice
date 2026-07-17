@@ -36,6 +36,15 @@ import { RoomChatPanel } from "../components/RoomChatPanel.js";
 import { useKeybind } from "../lib/keybinds.js";
 import { routeElement, setMonoOutput, setMonoOutputSink } from "../lib/mono-output.js";
 
+// True when the event started inside an element marked data-rv-pop — a menu,
+// picker, or panel (or its trigger) that must survive the capture-phase
+// outside-click closers below. stopPropagation can't do this job: the closers
+// listen in the capture phase precisely so stray panels can't block them.
+function inPop(e: Event): boolean {
+  return e.composedPath().some((n) => n instanceof HTMLElement && n.dataset.rvPop !== undefined);
+}
+
+
 export interface InRoomScreenProps {
   roomId: string;
   selection: JoinSelection;
@@ -691,9 +700,12 @@ function CameraControl({
 
   useEffect(() => {
     if (!pickerOpen) return;
-    function onMouseDown(): void { setPickerOpen(false); }
-    window.addEventListener("mousedown", onMouseDown);
-    return () => window.removeEventListener("mousedown", onMouseDown);
+    function onMouseDown(e: globalThis.MouseEvent): void {
+      if (inPop(e)) return;
+      setPickerOpen(false);
+    }
+    window.addEventListener("mousedown", onMouseDown, true);
+    return () => window.removeEventListener("mousedown", onMouseDown, true);
   }, [pickerOpen]);
 
   async function pickCamera(deviceId: string): Promise<void> {
@@ -715,6 +727,7 @@ function CameraControl({
         type="button"
         aria-label="Pick camera"
         title="Switch camera"
+        data-rv-pop=""
         onMouseDown={(e) => e.stopPropagation()}
         onClick={() => setPickerOpen((v) => !v)}
         style={{
@@ -734,6 +747,7 @@ function CameraControl({
       </button>
       {pickerOpen && (
         <div
+          data-rv-pop=""
           onMouseDown={(e) => e.stopPropagation()}
           style={{
             position: "absolute",
@@ -809,11 +823,11 @@ function ShareAudioControl({
   useEffect(() => {
     if (!pickerOpen) return;
     function onMouseDown(e: globalThis.MouseEvent): void {
-      if (e.button !== 0) return;
+      if (e.button !== 0 || inPop(e)) return;
       setPickerOpen(false);
     }
-    window.addEventListener("mousedown", onMouseDown);
-    return () => window.removeEventListener("mousedown", onMouseDown);
+    window.addEventListener("mousedown", onMouseDown, true);
+    return () => window.removeEventListener("mousedown", onMouseDown, true);
   }, [pickerOpen]);
 
   async function pickSource(pid: string | null): Promise<void> {
@@ -853,6 +867,7 @@ function ShareAudioControl({
           aria-label="Pick audio source"
           title="Pick which app's audio to share"
           onMouseDown={(e) => e.stopPropagation()}
+          data-rv-pop=""
           onClick={() => setPickerOpen((v) => !v)}
           style={{
             appearance: "none",
@@ -872,6 +887,7 @@ function ShareAudioControl({
       )}
       {pickerOpen && showPicker && (
         <div
+          data-rv-pop=""
           onMouseDown={(e) => e.stopPropagation()}
           style={{
             position: "absolute",
@@ -1401,15 +1417,15 @@ export function InRoomScreen(props: InRoomScreenProps): ReactElement {
       }
     }
     function onMouseDown(e: globalThis.MouseEvent): void {
-      if (e.button !== 0) return;
+      if (e.button !== 0 || inPop(e)) return;
       setMenu(null);
       setRoomInfoOpen(false);
     }
     window.addEventListener("keydown", onKey);
-    window.addEventListener("mousedown", onMouseDown);
+    window.addEventListener("mousedown", onMouseDown, true);
     return () => {
       window.removeEventListener("keydown", onKey);
-      window.removeEventListener("mousedown", onMouseDown);
+      window.removeEventListener("mousedown", onMouseDown, true);
     };
   }, []);
 
@@ -1736,6 +1752,7 @@ export function InRoomScreen(props: InRoomScreenProps): ReactElement {
         <button
           type="button"
           onMouseDown={(e) => e.stopPropagation()}
+          data-rv-pop=""
           onClick={() => setRoomInfoOpen((v) => !v)}
           title="Room info + settings"
           style={{
@@ -2261,6 +2278,7 @@ export function InRoomScreen(props: InRoomScreenProps): ReactElement {
       {/* Right-click volume menu */}
       {menu && (
         <div
+          data-rv-pop=""
           onClick={(e) => e.stopPropagation()}
           onMouseDown={(e) => e.stopPropagation()}
           style={{

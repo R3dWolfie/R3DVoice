@@ -92,6 +92,7 @@ export function NewDmPicker({ open, onClose, onPick }: Props): ReactElement {
 
   return (
     <Modal open={open} onClose={onClose} title="Start a conversation" width="min(92vw, 440px)">
+      <div style={{ padding: "var(--s-5) var(--s-6)" }}>
       <input
         autoFocus
         className="rv-input"
@@ -170,6 +171,7 @@ export function NewDmPicker({ open, onClose, onPick }: Props): ReactElement {
             />
           </div>
         )}
+      </div>
       </div>
     </Modal>
   );

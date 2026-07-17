@@ -1,4 +1,5 @@
 import { useEffect, type ReactElement, type ReactNode } from "react";
+import { createPortal } from "react-dom";
 import { I } from "./Icons.js";
 
 // Generic modal shell, deck anatomy (WireFrames/4-modals): flat dim backdrop,
@@ -39,7 +40,10 @@ export function Modal({
 
   if (!open) return null;
 
-  return (
+  // Portal to <body>: ancestors with transform/filter/backdrop-filter (e.g.
+  // RoomInfoPanel's blur) become containing blocks for position:fixed and
+  // would trap the "fullscreen" backdrop inside their own box.
+  return createPortal(
     <div
       onClick={dismissible ? onClose : undefined}
       style={{
@@ -136,6 +140,7 @@ export function Modal({
           </div>
         )}
       </div>
-    </div>
+    </div>,
+    document.body,
   );
 }

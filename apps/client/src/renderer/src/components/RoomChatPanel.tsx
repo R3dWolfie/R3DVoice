@@ -6,6 +6,7 @@ import { useAuthStore } from "../lib/auth-context.js";
 import { decryptDM, encryptDM, type EncryptedDMPayload } from "../lib/crypto.js";
 import { loadKeyPair } from "../lib/key-storage.js";
 import { Avatar } from "./Avatar.js";
+import { useDismiss } from "../lib/use-dismiss.js";
 import { ContextMenu, MenuItem, MenuDivider } from "./ContextMenu.js";
 import { I } from "./Icons.js";
 import { MentionAutocomplete } from "./MentionAutocomplete.js";
@@ -44,6 +45,9 @@ export function RoomChatPanel({
   const [messages, setMessages] = useState<ChatMessageDTO[]>([]);
   const [draft, setDraft] = useState("");
   const [emojiOpen, setEmojiOpen] = useState(false);
+  const emojiWrapRef = useRef<HTMLDivElement>(null);
+  const emojiBtnRef = useRef<HTMLButtonElement>(null);
+  useDismiss(emojiOpen, () => setEmojiOpen(false), [emojiWrapRef, emojiBtnRef]);
   const [mentionQuery, setMentionQuery] = useState<string | null>(null);
   const [mentionAnchor, setMentionAnchor] = useState<number>(0);
   const [error, setError] = useState<string | null>(null);
@@ -659,7 +663,11 @@ export function RoomChatPanel({
             </button>
           </div>
         )}
-        {emojiOpen && <EmojiPicker onPick={insertEmoji} />}
+        {emojiOpen && (
+          <div ref={emojiWrapRef}>
+            <EmojiPicker onPick={insertEmoji} />
+          </div>
+        )}
         <div style={{ display: "flex", gap: "var(--s-2)", alignItems: "center" }}>
           <button
             type="button"
@@ -717,6 +725,7 @@ export function RoomChatPanel({
             )}
           </div>
           <button
+            ref={emojiBtnRef}
             type="button"
             className="rv-btn rv-btn-icon"
             data-variant="ghost"
