@@ -150,6 +150,12 @@ export class ApiClient {
   transferRoomOwnership(id: string, newOwnerId: string): Promise<RoomDTO> {
     return this.request("POST", `/rooms/${encodeURIComponent(id)}/transfer`, { newOwnerId });
   }
+  editChatMessage(id: string, body: string): Promise<void> {
+    return this.request("PATCH", `/chat/messages/${encodeURIComponent(id)}`, { body });
+  }
+  deleteChatMessage(id: string): Promise<void> {
+    return this.request("DELETE", `/chat/messages/${encodeURIComponent(id)}`);
+  }
   listPublicRooms(): Promise<PublicRoomsResponse> {
     return this.request("GET", "/rooms/public");
   }

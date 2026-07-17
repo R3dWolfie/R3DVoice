@@ -5,6 +5,7 @@ import { ensureTransport, setCurrentlyViewingThread, type ChatTransport } from "
 import { useAuthStore } from "../lib/auth-context.js";
 import { decryptDM, encryptDM, type EncryptedDMPayload } from "../lib/crypto.js";
 import { loadKeyPair } from "../lib/key-storage.js";
+import { ContextMenu, MenuItem, MenuDivider } from "./ContextMenu.js";
 import { I } from "./Icons.js";
 import { MentionAutocomplete } from "./MentionAutocomplete.js";
 
@@ -45,6 +46,9 @@ export function RoomChatPanel({
   const [mentionQuery, setMentionQuery] = useState<string | null>(null);
   const [mentionAnchor, setMentionAnchor] = useState<number>(0);
   const [error, setError] = useState<string | null>(null);
+  // 2.5k message context menu + edit-in-composer state.
+  const [msgMenu, setMsgMenu] = useState<{ id: string; x: number; y: number; body: string; mine: boolean } | null>(null);
+  const [editingId, setEditingId] = useState<string | null>(null);
   const listRef = useRef<HTMLDivElement | null>(null);
   const inputRef = useRef<HTMLInputElement | null>(null);
   const apiRef = useRef<ApiClient | null>(null);
@@ -158,6 +162,24 @@ export function RoomChatPanel({
       }
       const envelope = encryptDM(text, peerPublicKey, myKeyPair);
       body = JSON.stringify(envelope);
+    }
+
+    // Edit-in-composer (2.5k): same encrypt path, PATCH instead of POST,
+    // optimistic local update — the server doesn't push edit events yet.
+    if (editingId !== null) {
+      const id = editingId;
+      setEditingId(null);
+      setDraft("");
+      setError(null);
+      try {
+        await apiRef.current.editChatMessage(id, body);
+        setMessages((prev) =>
+          prev.map((m) => (m.id === id ? { ...m, body, editedAt: new Date().toISOString() } : m)),
+        );
+      } catch (e) {
+        setError(e instanceof Error ? e.message : "failed to edit");
+      }
+      return;
     }
 
     setDraft("");
@@ -301,6 +323,15 @@ export function RoomChatPanel({
               msg={m}
               me={m.authorId === localIdentity}
               followup={i > 0 && decrypted[i - 1]!.authorId === m.authorId}
+              onContextMenu={(x, y) =>
+                setMsgMenu({
+                  id: m.id,
+                  x,
+                  y,
+                  body: m.body ?? "",
+                  mine: m.authorId === localIdentity && m.deletedAt === null,
+                })
+              }
             />
           ))
         )}
@@ -330,6 +361,42 @@ export function RoomChatPanel({
           position: "relative",
         }}
       >
+        {editingId !== null && (
+          <div
+            style={{
+              display: "flex",
+              alignItems: "center",
+              gap: "var(--s-2)",
+              fontSize: "var(--t-2xs)",
+              color: "var(--text-dim)",
+              fontFamily: "var(--font-mono)",
+              textTransform: "uppercase",
+              letterSpacing: ".1em",
+            }}
+          >
+            <span style={{ color: "var(--rv-amber)" }}>✎</span> editing message
+            <button
+              type="button"
+              onClick={() => {
+                setEditingId(null);
+                setDraft("");
+              }}
+              style={{
+                appearance: "none",
+                background: "transparent",
+                border: 0,
+                padding: 0,
+                font: "inherit",
+                color: "var(--text-dim)",
+                cursor: "pointer",
+                textDecoration: "underline",
+                textUnderlineOffset: 2,
+              }}
+            >
+              cancel (esc)
+            </button>
+          </div>
+        )}
         {emojiOpen && <EmojiPicker onPick={insertEmoji} />}
         <div style={{ display: "flex", gap: "var(--s-2)", alignItems: "center" }}>
           <button
@@ -366,6 +433,10 @@ export function RoomChatPanel({
                   e.preventDefault();
                   void send();
                 }
+                if (e.key === "Escape" && editingId !== null) {
+                  setEditingId(null);
+                  setDraft("");
+                }
               }}
               style={{ width: "100%" }}
             />
@@ -390,6 +461,56 @@ export function RoomChatPanel({
           </button>
         </div>
       </footer>
+
+      {/* 2.5k message context menu */}
+      {msgMenu && (
+        <ContextMenu x={msgMenu.x} y={msgMenu.y} onClose={() => setMsgMenu(null)}>
+          <MenuItem
+            icon="⧉"
+            label="Copy text"
+            onClick={() => {
+              void navigator.clipboard.writeText(msgMenu.body).catch(() => {});
+              setMsgMenu(null);
+            }}
+          />
+          {msgMenu.mine && (
+            <>
+              <MenuDivider />
+              <MenuItem
+                icon="✎"
+                label="Edit message"
+                onClick={() => {
+                  setEditingId(msgMenu.id);
+                  setDraft(msgMenu.body);
+                  setMsgMenu(null);
+                  inputRef.current?.focus();
+                }}
+              />
+              <MenuItem
+                icon="🗑"
+                label="Delete message"
+                tone="danger"
+                onClick={() => {
+                  const id = msgMenu.id;
+                  setMsgMenu(null);
+                  void apiRef.current
+                    ?.deleteChatMessage(id)
+                    .then(() =>
+                      setMessages((prev) =>
+                        prev.map((m) =>
+                          m.id === id ? { ...m, body: null, deletedAt: new Date().toISOString() } : m,
+                        ),
+                      ),
+                    )
+                    .catch((e: unknown) =>
+                      setError(e instanceof Error ? e.message : "failed to delete"),
+                    );
+                }}
+              />
+            </>
+          )}
+        </ContextMenu>
+      )}
     </aside>
   );
 }
@@ -401,10 +522,12 @@ function ChatBubble({
   msg,
   me,
   followup,
+  onContextMenu,
 }: {
   msg: ChatMessageDTO;
   me: boolean;
   followup: boolean;
+  onContextMenu?: (x: number, y: number) => void;
 }): ReactElement {
   const time = new Date(msg.createdAt).toLocaleTimeString(undefined, {
     hour: "2-digit",
@@ -413,6 +536,11 @@ function ChatBubble({
   const deleted = msg.deletedAt !== null || msg.body === null;
   return (
     <div
+      onContextMenu={(e) => {
+        if (!onContextMenu) return;
+        e.preventDefault();
+        onContextMenu(e.clientX, e.clientY);
+      }}
       style={{
         display: "flex",
         flexDirection: me ? "row-reverse" : "row",

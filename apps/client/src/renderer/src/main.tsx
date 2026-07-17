@@ -2,6 +2,7 @@ import React from "react";
 import ReactDOM from "react-dom/client";
 import { installWebBridgeIfNeeded } from "./lib/web-bridge.js";
 import { App } from "./App.js";
+import { ErrorBoundary } from "./components/ErrorBoundary.js";
 import { ScreenPickerDialog } from "./screens/ScreenPickerDialog.js";
 import "./styles.css";
 
@@ -47,6 +48,6 @@ const isPicker = new URLSearchParams(window.location.search).get("picker") === "
 
 ReactDOM.createRoot(rootEl).render(
   <React.StrictMode>
-    {isPicker ? <ScreenPickerDialog /> : <App />}
+    <ErrorBoundary>{isPicker ? <ScreenPickerDialog /> : <App />}</ErrorBoundary>
   </React.StrictMode>,
 );

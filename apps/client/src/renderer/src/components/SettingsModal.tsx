@@ -451,12 +451,21 @@ const KEYBIND_ROWS: KeybindRowSpec[] = [
 ];
 
 function KeybindsTab(): ReactElement {
+  const [cheatsheetOpen, setCheatsheetOpen] = useState(false);
   return (
     <div
       style={{ display: "flex", flexDirection: "column", gap: "var(--s-3)", maxWidth: 460 }}
     >
       <div className="rv-section-head">
-        <span className="rv-label">Keybinds</span>
+        <span className="rv-label" style={{ flex: 1 }}>Keybinds</span>
+        <button
+          type="button"
+          className="rv-btn"
+          style={{ height: "1.7rem", fontSize: "var(--t-2xs)" }}
+          onClick={() => setCheatsheetOpen(true)}
+        >
+          Cheatsheet
+        </button>
       </div>
       {KEYBIND_ROWS.map((row) => (
         <KeybindRow key={row.key} spec={row} />
@@ -465,7 +474,62 @@ function KeybindsTab(): ReactElement {
         Push-to-talk uses a system-wide hotkey (works when the app is unfocused).
         The rest only fire when the R3DVoice window is focused.
       </div>
+      {cheatsheetOpen && <CheatsheetModal onClose={() => setCheatsheetOpen(false)} />}
     </div>
+  );
+}
+
+// Keyboard shortcuts cheatsheet per WireFrames 4.18 — user-configured binds
+// plus the built-in interactions that aren't rebindable.
+function CheatsheetModal({ onClose }: { onClose: () => void }): ReactElement {
+  const ptt = usePrefs((s) => s.pttKeybind);
+  const mute = usePrefs((s) => s.muteKeybind);
+  const ghost = usePrefs((s) => s.deafenKeybind);
+  const share = usePrefs((s) => s.shareScreenKeybind);
+  const settings = usePrefs((s) => s.openSettingsKeybind);
+  const leave = usePrefs((s) => s.leaveRoomKeybind);
+  const rows: Array<{ what: string; keys: string }> = [
+    { what: "Push to talk (global)", keys: ptt ?? "unbound" },
+    { what: "Toggle mute", keys: mute ?? "unbound" },
+    { what: "Toggle ghost", keys: ghost ?? "unbound" },
+    { what: "Share screen", keys: share ?? "unbound" },
+    { what: "Open settings", keys: settings ?? "unbound" },
+    { what: "Leave room", keys: leave ?? "unbound" },
+    { what: "Send message", keys: "Enter" },
+    { what: "New line in message", keys: "Shift+Enter" },
+    { what: "Close menu / cancel", keys: "Esc" },
+    { what: "Fullscreen a tile", keys: "double-click" },
+    { what: "Focus a tile (speaker view)", keys: "click" },
+    { what: "Volume / actions menu", keys: "right-click" },
+  ];
+  return (
+    <Modal
+      open={true}
+      onClose={onClose}
+      icon="⌨"
+      title="Keyboard shortcuts"
+      subtitle="Rebind the top section in Settings › Keybinds."
+      width="min(92vw, 440px)"
+    >
+      <div style={{ padding: "var(--s-4) var(--s-6)", display: "flex", flexDirection: "column", gap: 2 }}>
+        {rows.map((r) => (
+          <div
+            key={r.what}
+            style={{
+              display: "flex",
+              alignItems: "center",
+              gap: "var(--s-3)",
+              padding: "var(--s-2) 0",
+              borderBottom: "1px solid var(--border-soft)",
+              fontSize: "var(--t-sm)",
+            }}
+          >
+            <span style={{ flex: 1 }}>{r.what}</span>
+            <kbd className="rv-kbd">{r.keys}</kbd>
+          </div>
+        ))}
+      </div>
+    </Modal>
   );
 }
 
@@ -985,6 +1049,20 @@ function ThemeTab(): ReactElement {
         Applies instantly, everywhere. Custom token editing (per-color tweaks with live
         preview) is planned — the stylesheet is already token-driven.
       </p>
+      {/* 4.14 — with presets, reset = back to the deck default */}
+      <div>
+        <button
+          type="button"
+          className="rv-btn"
+          data-variant="danger"
+          data-disabled={theme === "light" || undefined}
+          onClick={() => {
+            if (theme !== "light") prefsActions().setTheme("light");
+          }}
+        >
+          Reset theme to defaults
+        </button>
+      </div>
     </div>
   );
 }
