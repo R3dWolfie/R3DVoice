@@ -2028,14 +2028,12 @@ export function InRoomScreen(props: InRoomScreenProps): ReactElement {
   const tileCallbacks: TileCallbacks = useMemo(
     () => ({
       onClick: (id) => {
-        // Clicking your OWN tile minimizes your self-view out of the grid
-        // (Discord behaviour) rather than focusing it on yourself.
-        if (id === localIdentityRef.current) {
-          setSelfMinimized((v) => !v);
-          return;
-        }
-        // Single-click focuses a tile in speaker layout. Click the same tile
-        // again to clear focus and let the auto-pick take over.
+        // Discord mechanic: left-click ANY tile (including your own) toggles
+        // the spotlight — focus one person big, click the same tile again to
+        // drop back to the grid showing everyone; click a different tile to
+        // switch focus. Uniform for all tiles. Per-person actions (volume,
+        // mute-for-me, hide-my-video, …) live in the right-click menu, so
+        // left-click stays a pure focus toggle.
         setFocusedId((current) => (current === id ? null : id));
       },
       onDoubleClick: (id, videoEl) => {
@@ -2137,9 +2135,14 @@ export function InRoomScreen(props: InRoomScreenProps): ReactElement {
   // everyone else renders as a compact audio circle (names live in the sidebar).
   const allVideoTiles = tiles.filter((t) => t.screenTrack !== null || t.cameraTrack !== null);
   const localVideoTile = allVideoTiles.find((t) => t.isLocal) ?? null;
-  // When self-minimized, drop the local tile from the grid/speaker layouts.
-  const videoTiles = selfMinimized ? allVideoTiles.filter((t) => !t.isLocal) : allVideoTiles;
-  const audioOnlyTiles = tiles.filter((t) => t.screenTrack === null && t.cameraTrack === null);
+  // "Hide my video" only bites when you actually have video — so turning your
+  // camera off (or a voice-only room) can't strand you off-grid with no way
+  // back. The preference persists and re-applies when video returns.
+  const selfHidden = selfMinimized && localVideoTile !== null;
+  // Discord model: ONE grid of EVERYONE — a Tile renders video when present,
+  // otherwise an avatar (no separate audio-only strip).
+  const gridTiles = selfHidden ? tiles.filter((t) => !t.isLocal) : tiles;
+  const anyoneHasVideo = gridTiles.some((t) => t.screenTrack !== null || t.cameraTrack !== null);
   const sharingParticipants = tiles.filter((t) => t.screenTrack !== null);
   const maximizedTile = maximizedId ? tiles.find((t) => t.id === maximizedId) : null;
   const menuParticipant = menu ? tiles.find((t) => t.id === menu.participantId) : null;
@@ -2574,7 +2577,7 @@ export function InRoomScreen(props: InRoomScreenProps): ReactElement {
             gap: "var(--s-3)",
           }}
         >
-          {selfMinimized && localVideoTile && (
+          {selfHidden && localVideoTile && (
             <button
               type="button"
               onClick={() => setSelfMinimized(false)}
@@ -2607,15 +2610,17 @@ export function InRoomScreen(props: InRoomScreenProps): ReactElement {
           )}
           {useSpeaker ? (
             <SpeakerLayout
-              people={selfMinimized ? tiles.filter((t) => !t.isLocal) : tiles}
+              people={gridTiles}
               sharer={focusSharer}
               focusedId={effectiveFocusedId}
               callbacks={tileCallbacks}
             />
-          ) : videoTiles.length > 0 ? (
-            <GridLayout people={videoTiles} callbacks={tileCallbacks} />
+          ) : anyoneHasVideo ? (
+            /* Everyone in one grid — camera-off participants render as avatar
+               tiles (Discord model), no separate audio strip. */
+            <GridLayout people={gridTiles} callbacks={tileCallbacks} />
           ) : (
-            /* Voice-only room (2.5b): centered large circles */
+            /* Pure-voice room: nicer centered circles instead of empty tiles. */
             <div
               style={{
                 display: "flex",
@@ -2626,25 +2631,8 @@ export function InRoomScreen(props: InRoomScreenProps): ReactElement {
                 alignContent: "center",
               }}
             >
-              {audioOnlyTiles.map((t) => (
+              {gridTiles.map((t) => (
                 <AudioCircle key={t.id} tile={t} size={72} callbacks={tileCallbacks} />
-              ))}
-            </div>
-          )}
-
-          {!useSpeaker && videoTiles.length > 0 && audioOnlyTiles.length > 0 && (
-            <div
-              className="rv-scroll"
-              style={{
-                display: "flex",
-                gap: "var(--s-3)",
-                alignItems: "center",
-                overflowX: "auto",
-                padding: "2px",
-              }}
-            >
-              {audioOnlyTiles.map((t) => (
-                <AudioCircle key={t.id} tile={t} size={52} callbacks={tileCallbacks} />
               ))}
             </div>
           )}
@@ -2890,10 +2878,23 @@ export function InRoomScreen(props: InRoomScreenProps): ReactElement {
           </div>
 
           {menuIsLocal ? (
-            <div style={{ fontSize: 12, color: "var(--text-dim)", lineHeight: 1.5 }}>
-              You can&apos;t adjust your own volume. Right-click someone else&apos;s tile to change
-              their voice or screen audio level.
-            </div>
+            <>
+              {localVideoTile && (
+                <CtxItem
+                  onClick={() => {
+                    setSelfMinimized((v) => !v);
+                    setMenu(null);
+                  }}
+                >
+                  {selfMinimized ? "Show my video" : "Hide my video"}{" "}
+                  <span style={{ color: "var(--text-dim)" }}>{selfMinimized ? "◱" : "◲"}</span>
+                </CtxItem>
+              )}
+              <div style={{ fontSize: 11, color: "var(--text-faint)", lineHeight: 1.5, marginTop: 6 }}>
+                Left-click your tile to spotlight yourself. Your own volume is set on each
+                listener&apos;s end.
+              </div>
+            </>
           ) : (
             <>
               <VolumeRow
