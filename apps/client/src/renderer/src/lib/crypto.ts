@@ -65,14 +65,24 @@ export function encryptDM(
 export function decryptDM(
   payload: EncryptedDMPayload,
   recipientKeyPair: KeyPair,
+  /**
+   * The OTHER participant's public key. Required to decrypt messages you
+   * authored: box's shared secret is ECDH(myPriv, otherPub), and for your
+   * own envelopes payload.s is your own key — using it would compute
+   * ECDH(me, me) and always fail. NaCl box is symmetric, so opening with
+   * (counterpartyPub, mySec) works for both directions.
+   */
+  counterpartyPublicKey?: string,
 ): string | null {
   try {
     if (payload.v !== 1) return null;
     const nonce = naclUtil.decodeBase64(payload.n);
     const ciphertext = naclUtil.decodeBase64(payload.c);
-    const senderPub = naclUtil.decodeBase64(payload.s);
+    const iAmSender = payload.s === recipientKeyPair.publicKey;
+    const otherPubB64 = iAmSender && counterpartyPublicKey ? counterpartyPublicKey : payload.s;
+    const otherPub = naclUtil.decodeBase64(otherPubB64);
     const recipientSec = naclUtil.decodeBase64(recipientKeyPair.secretKey);
-    const plain = nacl.box.open(ciphertext, nonce, senderPub, recipientSec);
+    const plain = nacl.box.open(ciphertext, nonce, otherPub, recipientSec);
     if (!plain) return null;
     return naclUtil.encodeUTF8(plain);
   } catch {

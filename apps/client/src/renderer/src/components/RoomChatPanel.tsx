@@ -238,11 +238,11 @@ export function RoomChatPanel({
         return m; // legacy plaintext, fall through
       }
       if (typeof payload !== "object" || payload === null || payload.v !== 1) return m;
-      const plain = decryptDM(payload, myKeyPair);
+      const plain = decryptDM(payload, myKeyPair, peerPublicKey ?? undefined);
       if (plain === null) return { ...m, body: "🔒 Sent before this device had your key" };
       return { ...m, body: plain };
     });
-  }, [messages, threadType, myKeyPair]);
+  }, [messages, threadType, myKeyPair, peerPublicKey]);
 
   const insertEmoji = (e: string): void => {
     setDraft((d) => d + e);
@@ -371,9 +371,17 @@ export function RoomChatPanel({
                   </button>
                 </div>
                 <div style={{ fontSize: "var(--t-xs)", color: "var(--text)", wordBreak: "break-word", marginTop: 2 }}>
-                  {threadType === "dm" && (p.body ?? "").startsWith("{")
-                    ? "🔒 Encrypted message"
-                    : (p.body ?? "(deleted)")}
+                  {(() => {
+                    const raw = p.body ?? "(deleted)";
+                    if (threadType !== "dm" || !raw.startsWith("{") || !myKeyPair) return raw;
+                    try {
+                      const env = JSON.parse(raw) as EncryptedDMPayload;
+                      if (env?.v !== 1) return raw;
+                      return decryptDM(env, myKeyPair, peerPublicKey ?? undefined) ?? "🔒 Encrypted message";
+                    } catch {
+                      return raw;
+                    }
+                  })()}
                 </div>
               </div>
             ))
