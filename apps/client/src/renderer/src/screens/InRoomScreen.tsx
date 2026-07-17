@@ -829,10 +829,12 @@ interface AudioSourceOption {
 
 function CameraControl({
   cameraOn,
+  starting = false,
   roomWrapper,
   onToggle,
 }: {
   cameraOn: boolean;
+  starting?: boolean;
   roomWrapper: LiveKitRoom;
   /** Toggle camera on/off — owned by the parent so it can flip optimistically. */
   onToggle: () => void;
@@ -880,11 +882,11 @@ function CameraControl({
   return (
     <div style={{ position: "relative", display: "flex", alignItems: "center", gap: 0 }}>
       <ControlButton
-        icon={cameraOn ? <I.CameraOff size={20} /> : <I.Camera size={20} />}
-        label={cameraOn ? "Stop camera" : "Camera"}
+        icon={starting ? <Spinner /> : cameraOn ? <I.CameraOff size={20} /> : <I.Camera size={20} />}
+        label={starting ? "Starting…" : cameraOn ? "Stop camera" : "Camera"}
         active={cameraOn}
         emphasis={cameraOn}
-        title={cameraOn ? "Stop camera" : "Start camera"}
+        title={starting ? "Starting camera…" : cameraOn ? "Stop camera" : "Start camera"}
         onClick={onToggle}
       />
       <button
@@ -2166,6 +2168,9 @@ export function InRoomScreen(props: InRoomScreenProps): ReactElement {
   const muted = pendingMute ?? actualMuted;
   const actualCameraOn = snapshot.local?.isCameraEnabled ?? false;
   const cameraOn = pendingCam ?? actualCameraOn;
+  // Camera acquisition (getUserMedia + warmup + encoder) can take a few
+  // seconds; show a spinner in the button so it doesn't feel dead.
+  const cameraStarting = pendingCam === true && !actualCameraOn;
   const localGhost = snapshot.local?.attributes?.["ghost"] === "1";
 
   useEffect(() => {
@@ -2765,7 +2770,12 @@ export function InRoomScreen(props: InRoomScreenProps): ReactElement {
               }}
             >
               {gridTiles.map((t) => (
-                <AudioCircle key={t.id} tile={t} size={72} callbacks={tileCallbacks} />
+                <AudioCircle
+                  key={t.id}
+                  tile={t}
+                  size={gridTiles.length <= 2 ? 140 : gridTiles.length <= 6 ? 104 : 76}
+                  callbacks={tileCallbacks}
+                />
               ))}
             </div>
           )}
@@ -2896,7 +2906,7 @@ export function InRoomScreen(props: InRoomScreenProps): ReactElement {
               title={withBind(muted ? "Unmute" : "Mute", muteKeybind)}
               onClick={handleToggleMute}
             />
-            <CameraControl cameraOn={cameraOn} roomWrapper={roomWrapper} onToggle={handleToggleCamera} />
+            <CameraControl cameraOn={cameraOn} starting={cameraStarting} roomWrapper={roomWrapper} onToggle={handleToggleCamera} />
             <ControlButton
               icon={<span style={{ fontSize: 20, lineHeight: 1 }}>👻</span>}
               label="Ghost"
@@ -3223,9 +3233,11 @@ export function InRoomScreen(props: InRoomScreenProps): ReactElement {
         <div
           role="status"
           style={{
+            // Anchored just above the control bar so it points at the mic
+            // button it's telling you to click — not floating mid-screen.
             position: "fixed",
             left: "50%",
-            top: "22%",
+            bottom: "5.75rem",
             transform: "translateX(-50%)",
             zIndex: 90,
             display: "flex",
