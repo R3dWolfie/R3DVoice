@@ -39,6 +39,7 @@ model User {
   friendshipsRequested  Friendship[] @relation("FriendshipRequester")
   friendshipsReceived   Friendship[] @relation("FriendshipRecipient")
   invites       Invite[]
+  reactions     Reaction[]
   threadReads     ThreadReadState[]
   threadMutes     ThreadMuteState[]
 }
@@ -109,7 +110,8 @@ model Message {
   pinnedAt   DateTime?
   pinnedById String?
 
-  author User @relation(fields: [authorId], references: [id], onDelete: Cascade)
+  author    User       @relation(fields: [authorId], references: [id], onDelete: Cascade)
+  reactions Reaction[]
 
   @@index([threadType, threadId, createdAt])
   @@index([threadType, threadId, pinnedAt])
@@ -122,6 +124,20 @@ model Message {
 //   pending  → rejected (recipient rejects; row is deleted by handler)
 //   accepted → blocked  (either side blocks)
 // Uniqueness enforced at the canonical-pair level via the @@unique constraint.
+model Reaction {
+  id        String   @id @default(uuid())
+  messageId String
+  userId    String
+  emoji     String
+  createdAt DateTime @default(now())
+
+  message Message @relation(fields: [messageId], references: [id], onDelete: Cascade)
+  user    User    @relation(fields: [userId], references: [id], onDelete: Cascade)
+
+  @@unique([messageId, userId, emoji])
+  @@index([messageId])
+}
+
 model Friendship {
   id           String   @id @default(uuid())
   requesterId  String

@@ -153,6 +153,34 @@ export function RoomChatPanel({
           setMessages((prev) => prev.map((m) => (m.id === event.id ? { ...m, pinnedAt: null } : m)));
           setPins((prev) => prev?.filter((x) => x.id !== event.id) ?? null);
         }
+      } else if (event.type === "reaction") {
+        if (event.threadType === threadType && event.threadId === threadId) {
+          const mineEvent = event.userId === localIdentity;
+          setMessages((prev) =>
+            prev.map((m) => {
+              if (m.id !== event.messageId) return m;
+              const list = [...(m.reactions ?? [])];
+              const idx = list.findIndex((r) => r.emoji === event.emoji);
+              if (event.op === "add") {
+                if (idx >= 0) {
+                  const cur = list[idx]!;
+                  // Own optimistic add may already be counted — don't double.
+                  if (mineEvent && cur.mine) return m;
+                  list[idx] = { ...cur, count: cur.count + 1, mine: cur.mine || mineEvent };
+                } else {
+                  list.push({ emoji: event.emoji, count: 1, mine: mineEvent });
+                }
+              } else if (idx >= 0) {
+                const cur = list[idx]!;
+                if (mineEvent && !cur.mine) return m;
+                const next = { ...cur, count: cur.count - 1, mine: cur.mine && !mineEvent };
+                if (next.count <= 0) list.splice(idx, 1);
+                else list[idx] = next;
+              }
+              return { ...m, reactions: list };
+            }),
+          );
+        }
       }
     });
 
@@ -259,6 +287,33 @@ export function RoomChatPanel({
   const insertEmoji = (e: string): void => {
     setDraft((d) => d + e);
     inputRef.current?.focus();
+  };
+
+  // 2.5k reactions — optimistic toggle; the WS echo is deduped by the
+  // mine-guards in the event handler.
+  const toggleReaction = (messageId: string, emoji: string, mine: boolean): void => {
+    setMessages((prev) =>
+      prev.map((m) => {
+        if (m.id !== messageId) return m;
+        const list = [...(m.reactions ?? [])];
+        const idx = list.findIndex((r) => r.emoji === emoji);
+        if (!mine) {
+          if (idx >= 0) list[idx] = { ...list[idx]!, count: list[idx]!.count + 1, mine: true };
+          else list.push({ emoji, count: 1, mine: true });
+        } else if (idx >= 0) {
+          const next = { ...list[idx]!, count: list[idx]!.count - 1, mine: false };
+          if (next.count <= 0) list.splice(idx, 1);
+          else list[idx] = next;
+        }
+        return { ...m, reactions: list };
+      }),
+    );
+    const call = mine
+      ? apiRef.current?.removeReaction(messageId, emoji)
+      : apiRef.current?.addReaction(messageId, emoji);
+    void call?.catch(() => {
+      /* WS truth wins on next event; worst case a refresh corrects */
+    });
   };
 
   const onPickMention = (c: { id: string; handle: string; displayName: string }): void => {
@@ -491,6 +546,7 @@ export function RoomChatPanel({
                   msg={m}
                   me={m.authorId === localIdentity}
                   followup={!dayChanged && prev !== null && prev.authorId === m.authorId}
+                  onToggleReaction={(emoji, mine) => toggleReaction(m.id, emoji, mine)}
                   onContextMenu={(x, y) =>
                     setMsgMenu({
                       id: m.id,
@@ -773,17 +829,22 @@ function DayDivider({ iso }: { iso: string }): ReactElement {
 // Deck 2.4 message row: 32px avatar beside the stack, mine reversed with
 // the ink bubble, theirs white with a hairline; follow-ups from the same
 // author drop the name/time + avatar and tighten up.
+const QUICK_REACTIONS = ["👍", "❤️", "😂"];
+
 function ChatBubble({
   msg,
   me,
   followup,
   onContextMenu,
+  onToggleReaction,
 }: {
   msg: ChatMessageDTO;
   me: boolean;
   followup: boolean;
   onContextMenu?: (x: number, y: number) => void;
+  onToggleReaction?: (emoji: string, mine: boolean) => void;
 }): ReactElement {
+  const [hovered, setHovered] = useState(false);
   const time = new Date(msg.createdAt).toLocaleTimeString(undefined, {
     hour: "2-digit",
     minute: "2-digit",
@@ -796,14 +857,58 @@ function ChatBubble({
         e.preventDefault();
         onContextMenu(e.clientX, e.clientY);
       }}
+      onMouseEnter={() => setHovered(true)}
+      onMouseLeave={() => setHovered(false)}
       style={{
         display: "flex",
         flexDirection: me ? "row-reverse" : "row",
         alignItems: "flex-end",
         gap: "var(--s-2)",
         marginTop: followup ? -6 : 0,
+        position: "relative",
       }}
     >
+      {/* 2.5k hover quick-reactions */}
+      {hovered && !deleted && onToggleReaction && (
+        <div
+          style={{
+            position: "absolute",
+            top: -14,
+            [me ? "left" : "right"]: 40,
+            display: "flex",
+            gap: 2,
+            background: "var(--bg-elev)",
+            border: "1px solid var(--border)",
+            borderRadius: 999,
+            padding: "2px 6px",
+            boxShadow: "var(--shadow-1)",
+            zIndex: 5,
+          }}
+        >
+          {QUICK_REACTIONS.map((e) => {
+            const mine = msg.reactions?.find((r) => r.emoji === e)?.mine ?? false;
+            return (
+              <button
+                key={e}
+                type="button"
+                onClick={() => onToggleReaction(e, mine)}
+                style={{
+                  appearance: "none",
+                  background: mine ? "var(--accent-tint)" : "transparent",
+                  border: 0,
+                  borderRadius: 999,
+                  padding: "1px 4px",
+                  fontSize: 14,
+                  cursor: "pointer",
+                  lineHeight: 1.2,
+                }}
+              >
+                {e}
+              </button>
+            );
+          })}
+        </div>
+      )}
       <div style={{ flexShrink: 0, visibility: followup ? "hidden" : "visible", marginBottom: 2 }}>
         <Avatar src={null} fallbackInitials={msg.authorName} fallbackColorSeed={msg.authorId} size={30} />
       </div>
@@ -854,6 +959,37 @@ function ChatBubble({
         >
           {deleted ? "(deleted)" : msg.body}
         </div>
+        {/* Reaction chips — click to toggle; mine = Cherry-tinted */}
+        {(msg.reactions?.length ?? 0) > 0 && (
+          <div style={{ display: "flex", flexWrap: "wrap", gap: 4, marginTop: 1 }}>
+            {msg.reactions!.map((r) => (
+              <button
+                key={r.emoji}
+                type="button"
+                onClick={() => onToggleReaction?.(r.emoji, r.mine)}
+                title={r.mine ? "Remove your reaction" : "React too"}
+                style={{
+                  appearance: "none",
+                  display: "inline-flex",
+                  alignItems: "center",
+                  gap: 4,
+                  padding: "1px 7px",
+                  borderRadius: 999,
+                  border: r.mine
+                    ? "1px solid color-mix(in srgb, var(--accent) 45%, var(--border))"
+                    : "1px solid var(--border)",
+                  background: r.mine ? "var(--accent-tint)" : "var(--bg-elev)",
+                  fontSize: 12,
+                  cursor: "pointer",
+                  color: "var(--text)",
+                }}
+              >
+                {r.emoji}
+                <span className="rv-mono" style={{ fontSize: 10, color: "var(--text-mid)" }}>{r.count}</span>
+              </button>
+            ))}
+          </div>
+        )}
       </div>
     </div>
   );

@@ -36,6 +36,7 @@ interface MessageDTO {
   editedAt: string | null;
   deletedAt: string | null;
   pinnedAt?: string | null;
+  reactions?: Array<{ emoji: string; count: number; mine: boolean }>;
   mentions?: string[];
 }
 
@@ -85,6 +86,35 @@ function toDTO(m: {
 /** Wrap room-chat bodies at rest. DMs pass through (client already encrypted). */
 function bodyForStorage(threadType: ThreadType, body: string): string {
   return threadType === "room" ? wrapAtRest(body) : body;
+}
+
+/** Aggregate reactions onto message DTOs: per-emoji count + whether the
+ *  caller reacted. One query for the whole page. */
+async function attachReactions(dtos: MessageDTO[], userId: string): Promise<void> {
+  if (dtos.length === 0) return;
+  const rows = await prisma.reaction.findMany({
+    where: { messageId: { in: dtos.map((m) => m.id) } },
+    select: { messageId: true, emoji: true, userId: true },
+  });
+  if (rows.length === 0) return;
+  const byMessage = new Map<string, Map<string, { count: number; mine: boolean }>>();
+  for (const r of rows) {
+    let per = byMessage.get(r.messageId);
+    if (!per) {
+      per = new Map();
+      byMessage.set(r.messageId, per);
+    }
+    const entry = per.get(r.emoji) ?? { count: 0, mine: false };
+    entry.count += 1;
+    if (r.userId === userId) entry.mine = true;
+    per.set(r.emoji, entry);
+  }
+  for (const m of dtos) {
+    const per = byMessage.get(m.id);
+    if (per) {
+      m.reactions = [...per.entries()].map(([emoji, e]) => ({ emoji, count: e.count, mine: e.mine }));
+    }
+  }
 }
 
 /**
@@ -140,7 +170,9 @@ export async function chatRoutes(app: FastifyInstance): Promise<void> {
       });
 
       // Return chronological-ascending so client can append directly.
-      return { messages: messages.reverse().map(toDTO) };
+      const dtos = messages.reverse().map(toDTO);
+      await attachReactions(dtos, userId);
+      return { messages: dtos };
     },
   );
 
@@ -384,6 +416,64 @@ export async function chatRoutes(app: FastifyInstance): Promise<void> {
         id: msg.id,
         threadType: msg.threadType,
         threadId: msg.threadId,
+      });
+      reply.status(204).send();
+    },
+  );
+
+  // ---------------------------------------------------------------------
+  // Reactions (2.5k): PUT adds the caller's reaction, DELETE removes it.
+  // Broadcast keeps every open panel's chips live.
+  // ---------------------------------------------------------------------
+  const emojiParamOk = (e: string): boolean => e.length > 0 && e.length <= 16;
+
+  app.put<{ Params: { id: string; emoji: string } }>(
+    "/chat/messages/:id/reactions/:emoji",
+    { preHandler: requireAuth },
+    async (request, reply) => {
+      const userId = request.auth!.userId;
+      const emoji = decodeURIComponent(request.params.emoji);
+      if (!emojiParamOk(emoji)) throw new ValidationError("invalid emoji");
+      const msg = await prisma.message.findUnique({ where: { id: request.params.id } });
+      if (!msg || msg.deletedAt) throw new NotFoundError("message not found");
+      await assertThreadAccess(msg.threadType as ThreadType, msg.threadId, userId);
+      await prisma.reaction.upsert({
+        where: { messageId_userId_emoji: { messageId: msg.id, userId, emoji } },
+        create: { messageId: msg.id, userId, emoji },
+        update: {},
+      });
+      broadcastToThread(msg.threadType as ThreadType, msg.threadId, {
+        type: "reaction",
+        op: "add",
+        messageId: msg.id,
+        threadType: msg.threadType,
+        threadId: msg.threadId,
+        emoji,
+        userId,
+      });
+      reply.status(204).send();
+    },
+  );
+
+  app.delete<{ Params: { id: string; emoji: string } }>(
+    "/chat/messages/:id/reactions/:emoji",
+    { preHandler: requireAuth },
+    async (request, reply) => {
+      const userId = request.auth!.userId;
+      const emoji = decodeURIComponent(request.params.emoji);
+      if (!emojiParamOk(emoji)) throw new ValidationError("invalid emoji");
+      const msg = await prisma.message.findUnique({ where: { id: request.params.id } });
+      if (!msg) throw new NotFoundError("message not found");
+      await assertThreadAccess(msg.threadType as ThreadType, msg.threadId, userId);
+      await prisma.reaction.deleteMany({ where: { messageId: msg.id, userId, emoji } });
+      broadcastToThread(msg.threadType as ThreadType, msg.threadId, {
+        type: "reaction",
+        op: "remove",
+        messageId: msg.id,
+        threadType: msg.threadType,
+        threadId: msg.threadId,
+        emoji,
+        userId,
       });
       reply.status(204).send();
     },

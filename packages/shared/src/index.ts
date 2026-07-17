@@ -128,6 +128,8 @@ export interface ChatMessageDTO {
   deletedAt: string | null;
   /** Set while pinned (2.5p). */
   pinnedAt?: string | null;
+  /** Aggregated per-emoji reactions; mine = caller has reacted. */
+  reactions?: Array<{ emoji: string; count: number; mine: boolean }>;
   mentions?: string[];
 }
 
@@ -175,7 +177,8 @@ export type ChatWsEvent =
   | { type: "presence.update"; userId: string; currentRoom: { id: string; name: string } | null }
   | { type: "chat.typing"; threadType: ChatThreadType; threadId: string; userId: string }
   | { type: "pinned"; message: ChatMessageDTO }
-  | { type: "unpinned"; id: string; threadType: ChatThreadType; threadId: string };
+  | { type: "unpinned"; id: string; threadType: ChatThreadType; threadId: string }
+  | { type: "reaction"; op: "add" | "remove"; messageId: string; threadType: ChatThreadType; threadId: string; emoji: string; userId: string };
 
 /** Client → server WebSocket frames. */
 export type ChatWsCommand =

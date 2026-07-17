@@ -55,7 +55,7 @@ export class ApiClient {
   }
 
   private async request<TBody, TRes>(
-    method: "GET" | "POST" | "PATCH" | "DELETE",
+    method: "GET" | "POST" | "PUT" | "PATCH" | "DELETE",
     path: string,
     body?: TBody,
   ): Promise<TRes> {
@@ -164,6 +164,12 @@ export class ApiClient {
   }
   deleteAccount(password: string): Promise<void> {
     return this.request("DELETE", "/me", { password });
+  }
+  addReaction(id: string, emoji: string): Promise<void> {
+    return this.request("PUT", `/chat/messages/${encodeURIComponent(id)}/reactions/${encodeURIComponent(emoji)}`);
+  }
+  removeReaction(id: string, emoji: string): Promise<void> {
+    return this.request("DELETE", `/chat/messages/${encodeURIComponent(id)}/reactions/${encodeURIComponent(emoji)}`);
   }
   pinChatMessage(id: string): Promise<void> {
     return this.request("POST", `/chat/messages/${encodeURIComponent(id)}/pin`);
