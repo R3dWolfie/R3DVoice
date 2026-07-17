@@ -1,7 +1,7 @@
 pkgbase = r3dvoice-bin
 	pkgdesc = Discord-style low-latency voice, video & screenshare for gamers (Electron + LiveKit)
-	pkgver = 0.11.0
-	pkgrel = 2
+	pkgver = 0.11.1
+	pkgrel = 1
 	url = https://github.com/R3dWolfie/R3DVoice
 	arch = x86_64
 	license = AGPL-3.0-or-later
@@ -13,9 +13,9 @@ pkgbase = r3dvoice-bin
 	optdepends = libpulse: system audio capture
 	provides = r3dvoice
 	conflicts = r3dvoice
-	noextract = R3DVoice-0.11.0.AppImage
+	noextract = R3DVoice-0.11.1.AppImage
 	options = !strip
-	source = R3DVoice-0.11.0.AppImage::https://github.com/R3dWolfie/R3DVoice/releases/download/v0.11.0/R3DVoice.AppImage
-	sha256sums = 7ed3359f6893a6e14731669aecdfced6d39884b7ad46a0156d6e02e1fbbea5a9
+	source = R3DVoice-0.11.1.AppImage::https://github.com/R3dWolfie/R3DVoice/releases/download/v0.11.1/R3DVoice.AppImage
+	sha256sums = 0d888e8038bb3cdaecbf8442c67a6ed2cbee41d01809d2a1ef2f61dc8079e157
 
 pkgname = r3dvoice-bin
