@@ -7,6 +7,8 @@ import { getTransport } from "../lib/chat-transport.js";
 import { usePrefs, prefsActions } from "../lib/prefs-singleton.js";
 import { pushToast } from "../lib/toast-store.js";
 import { I } from "../components/Icons.js";
+import { UnreadDot } from "../components/UnreadDot.js";
+import { useUnreadStore } from "../lib/unread-store.js";
 import { ContextMenu, MenuItem, MenuDivider, MenuSection } from "../components/ContextMenu.js";
 import { CreateRoomModal } from "../components/CreateRoomModal.js";
 import { InviteCreateModal } from "../components/InviteCreateModal.js";
@@ -102,11 +104,44 @@ export function LobbyScreen({ pendingInviteCode, pendingJoinRoomId, onInviteCode
   const [inviteFor, setInviteFor] = useState<string | null>(null);
   const [settingsFor, setSettingsFor] = useState<RoomDTO | null>(null);
   const [browseOpen, setBrowseOpen] = useState(false);
+  // Per-row join in-flight + inline failure (mirrors the createBusy pattern).
+  const [joiningId, setJoiningId] = useState<string | null>(null);
+  const [rowJoinError, setRowJoinError] = useState<{ id: string; message: string } | null>(null);
+  // Join-by-link ("Go") in-flight + inline failure.
+  const [joinByLinkBusy, setJoinByLinkBusy] = useState(false);
+  const [joinByLinkError, setJoinByLinkError] = useState<string | null>(null);
   const addMenuRef = useRef<HTMLDivElement>(null);
   const favoriteRoomIds = usePrefs((s) => s.favoriteRoomIds);
+  // Unread/mention badges on room rows — the store is keyed room:<id>.
+  const unreadCounts = useUnreadStore((s) => s.counts);
   useEffect(() => {
     void store.getState().refresh();
   }, [store]);
+
+  // Refresh unread counts so room rows show badges without opening a DM first.
+  useEffect(() => {
+    const api = new ApiClient(serverUrl);
+    api.setToken(token);
+    void useUnreadStore.getState().refresh(api);
+  }, [serverUrl, token]);
+
+  // A user-initiated join with a per-row busy state + inline error. The store's
+  // join() swallows failures into store.error and flips activeRoomId on
+  // success, so we read both back after it settles.
+  async function attemptJoin(roomId: string): Promise<void> {
+    if (joiningId) return;
+    setJoiningId(roomId);
+    setRowJoinError(null);
+    try {
+      await store.getState().join(roomId);
+      const st = store.getState();
+      if (!st.activeRoomId && st.error) {
+        setRowJoinError({ id: roomId, message: st.error });
+      }
+    } finally {
+      setJoiningId(null);
+    }
+  }
 
   useEffect(() => {
     if (pendingJoinRoomId) {
@@ -218,17 +253,34 @@ export function LobbyScreen({ pendingInviteCode, pendingJoinRoomId, onInviteCode
 
   async function onJoin(e: FormEvent): Promise<void> {
     e.preventDefault();
-    if (!joinInput.trim()) return;
-    const inviteCode = extractInviteCode(joinInput);
+    const raw = joinInput.trim();
+    if (!raw) return;
+    const inviteCode = extractInviteCode(raw);
     if (inviteCode) {
       if (onInviteCode) {
         onInviteCode(inviteCode);
       } else {
         setPhase({ kind: "invite", code: inviteCode });
       }
+      setJoinOpen(false);
+      setJoinInput("");
       return;
     }
-    await store.getState().join(joinInput.trim());
+    setJoinByLinkBusy(true);
+    setJoinByLinkError(null);
+    try {
+      await store.getState().join(raw);
+      const st = store.getState();
+      if (!st.activeRoomId && st.error) {
+        // Surface the failure inline instead of silently closing the field.
+        setJoinByLinkError(st.error);
+        return;
+      }
+      setJoinOpen(false);
+      setJoinInput("");
+    } finally {
+      setJoinByLinkBusy(false);
+    }
   }
 
   if (phase.kind === "invite") {
@@ -273,8 +325,12 @@ export function LobbyScreen({ pendingInviteCode, pendingJoinRoomId, onInviteCode
   const allRooms = new Map<string, RoomDTO>();
   for (const r of [...owned, ...recent]) allRooms.set(r.id, r);
   const matches = (r: RoomDTO): boolean => r.name.toLowerCase().includes(filter.trim().toLowerCase());
-  const starred = [...allRooms.values()].filter((r) => favoriteRoomIds.includes(r.id)).filter(matches);
+  const starredUnfiltered = [...allRooms.values()].filter((r) => favoriteRoomIds.includes(r.id));
+  const starred = starredUnfiltered.filter(matches);
   const myRooms = owned.filter((r) => !favoriteRoomIds.includes(r.id)).filter(matches);
+  // Distinguish "you have no rooms" from "the filter matched nothing".
+  const filterActive = filter.trim().length > 0;
+  const hasAnyRooms = owned.length > 0 || starredUnfiltered.length > 0;
 
   type FeedEntry = { key: string; at: number; icon: string; title: ReactElement; meta: string; room: RoomDTO; action: "open" | "copy" };
   const feed: FeedEntry[] = [
@@ -316,35 +372,83 @@ export function LobbyScreen({ pendingInviteCode, pendingJoinRoomId, onInviteCode
       .catch(() => pushToast({ kind: "error", text: "Couldn't access the clipboard" }));
   };
 
-  const roomRow = (r: RoomDTO, starredRow: boolean): ReactElement => (
-    <div
-      key={r.id}
-      className="rv-list-item"
-      onClick={() => void store.getState().join(r.id)}
-      onContextMenu={(e) => {
-        e.preventDefault();
-        setCtxMenu({ x: e.clientX, y: e.clientY, room: r });
-      }}
-    >
-      <RoomAvatar name={r.name} />
-      <div style={{ display: "flex", flexDirection: "column", gap: 1, minWidth: 0, flex: 1 }}>
-        <span style={{ fontSize: "var(--t-sm)", whiteSpace: "nowrap", overflow: "hidden", textOverflow: "ellipsis" }}>
-          {r.name}
-        </span>
-        <span
-          className="rv-mono"
-          style={{ fontSize: "var(--t-2xs)", color: (r.inCall ?? 0) > 0 ? "var(--ok)" : "var(--text-faint)" }}
-          title={`${r.isOwner ? "yours" : "member"} · ${relativeAge(r.lastJoined ?? r.createdAt)}`}
+  const roomRow = (r: RoomDTO, starredRow: boolean): ReactElement => {
+    const busy = joiningId === r.id;
+    const unread = unreadCounts[`room:${r.id}`] ?? 0;
+    const rowErr = rowJoinError?.id === r.id ? rowJoinError.message : null;
+    return (
+      <div key={r.id} style={{ display: "flex", flexDirection: "column" }}>
+        <div
+          className="rv-list-item"
+          aria-busy={busy}
+          onClick={() => {
+            if (busy) return;
+            void attemptJoin(r.id);
+          }}
+          onContextMenu={(e) => {
+            e.preventDefault();
+            setCtxMenu({ x: e.clientX, y: e.clientY, room: r });
+          }}
+          style={{ opacity: busy ? 0.6 : 1, cursor: busy ? "default" : "pointer" }}
         >
-          {(r.inCall ?? 0) > 0 ? `${r.inCall} in call` : "empty"}
-        </span>
+          <RoomAvatar name={r.name} />
+          <div style={{ display: "flex", flexDirection: "column", gap: 1, minWidth: 0, flex: 1 }}>
+            <span
+              style={{
+                fontSize: "var(--t-sm)",
+                fontWeight: unread > 0 ? 600 : 400,
+                whiteSpace: "nowrap",
+                overflow: "hidden",
+                textOverflow: "ellipsis",
+              }}
+            >
+              {r.name}
+            </span>
+            <span
+              className="rv-mono"
+              style={{ fontSize: "var(--t-2xs)", color: (r.inCall ?? 0) > 0 ? "var(--ok)" : "var(--text-faint)" }}
+              title={`${r.isOwner ? "yours" : "member"} · ${relativeAge(r.lastJoined ?? r.createdAt)}`}
+            >
+              {busy ? "joining…" : (r.inCall ?? 0) > 0 ? `${r.inCall} in call` : "empty"}
+            </span>
+          </div>
+          {busy && <span className="rv-inline-spinner" style={{ flexShrink: 0 }} aria-hidden />}
+          {!busy && unread > 0 && <UnreadDot count={unread} />}
+          {!busy && (r.inCall ?? 0) > 0 && (
+            <span style={{ width: 6, height: 6, borderRadius: "50%", background: "var(--ok)", flexShrink: 0 }} />
+          )}
+          {starredRow && <I.StarFilled size={12} style={{ color: "var(--rv-amber)", flexShrink: 0 }} />}
+        </div>
+        {rowErr && (
+          <div
+            role="alert"
+            style={{
+              display: "flex",
+              alignItems: "center",
+              gap: "var(--s-2)",
+              margin: "2px var(--s-2) var(--s-1)",
+              padding: "var(--s-1) var(--s-2)",
+              fontSize: "var(--t-2xs)",
+              color: "var(--danger)",
+            }}
+          >
+            <span style={{ flex: 1 }}>{rowErr}</span>
+            <button
+              type="button"
+              className="rv-btn"
+              onClick={(e) => {
+                e.stopPropagation();
+                void attemptJoin(r.id);
+              }}
+              style={{ height: "1.5rem", padding: "0 var(--s-2)", fontSize: "var(--t-2xs)" }}
+            >
+              Retry
+            </button>
+          </div>
+        )}
       </div>
-      {(r.inCall ?? 0) > 0 && (
-        <span style={{ width: 6, height: 6, borderRadius: "50%", background: "var(--ok)", flexShrink: 0 }} />
-      )}
-      {starredRow && <I.StarFilled size={12} style={{ color: "var(--rv-amber)", flexShrink: 0 }} />}
-    </div>
-  );
+    );
+  };
 
   return (
     <div style={{ display: "grid", gridTemplateColumns: "280px 1fr", height: "100%", minHeight: 0 }}>
@@ -447,35 +551,43 @@ export function LobbyScreen({ pendingInviteCode, pendingJoinRoomId, onInviteCode
         </div>
 
         {joinOpen && (
-          <form
-            onSubmit={(e) => {
-              void onJoin(e);
-              setJoinOpen(false);
-              setJoinInput("");
-            }}
-            style={{ display: "flex", gap: "var(--s-2)", padding: "var(--s-3) var(--s-3) 0" }}
-          >
-            <input
-              autoFocus
-              className="rv-input"
-              placeholder="Invite link, room link, or ID"
-              value={joinInput}
-              onChange={(e) => setJoinInput(e.target.value)}
-              onKeyDown={(e) => {
-                if (e.key === "Escape") setJoinOpen(false);
-              }}
-              style={{ height: "2rem", fontSize: "var(--t-xs)" }}
-            />
-            <button
-              className="rv-btn"
-              data-variant="primary"
-              type="submit"
-              disabled={!joinInput.trim()}
-              style={{ height: "2rem", padding: "0 var(--s-3)", fontSize: "var(--t-xs)" }}
+          <div style={{ padding: "var(--s-3) var(--s-3) 0" }}>
+            <form
+              onSubmit={(e) => void onJoin(e)}
+              style={{ display: "flex", gap: "var(--s-2)" }}
             >
-              Go
-            </button>
-          </form>
+              <input
+                autoFocus
+                className="rv-input"
+                placeholder="Invite link, room link, or ID"
+                value={joinInput}
+                onChange={(e) => {
+                  setJoinInput(e.target.value);
+                  if (joinByLinkError) setJoinByLinkError(null);
+                }}
+                onKeyDown={(e) => {
+                  if (e.key === "Escape") setJoinOpen(false);
+                }}
+                disabled={joinByLinkBusy}
+                style={{ height: "2rem", fontSize: "var(--t-xs)" }}
+              />
+              <button
+                className="rv-btn"
+                data-variant="primary"
+                type="submit"
+                disabled={!joinInput.trim() || joinByLinkBusy}
+                style={{ height: "2rem", padding: "0 var(--s-3)", fontSize: "var(--t-xs)" }}
+              >
+                {joinByLinkBusy ? <span className="rv-inline-spinner" aria-label="Joining" /> : "Go"}
+              </button>
+            </form>
+            {joinByLinkError && (
+              <div className="rv-err-banner" role="alert" style={{ marginTop: "var(--s-2)", padding: "var(--s-2) var(--s-3)", fontSize: "var(--t-xs)" }}>
+                <span className="ic">!</span>
+                <div>{joinByLinkError}</div>
+              </div>
+            )}
+          </div>
         )}
 
         <div
@@ -517,10 +629,17 @@ export function LobbyScreen({ pendingInviteCode, pendingJoinRoomId, onInviteCode
                   My rooms · {myRooms.length}
                 </div>
                 {myRooms.length === 0 && starred.length === 0 ? (
-                  <div className="rv-empty" style={{ padding: "var(--s-6) var(--s-3)" }}>
-                    <span className="rv-empty-title">No rooms yet</span>
-                    <span className="rv-empty-hint">Hit + to create one or paste an invite.</span>
-                  </div>
+                  filterActive && hasAnyRooms ? (
+                    <div className="rv-empty" style={{ padding: "var(--s-6) var(--s-3)" }}>
+                      <span className="rv-empty-title">No rooms match “{filter.trim()}”</span>
+                      <span className="rv-empty-hint">Clear the filter to see all your rooms.</span>
+                    </div>
+                  ) : (
+                    <div className="rv-empty" style={{ padding: "var(--s-6) var(--s-3)" }}>
+                      <span className="rv-empty-title">No rooms yet</span>
+                      <span className="rv-empty-hint">Hit + to create one or paste an invite.</span>
+                    </div>
+                  )
                 ) : (
                   <div className="rv-list">{myRooms.map((r) => roomRow(r, false))}</div>
                 )}
@@ -619,10 +738,11 @@ export function LobbyScreen({ pendingInviteCode, pendingJoinRoomId, onInviteCode
                     <button
                       className="rv-btn"
                       data-variant="primary"
-                      onClick={() => void store.getState().join(f.room.id)}
+                      disabled={joiningId === f.room.id}
+                      onClick={() => void attemptJoin(f.room.id)}
                       style={{ height: "1.9rem", padding: "0 var(--s-4)", fontSize: "var(--t-xs)" }}
                     >
-                      Join ›
+                      {joiningId === f.room.id ? <span className="rv-inline-spinner" aria-label="Joining" /> : "Join ›"}
                     </button>
                   ) : (
                     <button
@@ -678,8 +798,9 @@ export function LobbyScreen({ pendingInviteCode, pendingJoinRoomId, onInviteCode
             label="Open"
             kbd="↵"
             onClick={() => {
+              const id = ctxMenu.room.id;
               setCtxMenu(null);
-              void store.getState().join(ctxMenu.room.id);
+              void attemptJoin(id);
             }}
           />
           <MenuItem

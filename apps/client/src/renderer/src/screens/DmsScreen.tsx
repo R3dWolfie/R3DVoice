@@ -15,6 +15,7 @@ import { ThreadHeader } from "../components/ThreadHeader.js";
 import { UserContextMenu } from "../components/UserContextMenu.js";
 import { I } from "../components/Icons.js";
 import { useUnreadStore } from "../lib/unread-store.js";
+import { pushToast } from "../lib/toast-store.js";
 
 type DmsScreenProps = {
   onJoinRoom?: (roomId: string) => void;
@@ -42,6 +43,10 @@ export function DmsScreen({ onJoinRoom, openUserId, onOpenUserConsumed }: DmsScr
   const [pickerOpen, setPickerOpen] = useState(false);
   const [friendsOpen, setFriendsOpen] = useState(false);
   const [activePeer, setActivePeer] = useState<{ id: string; handle: string | null; displayName: string } | null>(null);
+  // Load failures used to be swallowed and read as "no conversations". Track
+  // them so the sidebar can show a distinct error + retry instead.
+  const [threadsError, setThreadsError] = useState<string | null>(null);
+  const [friendsError, setFriendsError] = useState<string | null>(null);
 
   const refresh = useCallback(async () => {
     if (!token) return;
@@ -50,7 +55,10 @@ export function DmsScreen({ onJoinRoom, openUserId, onOpenUserConsumed }: DmsScr
     try {
       const r = await api.dmThreads();
       setThreads(r.threads);
-    } catch { /* */ }
+      setThreadsError(null);
+    } catch (e) {
+      setThreadsError(e instanceof Error ? e.message : "Couldn't load your conversations.");
+    }
   }, [serverUrl, token]);
 
   // Friends feed two things here: presence for the DM header status line
@@ -63,8 +71,16 @@ export function DmsScreen({ onJoinRoom, openUserId, onOpenUserConsumed }: DmsScr
     try {
       const r = await api.friends();
       setFriends(r.friends);
-    } catch { /* */ }
+      setFriendsError(null);
+    } catch (e) {
+      setFriendsError(e instanceof Error ? e.message : "Couldn't load your friends.");
+    }
   }, [serverUrl, token]);
+
+  const retryLoads = useCallback(() => {
+    void refresh();
+    void refreshFriends();
+  }, [refresh, refreshFriends]);
 
   useEffect(() => {
     void refreshFriends();
@@ -216,7 +232,7 @@ export function DmsScreen({ onJoinRoom, openUserId, onOpenUserConsumed }: DmsScr
         <div style={{ display: "flex", alignItems: "center", gap: "var(--s-2)", padding: "var(--s-3) var(--s-3)" }}>
           <input
             className="rv-input"
-            placeholder="Search messages…"
+            placeholder="Search conversations…"
             aria-label="Search direct messages"
             value={query}
             onChange={(e) => setQuery(e.target.value)}
@@ -273,12 +289,59 @@ export function DmsScreen({ onJoinRoom, openUserId, onOpenUserConsumed }: DmsScr
           </div>
         )}
         <div className="rv-scroll" style={{ flex: "1 1 auto", overflowY: "auto", padding: "var(--s-2) var(--s-3)" }}>
-          {q && shownThreads.length === 0 && startNew.length === 0 ? (
+          {threadsError ? (
+            <div className="rv-err-banner" role="alert" style={{ margin: "var(--s-2)", flexDirection: "column", alignItems: "stretch", gap: "var(--s-2)" }}>
+              <div style={{ display: "flex", alignItems: "flex-start", gap: "var(--s-2)" }}>
+                <span className="ic">!</span>
+                <div style={{ flex: 1 }}>{threadsError}</div>
+              </div>
+              <button
+                type="button"
+                className="rv-btn"
+                onClick={retryLoads}
+                style={{ height: "1.8rem", fontSize: "var(--t-xs)", alignSelf: "flex-start" }}
+              >
+                Retry
+              </button>
+            </div>
+          ) : q && shownThreads.length === 0 && startNew.length === 0 ? (
             <div style={{ padding: "var(--s-4)", color: "var(--text-faint)", fontSize: "var(--t-sm)" }}>
               No matches for “{query.trim()}”.
             </div>
           ) : (
             <>
+              {friendsError && (
+                <div
+                  role="alert"
+                  style={{
+                    display: "flex",
+                    alignItems: "center",
+                    gap: "var(--s-2)",
+                    margin: "0 var(--s-1) var(--s-2)",
+                    padding: "var(--s-1) var(--s-2)",
+                    fontSize: "var(--t-2xs)",
+                    color: "var(--danger)",
+                  }}
+                >
+                  <span style={{ flex: 1 }}>Friends list didn’t load — presence and “start new” may be missing.</span>
+                  <button
+                    type="button"
+                    onClick={retryLoads}
+                    style={{
+                      appearance: "none",
+                      background: "transparent",
+                      border: 0,
+                      padding: 0,
+                      color: "inherit",
+                      cursor: "pointer",
+                      textDecoration: "underline",
+                      textUnderlineOffset: 2,
+                    }}
+                  >
+                    Retry
+                  </button>
+                </div>
+              )}
               {(shownThreads.length > 0 || !q) && (
                 <DmThreadList
                   threads={shownThreads}
@@ -664,7 +727,8 @@ function DmPane({
           onClose={() => setUserMenu(null)}
           onViewProfile={() => setProfileOpen(true)}
           onSendDm={() => {
-            /* already in this DM — nothing to open */
+            // Already in this thread — say so instead of silently doing nothing.
+            pushToast({ kind: "info", text: "You’re already in this conversation." });
           }}
         />
       )}
