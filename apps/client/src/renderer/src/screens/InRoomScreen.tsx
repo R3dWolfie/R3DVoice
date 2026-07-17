@@ -17,11 +17,17 @@ import {
   LiveKitRoom,
   RoomEvent,
   Track,
+  setParticipantGain,
+  registerParticipantGainElement,
+  unregisterParticipantGain,
+  setParticipantGainSink,
   type LocalParticipant,
   type RemoteParticipant,
+  type RemoteTrackPublication,
   type RoomStateSnapshot,
+  type ScreenShareQuality,
 } from "../lib/livekit-room.js";
-import type { JoinSelection } from "../lib/join-selection.js";
+import { RESOLUTIONS, type JoinSelection } from "../lib/join-selection.js";
 import { SettingsModal } from "../components/SettingsModal.js";
 import { usePrefs, prefsActions } from "../lib/prefs-singleton.js";
 import type { LinuxAudioSourceSummary, WindowsAudioSessionInfo } from "../../../shared/bridge-types.js";
@@ -125,6 +131,41 @@ function fmtTime(s: number): string {
   const m = Math.floor((s % 3600) / 60);
   const sec = s % 60;
   return `${h > 0 ? String(h).padStart(2, "0") + ":" : ""}${String(m).padStart(2, "0")}:${String(sec).padStart(2, "0")}`;
+}
+
+// Pretty-print an Electron-accelerator keybind for a tooltip: "Control+Shift+M"
+// → "Ctrl+Shift+M". Returns `label (bind)` when a bind exists, else `label`.
+function withBind(label: string, bind: string | null | undefined): string {
+  if (!bind) return label;
+  const pretty = bind.replace(/Control/g, "Ctrl").replace(/Super/g, "Cmd");
+  return `${label} (${pretty})`;
+}
+
+// Screenshare tiers the in-room quality dialog offers (join-time also supports
+// 4K, but the quick dialog keeps to the three most-used resolutions).
+type ShareRes = "720p" | "1080p" | "1440p";
+const SHARE_RES: ShareRes[] = ["720p", "1080p", "1440p"];
+// Voice can be boosted to 200% (rides a GainNode above 100%); screen audio stays 0–100%.
+const MAX_VOICE_PCT = 200;
+
+function MaximizeIcon({ size = 14 }: { size?: number }): ReactElement {
+  return (
+    <svg
+      viewBox="0 0 24 24"
+      width={size}
+      height={size}
+      fill="none"
+      stroke="currentColor"
+      strokeWidth="1.8"
+      strokeLinecap="round"
+      strokeLinejoin="round"
+    >
+      <path d="M8 3H5a2 2 0 0 0-2 2v3" />
+      <path d="M16 3h3a2 2 0 0 1 2 2v3" />
+      <path d="M8 21H5a2 2 0 0 1-2-2v-3" />
+      <path d="M16 21h3a2 2 0 0 0 2-2v-3" />
+    </svg>
+  );
 }
 
 // Stable 1..5 avatar tone bucket from id.
@@ -320,6 +361,7 @@ function TileImpl({
 }): ReactElement {
   const videoRef = useRef<HTMLVideoElement | null>(null);
   const camRef = useRef<HTMLVideoElement | null>(null);
+  const [hover, setHover] = useState(false);
   const sharing = tile.screenTrack !== null;
   // Primary track to attach: screen if sharing, else camera. Camera-as-PiP-overlay
   // when both is rendered separately via camRef below.
@@ -374,6 +416,8 @@ function TileImpl({
       onClick={onClick}
       onDoubleClick={onDoubleClick}
       onContextMenu={onContextMenu}
+      onMouseEnter={() => setHover(true)}
+      onMouseLeave={() => setHover(false)}
       title="Click to focus · double-click to fullscreen · right-click for volume"
       className={sharing ? "rv-scanlines" : ""}
       style={{
@@ -495,6 +539,39 @@ function TileImpl({
           ◉ SHARING
         </div>
       )}
+
+      {/* Hover maximize — fullscreen was previously double-click-only. Sits
+          left of the PiP button when sharing so the two never overlap. */}
+      <button
+        type="button"
+        aria-label="Maximize"
+        title="Maximize (fullscreen)"
+        onClick={(e) => {
+          e.stopPropagation();
+          callbacks.onDoubleClick(tile.id, videoRef.current);
+        }}
+        style={{
+          position: "absolute",
+          top: 8,
+          right: sharing ? 44 : 8,
+          display: "flex",
+          alignItems: "center",
+          justifyContent: "center",
+          width: 28,
+          height: 28,
+          background: "color-mix(in oklch, var(--rv-ink-0) 70%, transparent)",
+          backdropFilter: "blur(8px)",
+          border: "1px solid var(--border-soft)",
+          borderRadius: 6,
+          color: "var(--text)",
+          cursor: "pointer",
+          opacity: hover ? 1 : 0,
+          transition: "opacity var(--d-mid) var(--ease-out)",
+          pointerEvents: hover ? "auto" : "none",
+        }}
+      >
+        <MaximizeIcon size={14} />
+      </button>
 
       {sharing && (
         <button
@@ -673,9 +750,12 @@ interface AudioSourceOption {
 function CameraControl({
   cameraOn,
   roomWrapper,
+  onToggle,
 }: {
   cameraOn: boolean;
   roomWrapper: LiveKitRoom;
+  /** Toggle camera on/off — owned by the parent so it can flip optimistically. */
+  onToggle: () => void;
 }): ReactElement {
   const [pickerOpen, setPickerOpen] = useState(false);
   const [cameras, setCameras] = useState<DeviceInfo[]>([]);
@@ -724,15 +804,8 @@ function CameraControl({
         label={cameraOn ? "Stop camera" : "Camera"}
         active={cameraOn}
         emphasis={cameraOn}
-        onClick={() => {
-          void roomWrapper.setCamera(!cameraOn, selectedDeviceId ?? undefined).catch((err) => {
-            if (err instanceof DOMException && err.name === "NotAllowedError") {
-              pushToast({ kind: "error", text: "Camera permission denied", sub: "Allow camera access for this site, then try again." });
-            } else {
-              pushToast({ kind: "error", text: "Couldn't start camera", sub: err instanceof Error ? `${err.name}: ${err.message}` : String(err) });
-            }
-          });
-        }}
+        title={cameraOn ? "Stop camera" : "Start camera"}
+        onClick={onToggle}
       />
       <button
         type="button"
@@ -1193,6 +1266,180 @@ function tilePropsEqual(
 const Tile = memo(TileImpl, tilePropsEqual);
 const AudioCircle = memo(AudioCircleImpl, tilePropsEqual);
 
+// Small 3-ish-segment control (Auto/Grid/Speaker, resolution, fps). The active
+// segment is filled with --accent so it reads as "lit".
+function Segmented<T extends string | number>({
+  options,
+  value,
+  onChange,
+  ariaLabel,
+  translucent = false,
+}: {
+  options: { value: T; label: ReactNode }[];
+  value: T;
+  onChange: (v: T) => void;
+  ariaLabel?: string;
+  translucent?: boolean;
+}): ReactElement {
+  return (
+    <div
+      role="group"
+      aria-label={ariaLabel}
+      style={{
+        display: "inline-flex",
+        padding: 3,
+        gap: 2,
+        background: translucent ? "transparent" : "var(--bg-elev)",
+        border: translucent ? 0 : "1px solid var(--border-soft)",
+        borderRadius: "var(--r-md)",
+      }}
+    >
+      {options.map((o) => {
+        const active = o.value === value;
+        return (
+          <button
+            key={String(o.value)}
+            type="button"
+            aria-pressed={active}
+            onMouseDown={(e) => e.stopPropagation()}
+            onClick={() => onChange(o.value)}
+            style={{
+              appearance: "none",
+              border: 0,
+              cursor: "pointer",
+              padding: "5px 11px",
+              borderRadius: 5,
+              background: active ? "var(--accent)" : "transparent",
+              color: active ? "var(--on-accent)" : "var(--text-dim)",
+              fontSize: "var(--t-xs)",
+              fontFamily: "var(--font-mono)",
+              letterSpacing: ".06em",
+              textTransform: "uppercase",
+              display: "inline-flex",
+              alignItems: "center",
+              gap: 6,
+              transition: "background var(--d-fast) var(--ease-out), color var(--d-fast) var(--ease-out)",
+            }}
+          >
+            {o.label}
+          </button>
+        );
+      })}
+    </div>
+  );
+}
+
+// In-call screenshare quality picker (2.x): resolution · fps · system audio.
+// Reuses the persisted resolution/frameRate/shareAudio prefs as the last-used
+// defaults and writes them back on confirm.
+function ScreenShareDialog({
+  onConfirm,
+  onCancel,
+}: {
+  onConfirm: (q: ScreenShareQuality) => void;
+  onCancel: () => void;
+}): ReactElement {
+  const prefRes = usePrefs((s) => s.resolution);
+  const prefFps = usePrefs((s) => s.frameRate);
+  const prefShareAudio = usePrefs((s) => s.shareAudio);
+  const [res, setRes] = useState<ShareRes>(
+    SHARE_RES.includes(prefRes as ShareRes) ? (prefRes as ShareRes) : "1080p",
+  );
+  const [fps, setFps] = useState<30 | 60>(prefFps === 60 ? 60 : 30);
+  const [withAudio, setWithAudio] = useState(prefShareAudio);
+
+  function confirm(): void {
+    const dims = RESOLUTIONS[res] ?? RESOLUTIONS["1080p"]!;
+    prefsActions().setResolution(res);
+    prefsActions().setFrameRate(fps);
+    prefsActions().setShareAudio(withAudio);
+    onConfirm({
+      width: dims.width,
+      height: dims.height,
+      frameRate: fps,
+      audioSource: withAudio ? "all" : null,
+    });
+  }
+
+  return (
+    <div
+      data-rv-pop=""
+      onClick={(e) => e.stopPropagation()}
+      onMouseDown={(e) => e.stopPropagation()}
+      style={{
+        position: "fixed",
+        inset: 0,
+        background: "color-mix(in oklch, var(--rv-ink-0) 70%, transparent)",
+        zIndex: 400,
+        display: "grid",
+        placeItems: "center",
+      }}
+    >
+      <div
+        className="rv-card"
+        style={{ padding: "var(--s-6)", width: "min(100%, 26rem)" }}
+      >
+        <div style={{ fontSize: "var(--t-lg)", fontWeight: 600, marginBottom: "var(--s-2)" }}>
+          Share your screen
+        </div>
+        <div style={{ color: "var(--text-mid)", fontSize: "var(--t-sm)", marginBottom: "var(--s-5)" }}>
+          Pick a quality — higher settings need more upload bandwidth.
+        </div>
+
+        <div style={{ display: "flex", flexDirection: "column", gap: "var(--s-4)" }}>
+          <label style={{ display: "flex", flexDirection: "column", gap: 6 }}>
+            <span className="rv-label" style={{ fontSize: "var(--t-2xs)" }}>Resolution</span>
+            <Segmented
+              ariaLabel="Resolution"
+              value={res}
+              onChange={setRes}
+              options={SHARE_RES.map((r) => ({ value: r, label: r }))}
+            />
+          </label>
+          <label style={{ display: "flex", flexDirection: "column", gap: 6 }}>
+            <span className="rv-label" style={{ fontSize: "var(--t-2xs)" }}>Frame rate</span>
+            <Segmented<30 | 60>
+              ariaLabel="Frame rate"
+              value={fps}
+              onChange={setFps}
+              options={[
+                { value: 30, label: "30 fps" },
+                { value: 60, label: "60 fps" },
+              ]}
+            />
+          </label>
+          <label
+            style={{
+              display: "flex",
+              alignItems: "center",
+              gap: "var(--s-3)",
+              cursor: "pointer",
+              fontSize: "var(--t-sm)",
+            }}
+          >
+            <input
+              type="checkbox"
+              checked={withAudio}
+              onChange={(e) => setWithAudio(e.target.checked)}
+              style={{ width: 16, height: 16, accentColor: "var(--accent)" }}
+            />
+            Also share app / system audio
+          </label>
+        </div>
+
+        <div style={{ display: "flex", gap: "var(--s-3)", justifyContent: "flex-end", marginTop: "var(--s-6)" }}>
+          <button type="button" className="rv-btn" onClick={onCancel}>
+            Cancel
+          </button>
+          <button type="button" className="rv-btn" data-variant="primary" onClick={confirm}>
+            Share
+          </button>
+        </div>
+      </div>
+    </div>
+  );
+}
+
 export function InRoomScreen(props: InRoomScreenProps): ReactElement {
   const token = useAuthStore((s) => s.token);
   const serverUrl = useAuthStore((s) => s.serverUrl);
@@ -1208,7 +1455,17 @@ export function InRoomScreen(props: InRoomScreenProps): ReactElement {
   const [selfMinimized, setSelfMinimized] = useState(false);
   const persistedParticipantVolumes = usePrefs((s) => s.participantVolumes);
   const persistedScreenVolumes = usePrefs((s) => s.participantScreenVolumes);
-  const [voiceVolumes, setVoiceVolumes] = useState<Record<string, number>>(persistedParticipantVolumes);
+  const persistedParticipantGains = usePrefs((s) => s.participantGains);
+  // Local voice-volume state holds the COMBINED 0–2 value (element.volume ≤1
+  // plus any GainNode boost >1). Reconstruct it from the two persisted maps:
+  // a stored gain >1 means the slider was above 100%.
+  const [voiceVolumes, setVoiceVolumes] = useState<Record<string, number>>(() => {
+    const out: Record<string, number> = { ...persistedParticipantVolumes };
+    for (const [id, g] of Object.entries(persistedParticipantGains)) {
+      if (g > 1) out[id] = Math.min(g, MAX_VOICE_PCT / 100);
+    }
+    return out;
+  });
   const [screenVolumes, setScreenVolumes] = useState<Record<string, number>>(persistedScreenVolumes);
   // 2.5g "Mute for me" — local-only silence per participant (not persisted).
   const [mutedForMe, setMutedForMe] = useState<Record<string, boolean>>({});
@@ -1229,6 +1486,23 @@ export function InRoomScreen(props: InRoomScreenProps): ReactElement {
   const [focusedId, setFocusedId] = useState<string | null>(null);
   const [roomInfoOpen, setRoomInfoOpen] = useState(false);
   const [psearch, setPsearch] = useState("");
+  // In-call screenshare quality dialog (2.x).
+  const [shareDialogOpen, setShareDialogOpen] = useState(false);
+  // Owner-only participant actions (remove / transfer) live behind an inline
+  // confirm so a stray click can't eject someone.
+  const [isRoomOwner, setIsRoomOwner] = useState(false);
+  const [ownerConfirm, setOwnerConfirm] = useState<{
+    kind: "remove" | "transfer";
+    id: string;
+    name: string;
+  } | null>(null);
+  // One-time "you're muted" nudge (first ~minute, until the first unmute).
+  const [muteHintDismissed, setMuteHintDismissed] = useState(false);
+  const [everUnmuted, setEverUnmuted] = useState(false);
+  // Optimistic mic/camera state — flips on click, reconciles when the real
+  // LiveKit snapshot catches up (null = trust the snapshot).
+  const [pendingMute, setPendingMute] = useState<boolean | null>(null);
+  const [pendingCam, setPendingCam] = useState<boolean | null>(null);
 
   const snapshot: RoomStateSnapshot = useSyncExternalStore(
     (cb) => roomWrapper.subscribe(() => cb()),
@@ -1391,17 +1665,37 @@ export function InRoomScreen(props: InRoomScreenProps): ReactElement {
     const mount = audioMountRef.current;
     if (!mount) return;
 
-    const onTrackSubscribed = (track: Track): void => {
+    const onTrackSubscribed = (
+      track: Track,
+      pub: RemoteTrackPublication,
+      participant: RemoteParticipant,
+    ): void => {
       if (track.kind !== Track.Kind.Audio) return;
       const el = track.attach() as HTMLAudioElement;
       el.autoplay = true;
       (el as HTMLElement & { playsInline?: boolean }).playsInline = true;
       mount.appendChild(el);
       routeElement(el); // no-op unless mono output has been enabled
+      // Register the mic element with the gain graph so a saved/new >100%
+      // boost can ride a GainNode (element.volume can't exceed 1).
+      if (pub.source === Track.Source.Microphone) {
+        registerParticipantGainElement(participant.identity, el);
+        const g = prefsActions().participantGains[participant.identity];
+        if (g !== undefined && g > 1) {
+          setParticipantGain(participant.identity, Math.min(g, MAX_VOICE_PCT / 100));
+        }
+      }
     };
-    const onTrackUnsubscribed = (track: Track): void => {
+    const onTrackUnsubscribed = (
+      track: Track,
+      pub: RemoteTrackPublication,
+      participant: RemoteParticipant,
+    ): void => {
       if (track.kind !== Track.Kind.Audio) return;
       track.detach().forEach((el) => el.remove());
+      if (pub.source === Track.Source.Microphone) {
+        unregisterParticipantGain(participant.identity);
+      }
     };
 
     room.on(RoomEvent.TrackSubscribed, onTrackSubscribed);
@@ -1423,6 +1717,7 @@ export function InRoomScreen(props: InRoomScreenProps): ReactElement {
         if (!cancelled) {
           setRoomName(r.name);
           setRoomInCall(r.inCall ?? null);
+          setIsRoomOwner(r.isOwner);
         }
       })
       .catch(() => {});
@@ -1438,6 +1733,7 @@ export function InRoomScreen(props: InRoomScreenProps): ReactElement {
   const openSettingsKeybind = usePrefs((s) => s.openSettingsKeybind);
   const leaveRoomKeybind = usePrefs((s) => s.leaveRoomKeybind);
   const prefMic = usePrefs((s) => s.micDeviceId);
+  const cameraDeviceId = usePrefs((s) => s.cameraDeviceId);
   // Select primitives individually — a selector that returns a fresh object
   // literal triggers React #185 because useSyncExternalStore's Object.is
   // snapshot check sees a new reference every render and loops forever.
@@ -1470,6 +1766,9 @@ export function InRoomScreen(props: InRoomScreenProps): ReactElement {
     if (conn.phase === "connected" && prefSpeaker) {
       void roomWrapper.room.switchActiveDevice("audiooutput", prefSpeaker);
     }
+    // Captured (boosted) mic elements play through the gain graph's
+    // AudioContext, whose sink LiveKit's switchActiveDevice can't reach.
+    void setParticipantGainSink(prefSpeaker);
   }, [prefSpeaker, conn.phase, roomWrapper]);
 
   useEffect(() => {
@@ -1529,6 +1828,31 @@ export function InRoomScreen(props: InRoomScreenProps): ReactElement {
     props.onLeave();
   }
 
+  // Owner-only moderation. The LiveKit participant identity == the server
+  // userId (see mintLiveKitToken), so the tile id is exactly what the room
+  // member APIs expect. The SFU disconnect is driven by the server on removal.
+  async function handleRemoveMember(id: string): Promise<void> {
+    const api = new ApiClient(serverUrl);
+    api.setToken(token);
+    try {
+      await api.removeRoomMember(props.roomId, id);
+      pushToast({ kind: "success", text: "Removed from room" });
+    } catch (err) {
+      pushToast({ kind: "error", text: "Couldn't remove member", sub: err instanceof Error ? err.message : String(err) });
+    }
+  }
+  async function handleTransferOwnership(id: string): Promise<void> {
+    const api = new ApiClient(serverUrl);
+    api.setToken(token);
+    try {
+      await api.transferRoomOwnership(props.roomId, id);
+      setIsRoomOwner(false);
+      pushToast({ kind: "success", text: "Ownership transferred" });
+    } catch (err) {
+      pushToast({ kind: "error", text: "Couldn't transfer ownership", sub: err instanceof Error ? err.message : String(err) });
+    }
+  }
+
   // Live-apply mic-gain pref changes: when the user moves the slider in
   // Settings, the change reaches the published track via the GainNode in
   // the MicPipeline without re-opening the mic.
@@ -1554,9 +1878,23 @@ export function InRoomScreen(props: InRoomScreenProps): ReactElement {
   }, [snapshot.disconnectKind]);
 
   async function handleToggleScreen(): Promise<void> {
-    const isSharing = hasScreenShare(snapshot.local);
+    if (hasScreenShare(snapshot.local)) {
+      // Already sharing → stop immediately (no dialog).
+      try {
+        await roomWrapper.setScreenShare(false);
+      } catch (err) {
+        pushToast({ kind: "error", text: "Couldn't stop screen share", sub: err instanceof Error ? `${err.name}: ${err.message}` : String(err) });
+      }
+      return;
+    }
+    // Not sharing → open the quality/source picker before publishing.
+    setShareDialogOpen(true);
+  }
+
+  async function startScreenShareWithQuality(q: ScreenShareQuality): Promise<void> {
+    setShareDialogOpen(false);
     try {
-      await roomWrapper.setScreenShare(!isSharing);
+      await roomWrapper.setScreenShare(true, q);
     } catch (err) {
       // getDisplayMedia rejects on cancel (fine) or a real failure (surface it).
       if (err instanceof DOMException && err.name === "NotAllowedError") return;
@@ -1566,9 +1904,7 @@ export function InRoomScreen(props: InRoomScreenProps): ReactElement {
 
   // Wire prefs-driven keybinds for the in-room actions. PTT remains separate
   // (uses globalShortcut so it works when unfocused).
-  useKeybind(muteKeybind, () => {
-    void roomWrapper.setMuted(!(snapshot.local?.isMicrophoneEnabled ?? true));
-  });
+  useKeybind(muteKeybind, () => handleToggleMute());
   // Deck: Ghost replaces Deafen — the old deafen keybind now toggles ghost.
   useKeybind(deafenKeybind, () => void roomWrapper.setGhost(!(snapshot.local?.attributes?.["ghost"] === "1")));
   useKeybind(shareScreenKeybind, () => void handleToggleScreen());
@@ -1586,15 +1922,24 @@ export function InRoomScreen(props: InRoomScreenProps): ReactElement {
   }
 
   function setVoiceVolume(id: string, volume: number): void {
-    const v = clampVol(volume);
+    // Combined 0..2. element.volume carries 0..1 (LiveKit setVolume); the
+    // 100–200% band rides a per-participant GainNode (element.volume throws
+    // above 1). elVol × gain reconstructs the combined value at the output.
+    const combined =
+      Number.isFinite(volume) && volume > 0 ? Math.min(volume, MAX_VOICE_PCT / 100) : 0;
+    const elVol = Math.min(combined, 1);
+    const gain = combined > 1 ? combined : 1;
     // Dragging a slider implicitly lifts a local "Mute for me".
     setMutedForMe((prev) => (prev[id] ? { ...prev, [id]: false } : prev));
-    setVoiceVolumes((prev) => ({ ...prev, [id]: v }));
-    prefsActions().setParticipantVolume(id, v);
+    setVoiceVolumes((prev) => ({ ...prev, [id]: combined }));
+    prefsActions().setParticipantVolume(id, elVol);
+    prefsActions().setParticipantGain(id, gain);
     const participant = snapshot.remotes.find((r) => r.identity === id);
-    if (participant) {
-      participant.setVolume(v, Track.Source.Microphone);
-    }
+    if (participant) participant.setVolume(elVol, Track.Source.Microphone);
+    setParticipantGain(id, gain);
+    // A boost may have just created the gain graph's AudioContext — point it at
+    // the selected speaker (its sink defaults to the system output otherwise).
+    if (gain > 1) void setParticipantGainSink(prefSpeaker);
   }
 
   // Apply saved per-participant volumes whenever a remote subscribes — keeps
@@ -1605,12 +1950,15 @@ export function InRoomScreen(props: InRoomScreenProps): ReactElement {
     for (const remote of snapshot.remotes) {
       if (mutedForMe[remote.identity]) continue;
       const raw = persistedParticipantVolumes[remote.identity];
-      if (raw === undefined) continue;
-      const v = clampVol(raw);
-      if (v === 1) continue;
-      remote.setVolume(v, Track.Source.Microphone);
+      if (raw !== undefined) {
+        const v = clampVol(raw);
+        if (v !== 1) remote.setVolume(v, Track.Source.Microphone);
+      }
+      // Re-apply any saved >100% boost onto the GainNode (0..1 rode setVolume).
+      const g = persistedParticipantGains[remote.identity];
+      if (g !== undefined && g > 1) setParticipantGain(remote.identity, Math.min(g, MAX_VOICE_PCT / 100));
     }
-  }, [snapshot.remotes, persistedParticipantVolumes, mutedForMe, deafened]);
+  }, [snapshot.remotes, persistedParticipantVolumes, persistedParticipantGains, mutedForMe, deafened]);
 
   // Ghost = deafen (Red's ask): silence all incoming mic + screen audio while
   // ghosted; when un-ghosting, restore saved per-participant volumes (and
@@ -1623,6 +1971,8 @@ export function InRoomScreen(props: InRoomScreenProps): ReactElement {
       } else if (!mutedForMe[remote.identity]) {
         remote.setVolume(clampVol(persistedParticipantVolumes[remote.identity] ?? 1), Track.Source.Microphone);
         remote.setVolume(clampVol(persistedScreenVolumes[remote.identity] ?? 1), Track.Source.ScreenShareAudio);
+        const g = persistedParticipantGains[remote.identity] ?? 1;
+        setParticipantGain(remote.identity, g > 1 ? Math.min(g, MAX_VOICE_PCT / 100) : 1);
       }
     }
     // eslint-disable-next-line react-hooks/exhaustive-deps
@@ -1663,8 +2013,10 @@ export function InRoomScreen(props: InRoomScreenProps): ReactElement {
       participant.setVolume(0, Track.Source.Microphone);
       participant.setVolume(0, Track.Source.ScreenShareAudio);
     } else {
-      participant.setVolume(clampVol(voiceVolumes[id] ?? 1), Track.Source.Microphone);
+      const combined = voiceVolumes[id] ?? 1;
+      participant.setVolume(clampVol(combined), Track.Source.Microphone);
       participant.setVolume(clampVol(screenVolumes[id] ?? 1), Track.Source.ScreenShareAudio);
+      setParticipantGain(id, combined > 1 ? Math.min(combined, MAX_VOICE_PCT / 100) : 1);
     }
   }
 
@@ -1705,8 +2057,52 @@ export function InRoomScreen(props: InRoomScreenProps): ReactElement {
     [],
   );
 
-  const muted = !(snapshot.local?.isMicrophoneEnabled ?? true);
+  // Optimistic mic/camera: show the pending state instantly on click; clear
+  // the pending flag once the real snapshot reports the same value.
+  const actualMuted = !(snapshot.local?.isMicrophoneEnabled ?? true);
+  const muted = pendingMute ?? actualMuted;
+  const actualCameraOn = snapshot.local?.isCameraEnabled ?? false;
+  const cameraOn = pendingCam ?? actualCameraOn;
   const localGhost = snapshot.local?.attributes?.["ghost"] === "1";
+
+  useEffect(() => {
+    if (pendingMute !== null && pendingMute === actualMuted) setPendingMute(null);
+  }, [pendingMute, actualMuted]);
+  useEffect(() => {
+    if (pendingCam !== null && pendingCam === actualCameraOn) setPendingCam(null);
+  }, [pendingCam, actualCameraOn]);
+  // Track the first-ever unmute (via any path: button, keybind, PTT) so the
+  // "you're muted" nudge stops for good.
+  useEffect(() => {
+    if (!actualMuted) setEverUnmuted(true);
+  }, [actualMuted]);
+
+  function handleToggleMute(): void {
+    const next = !muted;
+    setPendingMute(next);
+    if (!next) setEverUnmuted(true);
+    void roomWrapper.setMuted(next).catch((err) => {
+      setPendingMute(null);
+      if (err instanceof DOMException && err.name === "NotAllowedError") {
+        pushToast({ kind: "error", text: "Microphone permission denied", sub: "Allow mic access for this site in your browser, then try again." });
+      } else {
+        pushToast({ kind: "error", text: "Couldn't open microphone", sub: err instanceof Error ? `${err.name}: ${err.message}` : String(err) });
+      }
+    });
+  }
+
+  function handleToggleCamera(): void {
+    const next = !cameraOn;
+    setPendingCam(next);
+    void roomWrapper.setCamera(next, cameraDeviceId ?? undefined).catch((err) => {
+      setPendingCam(null);
+      if (err instanceof DOMException && err.name === "NotAllowedError") {
+        pushToast({ kind: "error", text: "Camera permission denied", sub: "Allow camera access for this site, then try again." });
+      } else {
+        pushToast({ kind: "error", text: "Couldn't start camera", sub: err instanceof Error ? `${err.name}: ${err.message}` : String(err) });
+      }
+    });
+  }
 
   const tiles: ParticipantView[] = [];
   if (snapshot.local) {
@@ -1737,7 +2133,6 @@ export function InRoomScreen(props: InRoomScreenProps): ReactElement {
   }
 
   const sharing = hasScreenShare(snapshot.local);
-  const cameraOn = snapshot.local?.isCameraEnabled ?? false;
   // Deck 2.5: only participants with a live video/share go in the tile grid;
   // everyone else renders as a compact audio circle (names live in the sidebar).
   const allVideoTiles = tiles.filter((t) => t.screenTrack !== null || t.cameraTrack !== null);
@@ -1762,6 +2157,18 @@ export function InRoomScreen(props: InRoomScreenProps): ReactElement {
     effectiveFocusedId !== null ||
     (layout === "auto" && sharingParticipants.length === 1);
   const focusSharer = sharingParticipants[0] ?? null;
+
+  // 4g: remote sharers who aren't the tile currently on the big view → "Watch"
+  // chips. Whoever is focused (explicitly, or auto-focused in speaker mode) is
+  // already being watched, so no chip for them.
+  const shownFocusId = effectiveFocusedId ?? (useSpeaker ? focusSharer?.id ?? null : null);
+  const watchableSharers = sharingParticipants.filter(
+    (s) => !s.isLocal && s.id !== shownFocusId,
+  );
+  // 4e: one-time "you're muted" nudge — connected, still muted, never unmuted,
+  // not dismissed, within the first minute.
+  const showMuteHint =
+    conn.phase === "connected" && muted && !everUnmuted && !muteHintDismissed && elapsed < 60;
 
   // Full-viewport maximized layout — no sidebar/topbar/control bar, single tile
   // fills the whole app window. OS fullscreen (requestFullscreen) is preferred
@@ -1982,6 +2389,38 @@ export function InRoomScreen(props: InRoomScreenProps): ReactElement {
         </button>
       </header>
 
+      {/* Media reconnection banner (task 1). `connected` stays true through a
+          blip, so RoomEvent.Reconnecting is the only signal audio has cut —
+          surface it prominently. Auto-clears on Reconnected. */}
+      {snapshot.reconnecting && (
+        <div
+          role="status"
+          aria-live="assertive"
+          style={{
+            position: "absolute",
+            top: "3.25rem",
+            left: 0,
+            right: 0,
+            zIndex: 200,
+            display: "flex",
+            alignItems: "center",
+            justifyContent: "center",
+            gap: "var(--s-3)",
+            padding: "var(--s-3) var(--s-4)",
+            background: "color-mix(in srgb, var(--rv-amber) 22%, var(--bg-elev))",
+            borderBottom: "1px solid color-mix(in srgb, var(--rv-amber) 55%, transparent)",
+            color: "var(--text)",
+            boxShadow: "var(--shadow-2)",
+          }}
+        >
+          <Spinner />
+          <span style={{ fontWeight: 600 }}>Reconnecting…</span>
+          <span style={{ color: "var(--text-mid)", fontSize: "var(--t-sm)" }}>
+            Your connection dropped — audio and video will resume automatically.
+          </span>
+        </div>
+      )}
+
       {/* Body */}
       <div
         style={{
@@ -2037,10 +2476,20 @@ export function InRoomScreen(props: InRoomScreenProps): ReactElement {
                     <div
                       key={tile.id}
                       className="rv-list-item"
+                      role="button"
+                      title="Click for volume, mute-for-me, profile"
                       style={{
                         gridTemplateColumns: "30px 1fr auto",
+                        cursor: "pointer",
                         ...(tile.ghost ? { opacity: 0.65 } : null),
                         ...(tile.isSpeaking ? { background: "var(--bg-elev-2)" } : null),
+                      }}
+                      onClick={(e) => {
+                        // Left-click a row → open the same menu the tile's
+                        // right-click shows. stopPropagation so the container's
+                        // click-to-close doesn't immediately dismiss it.
+                        e.stopPropagation();
+                        setMenu({ participantId: tile.id, x: e.clientX, y: e.clientY });
                       }}
                       onContextMenu={(e) => {
                         e.preventDefault();
@@ -2201,7 +2650,7 @@ export function InRoomScreen(props: InRoomScreenProps): ReactElement {
           )}
         </main>
 
-        {/* Layout switcher (floating) */}
+        {/* Layout switcher (floating) — 3-segment Auto/Grid/Speaker, active lit */}
         <div
           style={{
             position: "absolute",
@@ -2215,33 +2664,19 @@ export function InRoomScreen(props: InRoomScreenProps): ReactElement {
             backdropFilter: "blur(8px)",
             zIndex: 5,
           }}
+          title="Video layout"
         >
-          <button
-            onClick={() => {
-              const order: LayoutMode[] = ["auto", "grid", "speaker"];
-              const next = order[(order.indexOf(layout) + 1) % order.length]!;
-              setLayout(next);
-            }}
-            title={`Layout: ${layout} — click to cycle`}
-            style={{
-              appearance: "none",
-              border: 0,
-              cursor: "pointer",
-              padding: "5px 11px",
-              borderRadius: 5,
-              background: "transparent",
-              color: "var(--text-dim)",
-              fontSize: "var(--t-xs)",
-              fontFamily: "var(--font-mono)",
-              letterSpacing: ".06em",
-              textTransform: "uppercase",
-              display: "inline-flex",
-              alignItems: "center",
-              gap: 6,
-            }}
-          >
-            <I.Grid size={12} /> {layout}
-          </button>
+          <Segmented<LayoutMode>
+            translucent
+            ariaLabel="Video layout"
+            value={layout}
+            onChange={setLayout}
+            options={[
+              { value: "auto", label: "Auto" },
+              { value: "grid", label: "Grid" },
+              { value: "speaker", label: "Speaker" },
+            ]}
+          />
         </div>
 
         {chatOpen && (
@@ -2337,22 +2772,15 @@ export function InRoomScreen(props: InRoomScreenProps): ReactElement {
               icon={muted ? <I.MicOff size={20} /> : <I.Mic size={20} />}
               label={muted ? "Unmute" : "Mute"}
               danger={muted}
-              onClick={() => {
-                void roomWrapper.setMuted(!muted).catch((err) => {
-                  if (err instanceof DOMException && err.name === "NotAllowedError") {
-                    pushToast({ kind: "error", text: "Microphone permission denied", sub: "Allow mic access for this site in your browser, then try again." });
-                  } else {
-                    pushToast({ kind: "error", text: "Couldn't open microphone", sub: err instanceof Error ? `${err.name}: ${err.message}` : String(err) });
-                  }
-                });
-              }}
+              title={withBind(muted ? "Unmute" : "Mute", muteKeybind)}
+              onClick={handleToggleMute}
             />
-            <CameraControl cameraOn={cameraOn} roomWrapper={roomWrapper} />
+            <CameraControl cameraOn={cameraOn} roomWrapper={roomWrapper} onToggle={handleToggleCamera} />
             <ControlButton
               icon={<span style={{ fontSize: 20, lineHeight: 1 }}>👻</span>}
               label="Ghost"
               danger={localGhost}
-              title="Ghost — mic and camera off together"
+              title={withBind("Ghost — mic and camera off together", deafenKeybind)}
               onClick={() => void roomWrapper.setGhost(!localGhost)}
             />
           </div>
@@ -2362,6 +2790,7 @@ export function InRoomScreen(props: InRoomScreenProps): ReactElement {
               icon={sharing ? <I.ScreenOff size={20} /> : <I.Screen size={20} />}
               label={sharing ? "Stop share" : "Share"}
               active={sharing}
+              title={withBind(sharing ? "Stop sharing" : "Share screen", shareScreenKeybind)}
               onClick={() => void handleToggleScreen()}
             />
             {sharing && (
@@ -2377,12 +2806,14 @@ export function InRoomScreen(props: InRoomScreenProps): ReactElement {
               icon={<I.Chat size={20} />}
               label="Chat"
               active={chatOpen}
+              title="Toggle room chat"
               onClick={() => setChatOpen((c) => !c)}
             />
             <ControlButton
               icon={<I.Leave size={20} />}
               label="Leave"
               leave
+              title={withBind("Leave call", leaveRoomKeybind)}
               onClick={() => void handleLeave()}
             />
           </div>
@@ -2468,6 +2899,7 @@ export function InRoomScreen(props: InRoomScreenProps): ReactElement {
               <VolumeRow
                 label="Voice"
                 value={voiceVolumes[menu.participantId] ?? 1}
+                maxPercent={MAX_VOICE_PCT}
                 onChange={(v) => setVoiceVolume(menu.participantId, v)}
               />
               <VolumeRow
@@ -2514,6 +2946,78 @@ export function InRoomScreen(props: InRoomScreenProps): ReactElement {
                   View profile <span style={{ color: "var(--text-dim)" }}>👤</span>
                 </span>
               </CtxItem>
+
+              {/* Owner-only moderation — inline two-step confirm so a stray
+                  click can't eject or hand off the room. */}
+              {isRoomOwner && (
+                <>
+                  <hr className="rv-rule" />
+                  {ownerConfirm && ownerConfirm.id === menuParticipant.id ? (
+                    <div style={{ padding: "6px 8px" }}>
+                      <div style={{ fontSize: "var(--t-xs)", color: "var(--text-mid)", marginBottom: 6 }}>
+                        {ownerConfirm.kind === "remove"
+                          ? `Remove ${ownerConfirm.name} from the room?`
+                          : `Make ${ownerConfirm.name} the room owner?`}
+                      </div>
+                      <div style={{ display: "flex", gap: "var(--s-2)", justifyContent: "flex-end" }}>
+                        <button
+                          type="button"
+                          className="rv-btn"
+                          style={{ height: "1.6rem", fontSize: "var(--t-2xs)" }}
+                          onClick={() => setOwnerConfirm(null)}
+                        >
+                          Cancel
+                        </button>
+                        <button
+                          type="button"
+                          className="rv-btn"
+                          data-variant="primary"
+                          style={{
+                            height: "1.6rem",
+                            fontSize: "var(--t-2xs)",
+                            ...(ownerConfirm.kind === "remove"
+                              ? { background: "var(--danger)", borderColor: "var(--danger)", color: "#fff" }
+                              : {}),
+                          }}
+                          onClick={() => {
+                            const { kind, id } = ownerConfirm;
+                            setOwnerConfirm(null);
+                            setMenu(null);
+                            if (kind === "remove") void handleRemoveMember(id);
+                            else void handleTransferOwnership(id);
+                          }}
+                        >
+                          {ownerConfirm.kind === "remove" ? "Remove" : "Transfer"}
+                        </button>
+                      </div>
+                    </div>
+                  ) : (
+                    <>
+                      <CtxItem
+                        title="Hand the room over to this member"
+                        onClick={() =>
+                          setOwnerConfirm({ kind: "transfer", id: menuParticipant.id, name: menuParticipant.name })
+                        }
+                      >
+                        <span style={{ display: "flex", justifyContent: "space-between", alignItems: "center" }}>
+                          Transfer ownership <span style={{ color: "var(--text-dim)" }}>👑</span>
+                        </span>
+                      </CtxItem>
+                      <CtxItem
+                        danger
+                        title="Remove this person from the room"
+                        onClick={() =>
+                          setOwnerConfirm({ kind: "remove", id: menuParticipant.id, name: menuParticipant.name })
+                        }
+                      >
+                        <span style={{ display: "flex", justifyContent: "space-between", alignItems: "center" }}>
+                          Remove from room <span style={{ color: "var(--text-dim)" }}>⛔</span>
+                        </span>
+                      </CtxItem>
+                    </>
+                  )}
+                </>
+              )}
             </>
           )}
         </div>
@@ -2558,6 +3062,115 @@ export function InRoomScreen(props: InRoomScreenProps): ReactElement {
         </div>
       )}
 
+      {/* In-call screenshare quality/source picker (task 2) */}
+      {shareDialogOpen && (
+        <ScreenShareDialog
+          onConfirm={(q) => void startScreenShareWithQuality(q)}
+          onCancel={() => setShareDialogOpen(false)}
+        />
+      )}
+
+      {/* One-time "you're muted" nudge (task 4e) */}
+      {showMuteHint && (
+        <div
+          role="status"
+          style={{
+            position: "fixed",
+            left: "50%",
+            top: "22%",
+            transform: "translateX(-50%)",
+            zIndex: 90,
+            display: "flex",
+            alignItems: "center",
+            gap: "var(--s-3)",
+            padding: "var(--s-3) var(--s-4)",
+            background: "var(--bg-elev-2)",
+            border: "1px solid var(--border-strong)",
+            borderRadius: "var(--r-pill)",
+            boxShadow: "var(--shadow-3)",
+            maxWidth: "min(92vw, 32rem)",
+          }}
+        >
+          <I.MicOff size={16} style={{ color: "var(--danger)", flexShrink: 0 }} />
+          <span style={{ fontSize: "var(--t-sm)" }}>
+            You&apos;re muted —{" "}
+            {muteKeybind ? (
+              <>
+                press{" "}
+                <kbd style={kbdStyle}>
+                  {muteKeybind.replace(/Control/g, "Ctrl").replace(/Super/g, "Cmd")}
+                </kbd>{" "}
+                or{" "}
+              </>
+            ) : null}
+            click the mic to talk.
+          </span>
+          <button
+            type="button"
+            aria-label="Dismiss"
+            onClick={() => setMuteHintDismissed(true)}
+            style={{
+              appearance: "none",
+              border: 0,
+              background: "transparent",
+              color: "var(--text-faint)",
+              cursor: "pointer",
+              padding: 2,
+              flexShrink: 0,
+            }}
+          >
+            <I.X size={12} />
+          </button>
+        </div>
+      )}
+
+      {/* "is sharing — Watch" chip near the control bar (task 4g) */}
+      {conn.phase === "connected" && watchableSharers.length > 0 && (
+        <div
+          style={{
+            position: "fixed",
+            left: "50%",
+            bottom: "6.25rem",
+            transform: "translateX(-50%)",
+            zIndex: 40,
+            display: "flex",
+            gap: "var(--s-2)",
+            pointerEvents: "none",
+          }}
+        >
+          {watchableSharers.map((s) => (
+            <button
+              key={s.id}
+              type="button"
+              title={`Focus ${s.name}'s screen share`}
+              onClick={() => setFocusedId(s.id)}
+              style={{
+                pointerEvents: "auto",
+                appearance: "none",
+                cursor: "pointer",
+                display: "inline-flex",
+                alignItems: "center",
+                gap: 8,
+                padding: "6px 12px",
+                borderRadius: "var(--r-pill)",
+                background: "var(--bg-elev-2)",
+                border: "1px solid color-mix(in srgb, var(--accent) 45%, var(--border))",
+                color: "var(--text)",
+                fontSize: "var(--t-xs)",
+                boxShadow: "var(--shadow-2)",
+                backdropFilter: "blur(8px)",
+              }}
+            >
+              <span style={{ color: "var(--danger)" }}>🔴</span>
+              <span>
+                <b>{s.name}</b> is sharing
+              </span>
+              <span style={{ color: "var(--accent)", fontWeight: 600 }}>— Watch</span>
+            </button>
+          ))}
+        </div>
+      )}
+
       {settingsOpen && <SettingsModal onClose={() => setSettingsOpen(false)} />}
     </div>
   );
@@ -2567,11 +3180,16 @@ function VolumeRow({
   label,
   value,
   onChange,
+  maxPercent = 100,
 }: {
   label: string;
   value: number;
   onChange: (v: number) => void;
+  /** Slider ceiling. Voice goes to 200% (rides a GainNode above 100%). */
+  maxPercent?: number;
 }): ReactElement {
+  const pct = Math.round(value * 100);
+  const boosted = pct > 100;
   return (
     <div style={{ marginBottom: 10 }}>
       <div
@@ -2585,16 +3203,16 @@ function VolumeRow({
         }}
       >
         <span>{label}</span>
-        <span>{Math.round(value * 100)}%</span>
+        <span style={boosted ? { color: "var(--rv-amber)" } : undefined}>{pct}%</span>
       </div>
       <input
         type="range"
         min={0}
-        max={100}
+        max={maxPercent}
         step={5}
-        value={Math.round(Math.min(value, 1) * 100)}
+        value={Math.min(pct, maxPercent)}
         onChange={(e) => onChange(Number(e.target.value) / 100)}
-        style={{ width: "100%", accentColor: "var(--accent)" }}
+        style={{ width: "100%", accentColor: boosted ? "var(--rv-amber)" : "var(--accent)" }}
       />
       <div
         style={{
@@ -2606,7 +3224,8 @@ function VolumeRow({
         }}
       >
         <span>0</span>
-        <span>100</span>
+        {maxPercent > 100 && <span>100</span>}
+        <span>{maxPercent}</span>
       </div>
     </div>
   );
