@@ -4,6 +4,7 @@ import Fastify, { type FastifyInstance } from "fastify";
 import cors from "@fastify/cors";
 import rateLimit from "@fastify/rate-limit";
 import fastifyStatic from "@fastify/static";
+import compress from "@fastify/compress";
 import { registerErrorHandler } from "./errors.js";
 import { authRoutes } from "./auth/routes.js";
 import { roomRoutes } from "./rooms/routes.js";
@@ -32,6 +33,10 @@ export async function buildApp(options: BuildAppOptions = {}): Promise<FastifyIn
   // acceptable for a self-hosted app where authorization is enforced by JWTs.
   await app.register(cors, { origin: true, credentials: true });
 
+  // Speed: brotli/gzip for JSON and the web-client bundle (the main JS chunk
+  // shrinks ~4x, and it's the cold-load long pole over the tunnel).
+  await app.register(compress, { global: true });
+
   await app.register(rateLimit, { global: false });
 
   registerErrorHandler(app);
@@ -49,7 +54,20 @@ export async function buildApp(options: BuildAppOptions = {}): Promise<FastifyIn
   if (serveWebClient && webClientDir) {
     // wildcard:false enumerates real files at boot instead of a GET /* route,
     // so unknown paths reach the not-found handler below (SPA fallback).
-    await app.register(fastifyStatic, { root: webClientDir, index: "index.html", wildcard: false });
+    // Vite assets are content-hashed → cache forever; index.html must
+    // revalidate so deploys take effect immediately.
+    await app.register(fastifyStatic, {
+      root: webClientDir,
+      index: "index.html",
+      wildcard: false,
+      setHeaders: (res, filePath) => {
+        if (/[/\\]assets[/\\]/.test(filePath)) {
+          res.setHeader("Cache-Control", "public, max-age=31536000, immutable");
+        } else {
+          res.setHeader("Cache-Control", "no-cache");
+        }
+      },
+    });
     app.setNotFoundHandler((request, reply) => {
       const accepts = request.headers.accept ?? "";
       if (request.method === "GET" && accepts.includes("text/html")) {

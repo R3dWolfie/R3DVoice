@@ -108,8 +108,10 @@ export async function roomRoutes(app: FastifyInstance): Promise<void> {
   });
 
   // ---------------------------------------------------------------------
-  // Get room — only visible to owner / member / public-room callers, so a
-  // private room's existence isn't leaked to random authed users.
+  // Get room — deck semantics: isPublic=false means UNLISTED, not private.
+  // Knowing the room id IS the capability (ids only travel via links), so
+  // any authenticated caller may resolve it. A true invite-only "Private"
+  // tier is a future third visibility level with its own members-only gate.
   // ---------------------------------------------------------------------
   app.get<{ Params: { id: string } }>(
     "/rooms/:id",
@@ -120,8 +122,6 @@ export async function roomRoutes(app: FastifyInstance): Promise<void> {
       const membership = await prisma.roomMembership.findUnique({
         where: { userId_roomId: { userId, roomId: room.id } },
       });
-      const isAllowed = room.ownerId === userId || room.isPublic || membership !== null;
-      if (!isAllowed) throw new NotFoundError("room not found");
       return toResponse(room, userId, membership);
     },
   );
@@ -216,11 +216,9 @@ export async function roomRoutes(app: FastifyInstance): Promise<void> {
     async (request) => {
       const userId = request.auth!.userId;
       const room = await loadRoomOr404(request.params.id);
-      const ownMembership = await prisma.roomMembership.findUnique({
-        where: { userId_roomId: { userId, roomId: room.id } },
-      });
-      const isAllowed = room.ownerId === userId || room.isPublic || ownMembership !== null;
-      if (!isAllowed) throw new NotFoundError("room not found");
+      // Unlisted = link-is-access (see GET /rooms/:id); any authed caller
+      // who has the id may see the member list.
+      void userId;
 
       const memberships = await prisma.roomMembership.findMany({
         where: { roomId: room.id },
@@ -346,16 +344,9 @@ export async function roomRoutes(app: FastifyInstance): Promise<void> {
       const user = await prisma.user.findUnique({ where: { id: userId } });
       if (!user) throw new NotFoundError("user not found");
 
-      const isOwner = room.ownerId === userId;
-      const existingMembership = await prisma.roomMembership.findUnique({
-        where: { userId_roomId: { userId, roomId: room.id } },
-      });
-
-      if (!isOwner && !room.isPublic && !existingMembership) {
-        // Don't leak that this room exists — return the same 404 the
-        // GET /rooms/:id endpoint does for non-allowed callers.
-        throw new NotFoundError("room not found");
-      }
+      // Unlisted = link-is-access: anyone authenticated with the room id may
+      // join (deck 4.8: "Unlisted: anyone with the link can join"). The
+      // future invite-only Private tier re-introduces a gate here.
 
       // Refresh / create membership so the room shows up under "Recent".
       // Owner doesn't need a membership row but we create one anyway so

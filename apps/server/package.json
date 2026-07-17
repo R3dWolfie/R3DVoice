@@ -16,6 +16,7 @@
     "db:reset": "prisma migrate reset --force"
   },
   "dependencies": {
+    "@fastify/compress": "^9.1.0",
     "@fastify/cors": "^10.0.2",
     "@fastify/rate-limit": "^10.2.0",
     "@fastify/static": "^10.1.0",
