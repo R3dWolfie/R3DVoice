@@ -80,11 +80,13 @@ export function broadcastToThread(
   threadType: ThreadType,
   threadId: string,
   payload: unknown,
+  excludeUserId?: string,
 ): void {
   const set = subscriptions.get(key(threadType, threadId));
   if (!set || set.size === 0) return;
   const data = JSON.stringify(payload);
   for (const conn of set) {
+    if (excludeUserId !== undefined && conn.userId === excludeUserId) continue;
     try {
       conn.socket.send(data);
     } catch {

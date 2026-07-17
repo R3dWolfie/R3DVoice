@@ -12,6 +12,7 @@ import {
   markOnline,
   markOffline,
   sendToUser,
+  broadcastToThread,
   type ConnectedSocket,
 } from "./ws-state.js";
 
@@ -27,6 +28,11 @@ const incomingSchema = z.union([
     threadId: z.string().min(1),
   }),
   z.object({ type: z.literal("ping") }),
+  z.object({
+    type: z.literal("typing"),
+    threadType: z.enum(["room", "dm"]),
+    threadId: z.string().min(1),
+  }),
 ]);
 
 /**
@@ -91,6 +97,16 @@ export async function chatWsRoutes(app: FastifyInstance): Promise<void> {
 
       if (msg.type === "subscribe") subscribe(msg.threadType, msg.threadId, conn);
       else if (msg.type === "unsubscribe") unsubscribe(msg.threadType, msg.threadId, conn);
+      else if (msg.type === "typing") {
+        // 2.5l typing indicator — pure relay to the thread's other
+        // subscribers; nothing persists. Client throttles sends.
+        broadcastToThread(
+          msg.threadType,
+          msg.threadId,
+          { type: "chat.typing", threadType: msg.threadType, threadId: msg.threadId, userId },
+          userId,
+        );
+      }
     });
 
     sock.on("close", () => {

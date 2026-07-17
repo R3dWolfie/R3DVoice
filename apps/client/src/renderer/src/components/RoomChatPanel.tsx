@@ -49,6 +49,16 @@ export function RoomChatPanel({
   // 2.5k message context menu + edit-in-composer state.
   const [msgMenu, setMsgMenu] = useState<{ id: string; x: number; y: number; body: string; mine: boolean } | null>(null);
   const [editingId, setEditingId] = useState<string | null>(null);
+  // 2.5l typing indicator: peers' typing pings extend the deadline; a ticker
+  // clears it. Own sends are throttled via lastTypingSentRef.
+  const [typingUntil, setTypingUntil] = useState<number>(0);
+  const [now, setNow] = useState<number>(() => Date.now());
+  const lastTypingSentRef = useRef<number>(0);
+  useEffect(() => {
+    if (typingUntil <= Date.now()) return;
+    const t = setInterval(() => setNow(Date.now()), 1000);
+    return () => clearInterval(t);
+  }, [typingUntil]);
   const listRef = useRef<HTMLDivElement | null>(null);
   const inputRef = useRef<HTMLInputElement | null>(null);
   const apiRef = useRef<ApiClient | null>(null);
@@ -118,6 +128,10 @@ export function RoomChatPanel({
           setMessages((prev) =>
             prev.map((m) => (m.id === event.id ? { ...m, body: null, deletedAt: new Date().toISOString() } : m)),
           );
+        }
+      } else if (event.type === "chat.typing") {
+        if (event.threadType === threadType && event.threadId === threadId) {
+          setTypingUntil(Date.now() + 4000);
         }
       }
     });
@@ -361,6 +375,22 @@ export function RoomChatPanel({
           position: "relative",
         }}
       >
+        {typingUntil > now && (
+          <div
+            style={{
+              fontSize: "var(--t-2xs)",
+              color: "var(--text-dim)",
+              fontFamily: "var(--font-mono)",
+              letterSpacing: ".08em",
+              display: "flex",
+              alignItems: "center",
+              gap: 6,
+            }}
+          >
+            <span className="rv-skeleton" style={{ width: 18, height: 6, borderRadius: 3 }} />
+            typing…
+          </div>
+        )}
         {editingId !== null && (
           <div
             style={{
@@ -418,6 +448,10 @@ export function RoomChatPanel({
               onChange={(e) => {
                 const val = e.target.value;
                 setDraft(val);
+                if (val.trim() && Date.now() - lastTypingSentRef.current > 2500) {
+                  lastTypingSentRef.current = Date.now();
+                  transportRef.current?.sendTyping(threadType, threadId);
+                }
                 const cursor = e.target.selectionStart ?? val.length;
                 const slice = val.slice(0, cursor);
                 const at = slice.lastIndexOf("@");

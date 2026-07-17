@@ -112,6 +112,11 @@ export class ChatTransport {
     this.sendCmd({ type: "unsubscribe", threadType, threadId });
   }
 
+  /** 2.5l typing relay — fire-and-forget; callers throttle. */
+  sendTyping(threadType: ChatThreadType, threadId: string): void {
+    this.sendCmd({ type: "typing", threadType, threadId });
+  }
+
   /**
    * Returns the cached mute level for a thread, or fetches it lazily on miss.
    * Defaults to "all" when api isn't wired or the fetch fails.

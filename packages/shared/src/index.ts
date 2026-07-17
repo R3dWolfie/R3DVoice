@@ -166,13 +166,15 @@ export type ChatWsEvent =
   | { type: "friend.request"; from: { id: string; handle: string | null; displayName: string } }
   | { type: "friend.accepted"; by: { id: string; handle: string | null; displayName: string } }
   | { type: "invite.redeemed"; code: string; by: { id: string; handle: string | null; displayName: string }; kind: InviteKind; targetRoomId: string | null }
-  | { type: "presence.update"; userId: string; currentRoom: { id: string; name: string } | null };
+  | { type: "presence.update"; userId: string; currentRoom: { id: string; name: string } | null }
+  | { type: "chat.typing"; threadType: ChatThreadType; threadId: string; userId: string };
 
 /** Client → server WebSocket frames. */
 export type ChatWsCommand =
   | { type: "subscribe"; threadType: ChatThreadType; threadId: string }
   | { type: "unsubscribe"; threadType: ChatThreadType; threadId: string }
-  | { type: "ping" };
+  | { type: "ping" }
+  | { type: "typing"; threadType: ChatThreadType; threadId: string };
 
 // Friends DTOs
 export type FriendStatus = "pending-incoming" | "pending-outgoing" | "accepted" | "blocked";
