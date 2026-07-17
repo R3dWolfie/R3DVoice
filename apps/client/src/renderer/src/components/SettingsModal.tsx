@@ -16,7 +16,7 @@ import { I } from "./Icons.js";
 import { Modal } from "./Modal.js";
 import { Field } from "./Primitives.js";
 
-type Tab = "devices" | "keybinds" | "account" | "theme" | "compat" | "about";
+type Tab = "devices" | "keybinds" | "account" | "theme" | "notifications" | "compat" | "about";
 
 // Local copy of the designer's kbd inline style. Will be lifted to a shared
 // helper once a third call site appears.
@@ -72,6 +72,12 @@ export function SettingsModal({ onClose }: { onClose: () => void }): ReactElemen
             label="Theme"
           />
           <NavButton
+            active={tab === "notifications"}
+            onClick={() => setTab("notifications")}
+            icon={<I.Bell size={14} />}
+            label="Notifications"
+          />
+          <NavButton
             active={tab === "compat"}
             onClick={() => setTab("compat")}
             icon={<I.Grid size={14} />}
@@ -91,6 +97,7 @@ export function SettingsModal({ onClose }: { onClose: () => void }): ReactElemen
           {tab === "keybinds" && <KeybindsTab />}
           {tab === "account" && <AccountTab onClose={onClose} />}
           {tab === "theme" && <ThemeTab />}
+          {tab === "notifications" && <NotificationsTab />}
           {tab === "compat" && <CompatTab />}
           {tab === "about" && <AboutTab />}
         </div>
@@ -875,6 +882,40 @@ function PermRow({
           {display}
         </span>
       </span>
+    </div>
+  );
+}
+
+// Notifications tab per WireFrames 3.7 (honest subset): DM banner + preview
+// toggles feed notification-router; per-thread levels live on each thread's
+// header. Sound pickers land with the chat-extras pass.
+function NotificationsTab(): ReactElement {
+  const dmBanners = usePrefs((s) => s.dmBanners);
+  const dmPreviews = usePrefs((s) => s.dmPreviews);
+  return (
+    <div style={{ display: "flex", flexDirection: "column", gap: "var(--s-5)", maxWidth: 480 }}>
+      <div className="rv-section-head">
+        <span className="rv-label">Direct messages</span>
+      </div>
+      <SimpleToggle
+        label="DM banners"
+        hint="Show a desktop notification for every DM message."
+        value={dmBanners}
+        onChange={(v) => prefsActions().setDmBanners(v)}
+      />
+      <SimpleToggle
+        label="DM previews"
+        hint="Include the message text in the banner. Turn off if you screenshare a lot."
+        value={dmPreviews}
+        onChange={(v) => prefsActions().setDmPreviews(v)}
+      />
+      <div className="rv-section-head" style={{ marginTop: "var(--s-2)" }}>
+        <span className="rv-label">Per-room levels</span>
+      </div>
+      <p style={{ margin: 0, fontSize: "var(--t-xs)", color: "var(--text-dim)", lineHeight: 1.5 }}>
+        Each room and DM has its own level (all · @mentions only · muted) in the dropdown at the
+        top of its chat. Do-Not-Disturb silences everything except friend requests.
+      </p>
     </div>
   );
 }

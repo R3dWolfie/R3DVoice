@@ -2,13 +2,25 @@ import { describe, it, expect, vi } from "vitest";
 import { routeNotification } from "../src/renderer/src/lib/notification-router";
 import type { ChatMessageDTO, ChatWsEvent } from "@r3dvoice/shared";
 
-function ctx(overrides: Partial<{ selfUserId: string; dndUntil: Date | null; muteLevel: "all" | "mentions" | "none" }> = {}) {
+function ctx(
+  overrides: Partial<{
+    selfUserId: string;
+    dndUntil: Date | null;
+    muteLevel: "all" | "mentions" | "none";
+    dmBanners: boolean;
+    dmPreviews: boolean;
+  }> = {},
+) {
   const fire = vi.fn(async () => {});
   return {
     fire,
     arg: {
       selfUserId: overrides.selfUserId ?? "me",
       dndUntil: overrides.dndUntil ?? null,
+      prefs: {
+        dmBanners: overrides.dmBanners ?? true,
+        dmPreviews: overrides.dmPreviews ?? true,
+      },
       getMuteLevel: async () => (overrides.muteLevel ?? "all") as "all" | "mentions" | "none",
       fireOSNotification: fire,
     },

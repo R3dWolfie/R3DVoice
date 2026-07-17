@@ -5,6 +5,13 @@ type RouteContext = {
   selfUserId: string;
   /** Current DND state — null means not in DND. */
   dndUntil: Date | null;
+  /** Notification prefs (Settings › Notifications, 3.7). */
+  prefs: {
+    /** OS banner for every DM message. Off = DMs only surface as unread counts. */
+    dmBanners: boolean;
+    /** Include message text in DM banners. Off = generic text (screenshare-safe). */
+    dmPreviews: boolean;
+  };
   /** Mute lookup for any (threadType, threadId). Returns "all" when no row. */
   getMuteLevel(threadType: "room" | "dm", threadId: string): Promise<MuteLevel>;
   /** Cross to main process. */
@@ -23,21 +30,24 @@ export async function routeNotification(event: ChatWsEvent, ctx: RouteContext): 
       const lvl = await ctx.getMuteLevel(event.message.threadType, event.message.threadId);
       if (lvl === "none") return;
       if (dndActive) return;
+      const isDm = event.message.threadType === "dm";
       void ctx.fireOSNotification({
         title: `@${event.message.authorName} mentioned you`,
-        body: event.message.body ?? "(empty)",
+        body: isDm && !ctx.prefs.dmPreviews ? "New message" : (event.message.body ?? "(empty)"),
       });
       return;
     }
     case "message": {
       if (event.message.authorId === ctx.selfUserId) return;
+      const isDm = event.message.threadType === "dm";
+      if (isDm && !ctx.prefs.dmBanners) return;
       const lvl = await ctx.getMuteLevel(event.message.threadType, event.message.threadId);
       if (lvl === "none") return;
       if (lvl === "mentions") return; // chat.mention handles the mention case separately
       if (dndActive) return;
       void ctx.fireOSNotification({
         title: event.message.authorName,
-        body: event.message.body ?? "(empty)",
+        body: isDm && !ctx.prefs.dmPreviews ? "New message" : (event.message.body ?? "(empty)"),
       });
       return;
     }

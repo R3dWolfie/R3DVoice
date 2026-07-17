@@ -6,6 +6,7 @@ import type {
 } from "@r3dvoice/shared";
 import type { ApiClient } from "./api.js";
 import { routeNotification } from "./notification-router.js";
+import { prefsActions } from "./prefs-singleton.js";
 import { useUnreadStore } from "./unread-store.js";
 
 /** Snapshot of the authenticated user, kept current by the renderer shell. */
@@ -202,6 +203,10 @@ export class ChatTransport {
         void routeNotification(event, {
           selfUserId: me.id,
           dndUntil: me.dndUntil ? new Date(me.dndUntil) : null,
+          prefs: {
+            dmBanners: prefsActions().dmBanners,
+            dmPreviews: prefsActions().dmPreviews,
+          },
           getMuteLevel: async (threadType, threadId) => this.getMuteLevel(threadType, threadId),
           fireOSNotification: async (p) => {
             try { await window.r3dvoice.notify({ title: p.title, body: p.body }); } catch { /* */ }

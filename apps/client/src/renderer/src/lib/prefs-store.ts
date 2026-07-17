@@ -13,6 +13,8 @@ export type ThemePreset = "light" | "dark" | "system";
 
 export interface PrefsState {
   theme: ThemePreset;
+  dmBanners: boolean;
+  dmPreviews: boolean;
   micDeviceId: string | null;
   speakerDeviceId: string | null;
   cameraDeviceId: string | null;
@@ -40,6 +42,8 @@ export interface PrefsState {
   participantScreenVolumes: Record<string, number>;
 
   setTheme(theme: ThemePreset): void;
+  setDmBanners(v: boolean): void;
+  setDmPreviews(v: boolean): void;
   setMicDeviceId(id: string | null): void;
   setSpeakerDeviceId(id: string | null): void;
   setCameraDeviceId(id: string | null): void;
@@ -66,6 +70,8 @@ export interface PrefsState {
 
 const DEFAULTS = {
   theme: "light" as ThemePreset,
+  dmBanners: true,
+  dmPreviews: true,
   micDeviceId: null as string | null,
   speakerDeviceId: null as string | null,
   cameraDeviceId: null as string | null,
@@ -160,6 +166,8 @@ export function createPrefsStore(storage: PrefsStorage): StoreApi<PrefsState> {
       micGain: state.micGain,
       serverUrl: state.serverUrl,
       theme: state.theme,
+      dmBanners: state.dmBanners,
+      dmPreviews: state.dmPreviews,
       favoriteRoomIds: state.favoriteRoomIds,
       participantVolumes: state.participantVolumes,
       participantScreenVolumes: state.participantScreenVolumes,
@@ -170,6 +178,8 @@ export function createPrefsStore(storage: PrefsStorage): StoreApi<PrefsState> {
   return createStore<PrefsState>((set, get) => ({
     ...initial,
     setTheme: (v) => { set({ theme: v }); persistFromState(get()); },
+    setDmBanners: (v) => { set({ dmBanners: v }); persistFromState(get()); },
+    setDmPreviews: (v) => { set({ dmPreviews: v }); persistFromState(get()); },
     setMicDeviceId: (v) => { set({ micDeviceId: v }); persistFromState(get()); },
     setSpeakerDeviceId: (v) => { set({ speakerDeviceId: v }); persistFromState(get()); },
     setCameraDeviceId: (v) => { set({ cameraDeviceId: v }); persistFromState(get()); },

@@ -1,4 +1,4 @@
-import { useCallback, useEffect, useState, type ReactElement } from "react";
+import { useCallback, useEffect, useState, type ReactElement, type ReactNode } from "react";
 import type { MuteLevel } from "@r3dvoice/shared";
 import { useAuthStore } from "../lib/auth-context.js";
 import { ApiClient } from "../lib/api.js";
@@ -9,9 +9,11 @@ type Props = {
   threadId: string;
   title: string;
   subtitle?: string | undefined;
+  /** Extra header buttons (e.g. the 2.4e split-view ⫼ toggle). */
+  actions?: ReactNode;
 };
 
-export function ThreadHeader({ threadType, threadId, title, subtitle }: Props): ReactElement {
+export function ThreadHeader({ threadType, threadId, title, subtitle, actions }: Props): ReactElement {
   const serverUrl = useAuthStore((s) => s.serverUrl);
   const token = useAuthStore((s) => s.token);
   const [level, setLevel] = useState<MuteLevel>("all");
@@ -57,6 +59,7 @@ export function ThreadHeader({ threadType, threadId, title, subtitle }: Props): 
         <option value="mentions">@mentions only</option>
         <option value="none">Muted</option>
       </select>
+      {actions}
     </header>
   );
 }

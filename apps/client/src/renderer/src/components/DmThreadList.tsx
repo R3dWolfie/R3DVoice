@@ -7,14 +7,18 @@ import { useUnreadStore } from "../lib/unread-store.js";
 type Props = {
   threads: DmThreadEntry[];
   activeThreadId: string | null;
+  /** Second highlighted thread while split view (2.4f) is open. */
+  splitThreadId?: string | null;
   onSelect(threadId: string): void;
+  /** Right-click on a row (2.4d user context menu). */
+  onContextMenu?(threadId: string, x: number, y: number): void;
 };
 
 function avatarTone(seed: string): 1 | 2 | 3 | 4 | 5 {
   return ((seed.charCodeAt(0) % 5) + 1) as 1 | 2 | 3 | 4 | 5;
 }
 
-export function DmThreadList({ threads, activeThreadId, onSelect }: Props): ReactElement {
+export function DmThreadList({ threads, activeThreadId, splitThreadId, onSelect, onContextMenu }: Props): ReactElement {
   const counts = useUnreadStore((s) => s.counts);
   if (threads.length === 0) {
     return (
@@ -26,13 +30,18 @@ export function DmThreadList({ threads, activeThreadId, onSelect }: Props): Reac
   return (
     <ul style={{ listStyle: "none", padding: 0, margin: 0 }}>
       {threads.map((t) => {
-        const active = t.threadId === activeThreadId;
+        const active = t.threadId === activeThreadId || t.threadId === splitThreadId;
         const peer = t.otherParticipant;
         const headline = peer.handle ? `@${peer.handle}` : peer.displayName;
         return (
           <li
             key={t.threadId}
             onClick={() => onSelect(t.threadId)}
+            onContextMenu={(e) => {
+              if (!onContextMenu) return;
+              e.preventDefault();
+              onContextMenu(t.threadId, e.clientX, e.clientY);
+            }}
             style={{
               display: "flex",
               alignItems: "center",
