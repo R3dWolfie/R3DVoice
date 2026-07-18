@@ -225,8 +225,8 @@ function withBind(label: string, bind: string | null | undefined): string {
 
 // Screenshare tiers the in-room quality dialog offers (join-time also supports
 // 4K, but the quick dialog keeps to the three most-used resolutions).
-type ShareRes = "720p" | "1080p" | "1440p";
-const SHARE_RES: ShareRes[] = ["720p", "1080p", "1440p"];
+type ShareRes = "144p" | "240p" | "480p" | "720p" | "1080p" | "1440p";
+const SHARE_RES: ShareRes[] = ["144p", "240p", "480p", "720p", "1080p", "1440p"];
 // Voice can be boosted to 200% (rides a GainNode above 100%); screen audio stays 0–100%.
 const MAX_VOICE_PCT = 200;
 
@@ -2826,34 +2826,7 @@ export function InRoomScreen(props: InRoomScreenProps): ReactElement {
           )}
         </main>
 
-        {/* Layout switcher (floating) — 3-segment Auto/Grid/Speaker, active lit */}
-        <div
-          style={{
-            position: "absolute",
-            top: "var(--s-5)",
-            right: "var(--s-5)",
-            display: "flex",
-            padding: 3,
-            background: "color-mix(in oklch, var(--bg-elev) 80%, transparent)",
-            border: "1px solid var(--border-soft)",
-            borderRadius: "var(--r-md)",
-            backdropFilter: "blur(8px)",
-            zIndex: 5,
-          }}
-          title="Video layout"
-        >
-          <Segmented<LayoutMode>
-            translucent
-            ariaLabel="Video layout"
-            value={layout}
-            onChange={setLayout}
-            options={[
-              { value: "auto", label: "Auto" },
-              { value: "grid", label: "Grid" },
-              { value: "speaker", label: "Speaker" },
-            ]}
-          />
-        </div>
+        {/* Layout switcher removed per Red — layout stays "auto". */}
 
         {dmTarget && snapshot.local && (
           <RoomChatPanel
@@ -3055,8 +3028,10 @@ export function InRoomScreen(props: InRoomScreenProps): ReactElement {
           onMouseDown={(e) => e.stopPropagation()}
           style={{
             position: "fixed",
-            top: menu.y,
-            left: menu.x,
+            // Clamp into the viewport so a right-click near an edge doesn't push
+            // the menu off-screen (it's a tall menu for remote participants).
+            top: Math.max(8, Math.min(menu.y, window.innerHeight - 440)),
+            left: Math.max(8, Math.min(menu.x, window.innerWidth - 250)),
             width: 240,
             background: "var(--bg-elev-2)",
             border: "1px solid var(--border-strong)",

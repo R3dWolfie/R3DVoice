@@ -5,7 +5,7 @@ export interface PrefsStorage {
   write(value: string): void;
 }
 
-export type Resolution = "720p" | "1080p" | "1440p" | "4K";
+export type Resolution = "144p" | "240p" | "480p" | "720p" | "1080p" | "1440p" | "4K";
 export type FrameRate = 30 | 60;
 export type NoiseSuppressionLevel = "off" | "low" | "high";
 export type InputProfile = "voice-isolation" | "studio" | "custom";
