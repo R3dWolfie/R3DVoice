@@ -1717,6 +1717,8 @@ export function InRoomScreen(props: InRoomScreenProps): ReactElement {
 
   useEffect(() => {
     let cancelled = false;
+    // eslint-disable-next-line no-console
+    console.log("[call] join effect RUN — room=%s (connect to LiveKit)", props.roomId);
     // 2.5j step-list: reset, then mark real phases done as they complete.
     setConnSteps(freshConnSteps());
     let stepStart = performance.now();
@@ -1809,10 +1811,23 @@ export function InRoomScreen(props: InRoomScreenProps): ReactElement {
       }
     })();
     return () => {
+      // eslint-disable-next-line no-console
+      console.warn("[call] join effect CLEANUP → roomWrapper.leave() — room=%s (this ends the call!)", props.roomId);
       cancelled = true;
       void roomWrapper.leave();
     };
   }, [roomWrapper, props.roomId, props.selection, token, serverUrl, retryNonce]);
+
+  // Diagnostic (#35): confirm the screen truly persists across navigation.
+  useEffect(() => {
+    // eslint-disable-next-line no-console
+    console.log("[call] InRoomScreen MOUNTED — room=%s", props.roomId);
+    return () => {
+      // eslint-disable-next-line no-console
+      console.warn("[call] InRoomScreen UNMOUNTED — room=%s", props.roomId);
+    };
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, []);
 
   useEffect(() => {
     const room = roomWrapper.room;

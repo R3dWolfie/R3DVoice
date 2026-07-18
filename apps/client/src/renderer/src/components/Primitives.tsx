@@ -1,6 +1,6 @@
-import { useEffect, useRef, useState, type CSSProperties, type ReactElement, type ReactNode } from "react";
-import { createPortal } from "react-dom";
+import { useState, type CSSProperties, type ReactElement, type ReactNode } from "react";
 import { UpdateButton } from "./UpdateButton.js";
+import { Modal } from "./Modal.js";
 
 // Vite-injected at build time from apps/client/package.json.
 declare const __APP_VERSION__: string;
@@ -60,48 +60,46 @@ function detectOS(): "windows" | "mac" | "linux" | "other" {
   return "other";
 }
 
-const DL_ITEM: CSSProperties = {
-  display: "flex",
-  alignItems: "baseline",
-  gap: "var(--s-2)",
-  padding: "var(--s-2) var(--s-3)",
+const PLATFORM_TAG: CSSProperties = {
+  fontFamily: "var(--font-mono, monospace)",
+  fontSize: "var(--t-2xs)",
+  padding: "2px 7px",
   borderRadius: "var(--r-sm)",
-  color: "var(--text)",
-  textDecoration: "none",
-  fontSize: "var(--t-xs)",
+  background: "var(--bg-elev-3)",
+  color: "var(--text-mid)",
   whiteSpace: "nowrap",
+  flexShrink: 0,
 };
 
-/** Web-only: OS-detecting desktop-download popup (detected build + others + GitHub). */
+const PRIMARY_DL_CARD: CSSProperties = {
+  display: "flex",
+  alignItems: "center",
+  gap: "var(--s-4)",
+  padding: "var(--s-4) var(--s-5)",
+  borderRadius: "var(--r-lg)",
+  border: "1px solid color-mix(in oklch, var(--accent) 45%, transparent)",
+  background: "var(--accent-tint)",
+  color: "var(--text)",
+  textDecoration: "none",
+};
+
+const SECONDARY_DL_CARD: CSSProperties = {
+  display: "flex",
+  alignItems: "center",
+  gap: "var(--s-3)",
+  padding: "var(--s-3) var(--s-4)",
+  borderRadius: "var(--r-md)",
+  border: "1px solid var(--border)",
+  background: "var(--bg-elev-2)",
+  color: "var(--text)",
+  textDecoration: "none",
+};
+
+const ext = (sub: string): string => sub.split(" ")[0] ?? sub;
+
+/** Web-only: opens a polished modal to grab the desktop app (detected OS first). */
 function DownloadMenu(): ReactElement {
   const [open, setOpen] = useState(false);
-  const btnRef = useRef<HTMLButtonElement>(null);
-  const menuRef = useRef<HTMLDivElement>(null);
-  const [pos, setPos] = useState<{ top: number; right: number } | null>(null);
-
-  // Anchor the portaled popover under the trigger (see UpdateButton — the
-  // titlebar shares a stacking context with the content area, so an in-place
-  // absolute popover paints *behind* the app).
-  const place = (): void => {
-    const r = btnRef.current?.getBoundingClientRect();
-    if (r) setPos({ top: r.bottom + 6, right: Math.max(8, window.innerWidth - r.right) });
-  };
-
-  useEffect(() => {
-    if (!open) return;
-    const onDoc = (e: MouseEvent): void => {
-      const t = e.target as Node;
-      if (!btnRef.current?.contains(t) && !menuRef.current?.contains(t)) setOpen(false);
-    };
-    const onResize = (): void => place();
-    document.addEventListener("mousedown", onDoc);
-    window.addEventListener("resize", onResize);
-    return () => {
-      document.removeEventListener("mousedown", onDoc);
-      window.removeEventListener("resize", onResize);
-    };
-  }, [open]);
-
   const os = detectOS();
   const detected = PLATFORMS.find((p) => p.key === os) ?? null;
   const others = PLATFORMS.filter((p) => p.key !== os);
@@ -109,51 +107,101 @@ function DownloadMenu(): ReactElement {
   return (
     <>
       <button
-        ref={btnRef}
         type="button"
         className="rv-btn"
         data-variant="ghost"
         data-active={open}
         title="Download the desktop app"
-        onClick={() => {
-          if (!open) place();
-          setOpen((v) => !v);
-        }}
+        onClick={() => setOpen(true)}
         style={{ height: "1.4rem", padding: "0 var(--s-2)", fontSize: "var(--t-2xs)", lineHeight: 1 }}
       >
-        ↓ Download app ▾
+        ↓ Download app
       </button>
-      {open &&
-        pos &&
-        createPortal(
-        <div
-          ref={menuRef}
-          className="rv-menu rv-fade-in"
-          style={{ position: "fixed", top: pos.top, right: pos.right, minWidth: 230, zIndex: 4000, padding: "var(--s-1)" }}
-          onClick={() => setOpen(false)}
-        >
+      <Modal
+        open={open}
+        onClose={() => setOpen(false)}
+        title="Download R3DVoice"
+        subtitle="The native desktop app — lower latency, global hotkeys, per-app screen audio"
+        icon="↓"
+        width="min(94vw, 540px)"
+        footer={
+          <>
+            <span style={{ fontSize: "var(--t-2xs)", color: "var(--text-faint)" }}>
+              Free · open source · AGPL-3.0
+            </span>
+            <a
+              href={`${RELEASES}/latest`}
+              target="_blank"
+              rel="noopener noreferrer"
+              className="rv-btn"
+              data-variant="ghost"
+              style={{ fontSize: "var(--t-xs)" }}
+            >
+              All builds & notes →
+            </a>
+          </>
+        }
+      >
+        <div style={{ padding: "var(--s-5) var(--s-6)", display: "flex", flexDirection: "column", gap: "var(--s-5)" }}>
           {detected && (
-            <a href={detected.url} style={{ ...DL_ITEM, fontWeight: 600, color: "var(--accent)" }}>
-              ↓ Download for {detected.label}
-              <span style={{ color: "var(--text-faint)", fontWeight: 400 }}>{detected.sub}</span>
+            <a href={detected.url} style={PRIMARY_DL_CARD}>
+              <span aria-hidden style={{ fontSize: "1.7rem", lineHeight: 1, color: "var(--accent)" }}>
+                ↓
+              </span>
+              <span style={{ display: "flex", flexDirection: "column", gap: 3, minWidth: 0 }}>
+                <span style={{ fontWeight: 700, fontSize: "var(--t-md)" }}>Download for {detected.label}</span>
+                <span style={{ fontSize: "var(--t-2xs)", color: "var(--text-mid)" }}>
+                  Detected your system · {detected.sub}
+                </span>
+              </span>
+              <span style={{ ...PLATFORM_TAG, marginLeft: "auto" }}>{ext(detected.sub)}</span>
             </a>
           )}
-          <div className="rv-label" style={{ padding: "var(--s-1) var(--s-3)", fontSize: "var(--t-2xs)", opacity: 0.7 }}>
-            {detected ? "Other platforms" : "Choose your platform"}
+
+          <div style={{ display: "flex", flexDirection: "column", gap: "var(--s-2)" }}>
+            <span className="rv-label" style={{ fontSize: "var(--t-2xs)", opacity: 0.7 }}>
+              {detected ? "Other platforms" : "Choose your platform"}
+            </span>
+            <div
+              style={{
+                display: "grid",
+                gridTemplateColumns: others.length > 1 ? "1fr 1fr" : "1fr",
+                gap: "var(--s-3)",
+              }}
+            >
+              {others.map((p) => (
+                <a key={p.key} href={p.url} style={SECONDARY_DL_CARD}>
+                  <span style={{ display: "flex", flexDirection: "column", minWidth: 0 }}>
+                    <span style={{ fontWeight: 600, fontSize: "var(--t-sm)" }}>{p.label}</span>
+                    <span style={{ fontSize: "var(--t-2xs)", color: "var(--text-faint)" }}>{p.sub}</span>
+                  </span>
+                  <span style={{ ...PLATFORM_TAG, marginLeft: "auto" }}>{ext(p.sub)}</span>
+                </a>
+              ))}
+            </div>
           </div>
-          {others.map((p) => (
-            <a key={p.key} href={p.url} style={DL_ITEM}>
-              {p.label}
-              <span style={{ color: "var(--text-faint)" }}>{p.sub}</span>
-            </a>
-          ))}
-          <div style={{ height: 1, background: "var(--border-soft)", margin: "var(--s-1) 0" }} />
-          <a href={`${RELEASES}/latest`} target="_blank" rel="noopener noreferrer" style={{ ...DL_ITEM, color: "var(--text-mid)" }}>
-            GitHub Download →
-          </a>
-        </div>,
-        document.body,
-      )}
+
+          {os === "linux" && (
+            <div
+              style={{
+                display: "flex",
+                flexWrap: "wrap",
+                alignItems: "center",
+                gap: "var(--s-2)",
+                padding: "var(--s-3) var(--s-4)",
+                borderRadius: "var(--r-md)",
+                border: "1px dashed var(--border)",
+                background: "var(--bg-elev)",
+              }}
+            >
+              <span style={{ fontSize: "var(--t-2xs)", color: "var(--text-mid)" }}>
+                On Arch? Install from the AUR — updates come through your package manager:
+              </span>
+              <code style={{ ...PLATFORM_TAG, fontSize: "var(--t-xs)" }}>yay -S r3dvoice-bin</code>
+            </div>
+          )}
+        </div>
+      </Modal>
     </>
   );
 }

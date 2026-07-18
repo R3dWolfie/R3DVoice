@@ -632,7 +632,12 @@ input, select, textarea { font: inherit; color: inherit; }
 /* Context menu / popover surface */
 .rv-menu {
   min-width: 11rem;
-  background: var(--bg-elev);
+  /* Dropdowns must be fully OPAQUE even when the active theme's surface token
+     (--bg-elev) is translucent — otherwise the app UI behind bleeds through and
+     a divider/border shows across a menu row. Composite the surface tint over
+     the opaque app base so the result is always solid, in any theme. */
+  background-color: var(--bg);
+  background-image: linear-gradient(var(--bg-elev), var(--bg-elev));
   border: 1px solid var(--border);
   border-radius: var(--r-md);
   box-shadow: var(--shadow-2);
