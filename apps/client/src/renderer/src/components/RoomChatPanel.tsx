@@ -9,6 +9,23 @@ import { Avatar } from "./Avatar.js";
 import { useDismiss } from "../lib/use-dismiss.js";
 import { pushToast } from "../lib/toast-store.js";
 
+// Shared style for the composer "+" menu rows.
+const PLUS_ITEM_STYLE: CSSProperties = {
+  display: "flex",
+  alignItems: "center",
+  gap: "var(--s-2)",
+  width: "100%",
+  textAlign: "left",
+  padding: "var(--s-2) var(--s-3)",
+  borderRadius: "var(--r-sm)",
+  background: "transparent",
+  border: 0,
+  color: "var(--text)",
+  font: "inherit",
+  fontSize: "var(--t-sm)",
+  cursor: "pointer",
+};
+
 /** A message the local user is sending — shown optimistically before the
  *  server echoes it back. `text` is the plaintext (used for display + retry;
  *  for DMs the wire body is re-encrypted per attempt). */
@@ -172,6 +189,12 @@ export function RoomChatPanel({
   const emojiWrapRef = useRef<HTMLDivElement>(null);
   const emojiBtnRef = useRef<HTMLButtonElement>(null);
   useDismiss(emojiOpen, () => setEmojiOpen(false), [emojiWrapRef, emojiBtnRef]);
+  // Composer "+" actions menu (Upload a File / Create Poll). Platform-split so
+  // mobile can later swap in touch-native items; desktop shows both.
+  const [plusOpen, setPlusOpen] = useState(false);
+  const plusBtnRef = useRef<HTMLButtonElement>(null);
+  const plusMenuRef = useRef<HTMLDivElement>(null);
+  useDismiss(plusOpen, () => setPlusOpen(false), [plusMenuRef, plusBtnRef]);
   const [mentionQuery, setMentionQuery] = useState<string | null>(null);
   const [mentionAnchor, setMentionAnchor] = useState<number>(0);
   const [error, setError] = useState<string | null>(null);
@@ -1036,17 +1059,60 @@ export function RoomChatPanel({
           </div>
         )}
         <div style={{ display: "flex", gap: "var(--s-2)", alignItems: "center" }}>
-          <button
-            type="button"
-            className="rv-btn rv-btn-icon"
-            data-variant="ghost"
-            data-disabled="true"
-            title="Attachments are coming — not in this build yet."
-            aria-label="Attach"
-            style={{ opacity: 0.45, cursor: "default" }}
-          >
-            📎
-          </button>
+          <div style={{ position: "relative" }}>
+            <button
+              ref={plusBtnRef}
+              type="button"
+              className="rv-btn rv-btn-icon"
+              data-variant="ghost"
+              data-active={plusOpen}
+              title="Add"
+              aria-label="Add"
+              onClick={() => setPlusOpen((v) => !v)}
+              style={{ fontSize: 20, lineHeight: 1 }}
+            >
+              ＋
+            </button>
+            {plusOpen && (
+              <div
+                ref={plusMenuRef}
+                className="rv-menu rv-fade-in"
+                style={{
+                  position: "absolute",
+                  bottom: "calc(100% + var(--s-2))",
+                  left: 0,
+                  minWidth: 190,
+                  zIndex: 46,
+                  padding: "var(--s-1)",
+                }}
+              >
+                <button
+                  type="button"
+                  className="rv-menu-item"
+                  onClick={() => {
+                    setPlusOpen(false);
+                    // TODO(attachments): open the file picker + upload pipeline.
+                    pushToast({ kind: "info", text: "File uploads are coming — building it next." });
+                  }}
+                  style={PLUS_ITEM_STYLE}
+                >
+                  <span aria-hidden style={{ width: 18 }}>📎</span> Upload a File
+                </button>
+                <button
+                  type="button"
+                  className="rv-menu-item"
+                  onClick={() => {
+                    setPlusOpen(false);
+                    // TODO(polls): open the poll composer.
+                    pushToast({ kind: "info", text: "Polls are coming — building it next." });
+                  }}
+                  style={PLUS_ITEM_STYLE}
+                >
+                  <span aria-hidden style={{ width: 18 }}>📊</span> Create Poll
+                </button>
+              </div>
+            )}
+          </div>
           <div style={{ position: "relative", flex: 1 }}>
             <input
               ref={inputRef}

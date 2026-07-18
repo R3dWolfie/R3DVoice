@@ -169,6 +169,10 @@ async function createWindow(splash: BrowserWindow | null): Promise<BrowserWindow
   const win = new BrowserWindow({
     width: bounds.width,
     height: bounds.height,
+    // Floor the window size — below this the titlebar/controls compress into an
+    // unusable sliver (custom-scale drag had no lower bound).
+    minWidth: 900,
+    minHeight: 600,
     ...(typeof bounds.x === "number" ? { x: bounds.x } : {}),
     ...(typeof bounds.y === "number" ? { y: bounds.y } : {}),
     backgroundColor: "#101014",
