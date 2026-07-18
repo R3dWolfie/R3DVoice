@@ -1,4 +1,5 @@
 import { useEffect, useRef, useState, type CSSProperties, type ReactElement, type ReactNode } from "react";
+import { createPortal } from "react-dom";
 import { UpdateButton } from "./UpdateButton.js";
 
 // Vite-injected at build time from apps/client/package.json.
@@ -74,14 +75,31 @@ const DL_ITEM: CSSProperties = {
 /** Web-only: OS-detecting desktop-download popup (detected build + others + GitHub). */
 function DownloadMenu(): ReactElement {
   const [open, setOpen] = useState(false);
-  const ref = useRef<HTMLDivElement>(null);
+  const btnRef = useRef<HTMLButtonElement>(null);
+  const menuRef = useRef<HTMLDivElement>(null);
+  const [pos, setPos] = useState<{ top: number; right: number } | null>(null);
+
+  // Anchor the portaled popover under the trigger (see UpdateButton — the
+  // titlebar shares a stacking context with the content area, so an in-place
+  // absolute popover paints *behind* the app).
+  const place = (): void => {
+    const r = btnRef.current?.getBoundingClientRect();
+    if (r) setPos({ top: r.bottom + 6, right: Math.max(8, window.innerWidth - r.right) });
+  };
+
   useEffect(() => {
     if (!open) return;
     const onDoc = (e: MouseEvent): void => {
-      if (ref.current && !ref.current.contains(e.target as Node)) setOpen(false);
+      const t = e.target as Node;
+      if (!btnRef.current?.contains(t) && !menuRef.current?.contains(t)) setOpen(false);
     };
+    const onResize = (): void => place();
     document.addEventListener("mousedown", onDoc);
-    return () => document.removeEventListener("mousedown", onDoc);
+    window.addEventListener("resize", onResize);
+    return () => {
+      document.removeEventListener("mousedown", onDoc);
+      window.removeEventListener("resize", onResize);
+    };
   }, [open]);
 
   const os = detectOS();
@@ -89,22 +107,29 @@ function DownloadMenu(): ReactElement {
   const others = PLATFORMS.filter((p) => p.key !== os);
 
   return (
-    <div ref={ref} style={{ position: "relative" }}>
+    <>
       <button
+        ref={btnRef}
         type="button"
         className="rv-btn"
         data-variant="ghost"
         data-active={open}
         title="Download the desktop app"
-        onClick={() => setOpen((v) => !v)}
+        onClick={() => {
+          if (!open) place();
+          setOpen((v) => !v);
+        }}
         style={{ height: "1.4rem", padding: "0 var(--s-2)", fontSize: "var(--t-2xs)", lineHeight: 1 }}
       >
         ↓ Download app ▾
       </button>
-      {open && (
+      {open &&
+        pos &&
+        createPortal(
         <div
+          ref={menuRef}
           className="rv-menu rv-fade-in"
-          style={{ position: "absolute", top: "calc(100% + 6px)", right: 0, minWidth: 230, zIndex: 60, padding: "var(--s-1)" }}
+          style={{ position: "fixed", top: pos.top, right: pos.right, minWidth: 230, zIndex: 4000, padding: "var(--s-1)" }}
           onClick={() => setOpen(false)}
         >
           {detected && (
@@ -126,9 +151,10 @@ function DownloadMenu(): ReactElement {
           <a href={`${RELEASES}/latest`} target="_blank" rel="noopener noreferrer" style={{ ...DL_ITEM, color: "var(--text-mid)" }}>
             GitHub Download →
           </a>
-        </div>
+        </div>,
+        document.body,
       )}
-    </div>
+    </>
   );
 }
 
