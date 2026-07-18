@@ -1558,6 +1558,213 @@ function ScreenShareDialog({
   );
 }
 
+// Small live video thumbnail for the mini call bar — attaches a screenshare or
+// camera track to a compact <video>.
+function MiniVideoPreview({ track }: { track: Track }): ReactElement {
+  const ref = useRef<HTMLVideoElement | null>(null);
+  useEffect(() => {
+    const el = ref.current;
+    if (!el) return;
+    track.attach(el);
+    return () => {
+      try {
+        track.detach(el);
+      } catch {
+        /* track already gone */
+      }
+    };
+  }, [track]);
+  return (
+    <video
+      ref={ref}
+      autoPlay
+      muted
+      playsInline
+      style={{ width: 64, height: 38, borderRadius: 8, objectFit: "cover", background: "#000", flexShrink: 0 }}
+    />
+  );
+}
+
+// Session-remembered mini-bar position so drag survives minimize/restore.
+let lastMiniPos: { x: number; y: number } | null = null;
+
+// Draggable floating call dock shown while the call runs in the background
+// (#35). Drag it by the grip; the name area returns to the call.
+function MiniCallBar(props: {
+  connected: boolean;
+  statusText: string;
+  dotColor: string;
+  sharing: boolean;
+  muted: boolean;
+  localGhost: boolean;
+  previewTrack: Track | null;
+  onRestore: () => void;
+  onToggleMute: () => void;
+  onToggleGhost: () => void;
+  onLeave: () => void;
+}): ReactElement {
+  const [pos, setPos] = useState<{ x: number; y: number }>(
+    () => lastMiniPos ?? { x: 60, y: (typeof window !== "undefined" ? window.innerHeight : 800) - 90 },
+  );
+  const dragRef = useRef<{ sx: number; sy: number; ox: number; oy: number } | null>(null);
+  useEffect(() => {
+    lastMiniPos = pos;
+  }, [pos]);
+
+  const startDrag = (e: MouseEvent<HTMLSpanElement>): void => {
+    e.preventDefault();
+    dragRef.current = { sx: e.clientX, sy: e.clientY, ox: pos.x, oy: pos.y };
+    const onMove = (ev: globalThis.MouseEvent): void => {
+      const d = dragRef.current;
+      if (!d) return;
+      const nx = d.ox + (ev.clientX - d.sx);
+      const ny = d.oy + (ev.clientY - d.sy);
+      setPos({
+        x: Math.max(8, Math.min(nx, window.innerWidth - 220)),
+        y: Math.max(8, Math.min(ny, window.innerHeight - 60)),
+      });
+    };
+    const onUp = (): void => {
+      dragRef.current = null;
+      window.removeEventListener("mousemove", onMove);
+      window.removeEventListener("mouseup", onUp);
+    };
+    window.addEventListener("mousemove", onMove);
+    window.addEventListener("mouseup", onUp);
+  };
+
+  const { connected } = props;
+  const miniBtn: CSSProperties = {
+    width: 34,
+    height: 34,
+    flexShrink: 0,
+    borderRadius: 10,
+    display: "grid",
+    placeItems: "center",
+    border: "1px solid var(--border)",
+    background: "var(--bg-elev-2)",
+    color: "var(--text)",
+    cursor: "pointer",
+    font: "inherit",
+  };
+  return (
+    <div
+      className="rv-fade-in"
+      style={{
+        position: "fixed",
+        left: pos.x,
+        top: pos.y,
+        zIndex: 400,
+        display: "flex",
+        alignItems: "center",
+        gap: "var(--s-2)",
+        padding: "8px 10px 8px 6px",
+        background: "var(--bg-elev-1, var(--bg))",
+        border: "1px solid var(--border)",
+        borderRadius: 14,
+        boxShadow: "0 10px 34px rgba(0,0,0,.5)",
+        maxWidth: "min(94vw, 460px)",
+      }}
+    >
+      <span
+        onMouseDown={startDrag}
+        title="Drag to move"
+        aria-hidden
+        style={{
+          cursor: "grab",
+          padding: "0 3px",
+          color: "var(--text-faint)",
+          fontSize: 15,
+          lineHeight: 1,
+          userSelect: "none",
+          flexShrink: 0,
+        }}
+      >
+        ⠿
+      </span>
+      {props.previewTrack && <MiniVideoPreview track={props.previewTrack} />}
+      <button
+        type="button"
+        onClick={props.onRestore}
+        title="Return to call"
+        style={{
+          display: "flex",
+          alignItems: "center",
+          gap: 9,
+          background: "none",
+          border: "none",
+          color: "var(--text)",
+          cursor: "pointer",
+          font: "inherit",
+          padding: 0,
+          minWidth: 0,
+        }}
+      >
+        <span
+          style={{
+            width: 9,
+            height: 9,
+            flexShrink: 0,
+            borderRadius: "50%",
+            background: props.dotColor,
+            boxShadow: connected ? `0 0 8px ${props.dotColor}` : "none",
+          }}
+        />
+        <span style={{ display: "flex", flexDirection: "column", alignItems: "flex-start", minWidth: 0 }}>
+          <span
+            style={{
+              fontSize: 13,
+              fontWeight: 600,
+              whiteSpace: "nowrap",
+              overflow: "hidden",
+              textOverflow: "ellipsis",
+              maxWidth: 160,
+            }}
+          >
+            {props.statusText}
+          </span>
+          <span style={{ fontSize: 10, color: "var(--text-faint)", letterSpacing: ".03em" }}>
+            Tap to return{props.sharing ? " · sharing" : ""}
+          </span>
+        </span>
+      </button>
+      <span style={{ width: 1, height: 26, flexShrink: 0, background: "var(--border)" }} />
+      <button
+        type="button"
+        onClick={props.onToggleMute}
+        disabled={!connected}
+        title={props.muted ? "Unmute" : "Mute"}
+        style={{ ...miniBtn, color: props.muted ? "var(--rv-red, #ed4245)" : "var(--text)", opacity: connected ? 1 : 0.5 }}
+      >
+        {props.muted ? <I.MicOff size={17} /> : <I.Mic size={17} />}
+      </button>
+      <button
+        type="button"
+        onClick={props.onToggleGhost}
+        disabled={!connected}
+        title="Ghost — mic and camera off"
+        style={{
+          ...miniBtn,
+          fontSize: 17,
+          lineHeight: 1,
+          color: props.localGhost ? "var(--rv-amber, #faa61a)" : "var(--text)",
+          opacity: connected ? 1 : 0.5,
+        }}
+      >
+        👻
+      </button>
+      <button
+        type="button"
+        onClick={props.onLeave}
+        title="Leave call"
+        style={{ ...miniBtn, background: "var(--rv-red, #ed4245)", border: "none", color: "#fff" }}
+      >
+        <I.Leave size={17} />
+      </button>
+    </div>
+  );
+}
+
 export function InRoomScreen(props: InRoomScreenProps): ReactElement {
   const token = useAuthStore((s) => s.token);
   const serverUrl = useAuthStore((s) => s.serverUrl);
@@ -2380,111 +2587,26 @@ export function InRoomScreen(props: InRoomScreenProps): ReactElement {
       : conn.phase === "error"
         ? "Connection lost"
         : "Connecting…";
-    const miniBtn: CSSProperties = {
-      width: 34,
-      height: 34,
-      flexShrink: 0,
-      borderRadius: 10,
-      display: "grid",
-      placeItems: "center",
-      border: "1px solid var(--border)",
-      background: "var(--bg-elev-2)",
-      color: "var(--text)",
-      cursor: "pointer",
-      font: "inherit",
-    };
+    // Live thumbnail: prefer any active screenshare, else any camera.
+    const previewTrack = connected
+      ? (tiles.map((t) => t.screenTrack).find((t): t is Track => t !== null) ??
+        tiles.map((t) => t.cameraTrack).find((t): t is Track => t !== null) ??
+        null)
+      : null;
     return (
-      <div
-        className="rv-fade-in"
-        style={{
-          position: "fixed",
-          left: 60,
-          bottom: 16,
-          zIndex: 400,
-          display: "flex",
-          alignItems: "center",
-          gap: "var(--s-3)",
-          padding: "8px 10px 8px 14px",
-          background: "var(--bg-elev-1, var(--bg))",
-          border: "1px solid var(--border)",
-          borderRadius: 14,
-          boxShadow: "0 10px 34px rgba(0,0,0,.5)",
-          maxWidth: "min(92vw, 380px)",
-        }}
-      >
-        <button
-          type="button"
-          onClick={() => props.onRestore?.()}
-          title="Return to call"
-          style={{
-            display: "flex",
-            alignItems: "center",
-            gap: 9,
-            background: "none",
-            border: "none",
-            color: "var(--text)",
-            cursor: "pointer",
-            font: "inherit",
-            padding: 0,
-            minWidth: 0,
-          }}
-        >
-          <span
-            style={{
-              width: 9,
-              height: 9,
-              flexShrink: 0,
-              borderRadius: "50%",
-              background: dotColor,
-              boxShadow: connected ? `0 0 8px ${dotColor}` : "none",
-            }}
-          />
-          <span style={{ display: "flex", flexDirection: "column", alignItems: "flex-start", minWidth: 0 }}>
-            <span
-              style={{
-                fontSize: 13,
-                fontWeight: 600,
-                whiteSpace: "nowrap",
-                overflow: "hidden",
-                textOverflow: "ellipsis",
-                maxWidth: 170,
-              }}
-            >
-              {statusText}
-            </span>
-            <span style={{ fontSize: 10, color: "var(--text-faint)", letterSpacing: ".03em" }}>
-              Tap to return{sharing ? " · sharing" : ""}
-            </span>
-          </span>
-        </button>
-        <span style={{ width: 1, height: 26, flexShrink: 0, background: "var(--border)" }} />
-        <button
-          type="button"
-          onClick={handleToggleMute}
-          disabled={!connected}
-          title={muted ? "Unmute" : "Mute"}
-          style={{ ...miniBtn, color: muted ? "var(--rv-red, #ed4245)" : "var(--text)", opacity: connected ? 1 : 0.5 }}
-        >
-          {muted ? <I.MicOff size={17} /> : <I.Mic size={17} />}
-        </button>
-        <button
-          type="button"
-          onClick={() => void roomWrapper.setGhost(!localGhost)}
-          disabled={!connected}
-          title="Ghost — mic and camera off"
-          style={{ ...miniBtn, fontSize: 17, lineHeight: 1, color: localGhost ? "var(--rv-amber, #faa61a)" : "var(--text)", opacity: connected ? 1 : 0.5 }}
-        >
-          👻
-        </button>
-        <button
-          type="button"
-          onClick={() => void handleLeave()}
-          title="Leave call"
-          style={{ ...miniBtn, background: "var(--rv-red, #ed4245)", border: "none", color: "#fff" }}
-        >
-          <I.Leave size={17} />
-        </button>
-      </div>
+      <MiniCallBar
+        connected={connected}
+        statusText={statusText}
+        dotColor={dotColor}
+        sharing={sharing}
+        muted={muted}
+        localGhost={localGhost}
+        previewTrack={previewTrack}
+        onRestore={() => props.onRestore?.()}
+        onToggleMute={handleToggleMute}
+        onToggleGhost={() => void roomWrapper.setGhost(!localGhost)}
+        onLeave={() => void handleLeave()}
+      />
     );
   }
 

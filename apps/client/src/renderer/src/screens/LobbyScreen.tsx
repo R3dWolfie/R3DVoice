@@ -74,9 +74,11 @@ interface LobbyScreenProps {
   onInviteCode?: (code: string) => void;
   /** Friend invites redeem into the DMs page — App switches the rail page. */
   onOpenDms?: () => void;
+  /** Clicking the room you're already in (call running minimized) returns to it. */
+  onReturnToCall?: () => void;
 }
 
-export function LobbyScreen({ pendingInviteCode, pendingJoinRoomId, onInviteCodeConsumed, onJoinRoomIdConsumed, onInviteCode, onOpenDms }: LobbyScreenProps = {}): ReactElement {
+export function LobbyScreen({ pendingInviteCode, pendingJoinRoomId, onInviteCodeConsumed, onJoinRoomIdConsumed, onInviteCode, onOpenDms, onReturnToCall }: LobbyScreenProps = {}): ReactElement {
   const token = useAuthStore((s) => s.token);
   const serverUrl = useAuthStore((s) => s.serverUrl);
 
@@ -141,6 +143,12 @@ export function LobbyScreen({ pendingInviteCode, pendingJoinRoomId, onInviteCode
   // join() swallows failures into store.error and flips activeRoomId on
   // success, so we read both back after it settles.
   async function attemptJoin(roomId: string): Promise<void> {
+    // Already in this call (running minimized in the shell) — clicking it should
+    // return to the call view, not re-join (which is a no-op and looks dead).
+    if (roomId === store.getState().activeRoomId) {
+      onReturnToCall?.();
+      return;
+    }
     if (joiningId) return;
     setJoiningId(roomId);
     setRowJoinError(null);

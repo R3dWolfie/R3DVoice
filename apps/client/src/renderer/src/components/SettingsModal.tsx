@@ -973,18 +973,35 @@ function SimpleToggle({
       </div>
       <span
         onClick={() => onChange(!value)}
+        role="switch"
+        aria-checked={value}
         style={{
-          width: 36,
-          height: 20,
+          width: 40,
+          height: 22,
+          flexShrink: 0,
           borderRadius: 999,
-          background: value ? "var(--accent)" : "var(--bg-elev-3)",
-          border: "1px solid " + (value ? "color-mix(in oklch, var(--accent) 70%, black)" : "var(--border-strong)"),
+          // Off-track must contrast the panel behind it in ANY theme — a % of
+          // the text colour always reads against its own background (the old
+          // --bg-elev-3 was ~invisible on the white surface, so only the dark
+          // knob showed → the "floating dot" bug).
+          background: value ? "var(--accent)" : "color-mix(in oklch, var(--text) 28%, transparent)",
           position: "relative",
-          transition: "all var(--d-base) var(--ease-out)",
-          boxShadow: value ? "0 0 0 3px color-mix(in oklch, var(--accent) 25%, transparent)" : "none",
+          transition: "background var(--d-base) var(--ease-out)",
         }}
       >
-        <span style={{ position: "absolute", top: 1, left: value ? 17 : 1, width: 16, height: 16, borderRadius: "50%", background: "var(--text)", transition: "left var(--d-base) var(--ease-out)" }} />
+        <span
+          style={{
+            position: "absolute",
+            top: 2,
+            left: value ? 20 : 2,
+            width: 18,
+            height: 18,
+            borderRadius: "50%",
+            background: "#fff",
+            boxShadow: "0 1px 3px rgba(0,0,0,.4)",
+            transition: "left var(--d-base) var(--ease-out)",
+          }}
+        />
       </span>
     </label>
   );

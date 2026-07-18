@@ -206,6 +206,7 @@ function Router({ topPage, setTopPage }: { topPage: TopPage; setTopPage: (p: Top
               onJoinRoomIdConsumed={() => setPendingJoinRoomId(null)}
               onInviteCode={(code) => setPendingInviteCode(code)}
               onOpenDms={() => setTopPage("dms")}
+              onReturnToCall={() => setCallMinimized(false)}
             />
           ) : topPage === "friends" ? (
             <FriendsScreen
