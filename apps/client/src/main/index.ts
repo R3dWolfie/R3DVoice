@@ -66,9 +66,13 @@ app.commandLine.appendSwitch(
 );
 // Don't fight Chromium's IPC video decoder selection — leaving the default
 // (in-GPU-process decode) lets the platform encoder accelerator initialise.
+// WebRtcAllowInputVolumeAdjustment: Chromium otherwise rides your mic INPUT
+// gain up/down automatically (OS-level AGC), which fights the user's own gain
+// and makes the mic drift quieter — disabling it is what Discord does. On by
+// default here; must be set before app-ready, so it's a launch switch.
 app.commandLine.appendSwitch(
   "disable-features",
-  ["UseChromeOSDirectVideoDecoder"].join(","),
+  ["UseChromeOSDirectVideoDecoder", "WebRtcAllowInputVolumeAdjustment"].join(","),
 );
 
 // Dev/test escape hatch: run a second instance with an isolated session.

@@ -177,11 +177,15 @@ interface Props {
   onClose(): void;
   mentionCandidates?: { id: string; handle: string; displayName: string }[];
   /**
-   * "overlay": self-positioned right-side panel (in-room chat, 2.5f).
+   * "overlay": self-positioned right-side panel.
    * "fill": fills the parent container — the DMs thread pane (2.4), which
    * brings its own ThreadHeader, so no panel header is rendered.
+   * "dock": in-room chat (2.5f) — a full-width bottom band that fills its grid
+   * row (below the control bar), headerless like "fill" but with a top border.
    */
-  variant?: "overlay" | "fill";
+  variant?: "overlay" | "fill" | "dock";
+  /** Channel name for the composer placeholder ("Message #<name>…"). */
+  channelName?: string | undefined;
 }
 
 // Persistent chat panel backed by REST + WebSocket (P5 T20).
@@ -196,6 +200,7 @@ export function RoomChatPanel({
   onClose,
   mentionCandidates = [],
   variant = "overlay",
+  channelName,
 }: Props): ReactElement {
   const serverUrl = useAuthStore((s) => s.serverUrl);
   const token = useAuthStore((s) => s.token);
@@ -772,6 +777,9 @@ export function RoomChatPanel({
               gridTemplateRows: "1fr auto",
               minHeight: 0,
               position: "relative",
+              // dock (in-room, 2.5f): a border separates the chat band from the
+              // control bar sitting directly above it.
+              ...(variant === "dock" && { borderTop: "1px solid var(--border-soft)" }),
             }
       }
     >
@@ -1381,7 +1389,7 @@ export function RoomChatPanel({
             <input
               ref={inputRef}
               className="rv-input"
-              placeholder="Message…"
+              placeholder={channelName ? `Message #${channelName}…` : "Message…"}
               value={draft}
               onChange={(e) => {
                 const val = e.target.value;

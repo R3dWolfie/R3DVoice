@@ -2409,7 +2409,14 @@ export function InRoomScreen(props: InRoomScreenProps): ReactElement {
 
   return (
     <div
-      style={{ display: "grid", gridTemplateRows: "auto 1fr auto", height: "100%", position: "relative" }}
+      style={{
+        display: "grid",
+        // 2.5f: opening chat adds a full-width bottom band (below the control
+        // bar), reflowing the tiles up — not a right-side overlay.
+        gridTemplateRows: chatOpen ? "auto 1fr auto minmax(200px, 34vh)" : "auto 1fr auto",
+        height: "100%",
+        position: "relative",
+      }}
       onClick={() => setMenu(null)}
     >
       {/* Top bar (2.5): room title ▾ opens the room panel; live + E2EE pills */}
@@ -2848,16 +2855,6 @@ export function InRoomScreen(props: InRoomScreenProps): ReactElement {
           />
         </div>
 
-        {chatOpen && (
-          <RoomChatPanel
-            threadType="room"
-            threadId={props.roomId}
-            localIdentity={snapshot.local?.identity ?? "you"}
-            localName={localDisplayName}
-            onClose={() => setChatOpen(false)}
-          />
-        )}
-
         {dmTarget && snapshot.local && (
           <RoomChatPanel
             threadType="dm"
@@ -3036,6 +3033,19 @@ export function InRoomScreen(props: InRoomScreenProps): ReactElement {
           )}
         </div>
       </footer>
+
+      {/* 2.5f in-room chat: full-width bottom band below the control bar */}
+      {chatOpen && (
+        <RoomChatPanel
+          variant="dock"
+          threadType="room"
+          threadId={props.roomId}
+          localIdentity={snapshot.local?.identity ?? "you"}
+          localName={localDisplayName}
+          channelName={roomName ?? undefined}
+          onClose={() => setChatOpen(false)}
+        />
+      )}
 
       {/* Right-click volume menu */}
       {menu && (
