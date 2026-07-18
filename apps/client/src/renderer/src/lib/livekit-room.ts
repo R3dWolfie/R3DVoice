@@ -5,12 +5,16 @@ import {
   AudioPresets,
   DisconnectReason,
   ExternalE2EEKeyProvider,
+  VideoQuality,
   type RemoteParticipant,
   type LocalParticipant,
   Track,
   type RemoteTrack,
   type RemoteTrackPublication,
 } from "livekit-client";
+
+/** Receiver-side quality request for an incoming video (#8, two-sided). */
+export type ReceiverQuality = "auto" | "high" | "medium" | "low";
 // Vite ?worker suffix produces a Worker constructor that's bundled separately.
 // The E2EE worker is where SFrame encryption/decryption runs off the main thread.
 import E2eeWorker from "livekit-client/e2ee-worker?worker";
@@ -1162,6 +1166,28 @@ export class LiveKitRoom {
       }
     }
     this.emit();
+  }
+
+  /**
+   * Two-sided resolution (#8). Request a specific quality for ONE incoming
+   * remote video, receiver-side only. adaptiveStream already downscales by
+   * tile size; this lets a viewer force a lower spatial layer (VP9 SVC) to
+   * save their own bandwidth/CPU — or "auto" hands control back to
+   * adaptiveStream (ceiling = HIGH). It never touches the sender's publish, so
+   * it can't disturb dynacast/simulcast for anyone else; a no-op when the
+   * encode has no selectable layers.
+   */
+  setRemoteVideoQuality(identity: string, kind: "screen" | "camera", quality: ReceiverQuality): void {
+    const source = kind === "screen" ? Track.Source.ScreenShare : Track.Source.Camera;
+    const pub = this.room.remoteParticipants.get(identity)?.getTrackPublication(source);
+    if (!pub) return;
+    try {
+      if (quality === "low") pub.setVideoQuality(VideoQuality.LOW);
+      else if (quality === "medium") pub.setVideoQuality(VideoQuality.MEDIUM);
+      else pub.setVideoQuality(VideoQuality.HIGH); // "high" or "auto" (adaptiveStream ceiling)
+    } catch {
+      /* encode has no selectable layers — harmless no-op */
+    }
   }
 
   async setCamera(enabled: boolean, deviceId?: string): Promise<void> {

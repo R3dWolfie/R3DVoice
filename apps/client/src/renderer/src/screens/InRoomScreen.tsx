@@ -27,6 +27,7 @@ import {
   type RemoteTrackPublication,
   type RoomStateSnapshot,
   type ScreenShareQuality,
+  type ReceiverQuality,
 } from "../lib/livekit-room.js";
 import { RESOLUTIONS, type JoinSelection } from "../lib/join-selection.js";
 import { SettingsModal } from "../components/SettingsModal.js";
@@ -1602,6 +1603,14 @@ export function InRoomScreen(props: InRoomScreenProps): ReactElement {
   } | null>(null);
   const [layout, setLayout] = useState<LayoutMode>("auto");
   const [focusedId, setFocusedId] = useState<string | null>(null);
+  // #8 two-sided resolution — per-participant receiver-side quality override.
+  const [receiverQuality, setReceiverQuality] = useState<Record<string, ReceiverQuality>>({});
+  const applyReceiverQuality = (participantId: string, q: ReceiverQuality): void => {
+    setReceiverQuality((m) => ({ ...m, [participantId]: q }));
+    // Applies to whichever video they're sending; the other is a harmless no-op.
+    roomWrapper.setRemoteVideoQuality(participantId, "screen", q);
+    roomWrapper.setRemoteVideoQuality(participantId, "camera", q);
+  };
   const [roomInfoOpen, setRoomInfoOpen] = useState(false);
   const [psearch, setPsearch] = useState("");
   // In-call screenshare quality dialog (2.x).
@@ -3090,6 +3099,41 @@ export function InRoomScreen(props: InRoomScreenProps): ReactElement {
           {!menuIsLocal && menuParticipant && (
             <>
               <hr className="rv-rule" />
+              {(menuParticipant.screenTrack !== null || menuParticipant.cameraTrack !== null) && (
+                <div style={{ marginBottom: 6 }}>
+                  <div className="rv-label" style={{ fontSize: 10, margin: "2px 0 4px" }}>
+                    INCOMING VIDEO QUALITY
+                  </div>
+                  <div style={{ display: "flex", gap: 4 }}>
+                    {(["auto", "high", "medium", "low"] as ReceiverQuality[]).map((q) => {
+                      const active = (receiverQuality[menu.participantId] ?? "auto") === q;
+                      return (
+                        <button
+                          key={q}
+                          type="button"
+                          onClick={() => applyReceiverQuality(menu.participantId, q)}
+                          style={{
+                            flex: 1,
+                            padding: "4px 0",
+                            fontSize: 11,
+                            textTransform: "capitalize",
+                            borderRadius: "var(--r-sm)",
+                            cursor: "pointer",
+                            border: active ? "1px solid var(--accent)" : "1px solid var(--border)",
+                            background: active ? "var(--accent-tint)" : "transparent",
+                            color: active ? "var(--accent)" : "var(--text-mid)",
+                          }}
+                        >
+                          {q === "medium" ? "Med" : q}
+                        </button>
+                      );
+                    })}
+                  </div>
+                  <div style={{ fontSize: 10, color: "var(--text-faint)", marginTop: 4, lineHeight: 1.4 }}>
+                    Lower saves bandwidth on your end — only affects your view.
+                  </div>
+                </div>
+              )}
               {menuParticipant.screenTrack !== null && (
                 <CtxItem
                   title="Show your cursor on their shared screen for everyone (a shared laser pointer — no actual control)"
