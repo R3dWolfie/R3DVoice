@@ -228,8 +228,14 @@ export class RoomE2EE {
     await this.sendTo(p.identity, offer);
   }
 
-  private encode(msg: E2EEMessage): Uint8Array {
-    return new TextEncoder().encode(JSON.stringify(msg));
+  private encode(msg: E2EEMessage): Uint8Array<ArrayBuffer> {
+    // livekit-client 2.20+ requires a plain-ArrayBuffer-backed Uint8Array for
+    // publishData (not the SharedArrayBuffer-capable ArrayBufferLike that
+    // TextEncoder returns). Copy into a fresh, plain-backed array.
+    const encoded = new TextEncoder().encode(JSON.stringify(msg));
+    const out = new Uint8Array(encoded.length);
+    out.set(encoded);
+    return out;
   }
 
   private async broadcast(msg: E2EEMessage): Promise<void> {
