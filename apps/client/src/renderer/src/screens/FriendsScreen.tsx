@@ -389,7 +389,7 @@ export function FriendsScreen({ onJoinRoom, onOpenDms }: Props = {}): ReactEleme
                   <span
                     className="rv-status"
                     data-status={f.isOnline ? undefined : "offline"}
-                    style={{ position: "absolute", bottom: -1, right: -1, border: "2px solid var(--bg)" }}
+                    style={{ position: "absolute", bottom: -1, right: -1, boxShadow: "0 0 0 2px var(--bg)" }}
                   />
                 </div>
                 <div style={{ display: "flex", flexDirection: "column", gap: 2, minWidth: 0 }}>

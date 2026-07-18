@@ -134,7 +134,7 @@ export function NewDmPicker({ open, onClose, onPick }: Props): ReactElement {
                   <span
                     className="rv-status"
                     data-status={f.isOnline ? undefined : "offline"}
-                    style={{ position: "absolute", bottom: -1, right: -1, border: "2px solid var(--bg-elev)" }}
+                    style={{ position: "absolute", bottom: -1, right: -1, boxShadow: "0 0 0 2px var(--bg-elev)" }}
                   />
                 </div>
                 <span style={{ display: "flex", gap: 6, alignItems: "baseline", minWidth: 0 }}>

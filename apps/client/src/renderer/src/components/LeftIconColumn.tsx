@@ -160,7 +160,7 @@ export function LeftIconColumn({ active, onNavigate, onOpenSettings, onJoinRoom 
               {/* deck icon-col: presence dot on the me-avatar */}
               <span
                 className="rv-status"
-                style={{ position: "absolute", bottom: -1, right: -1, border: "2px solid var(--bg)" }}
+                style={{ position: "absolute", bottom: -1, right: -1, boxShadow: "0 0 0 2px var(--bg)" }}
               />
             </span>
           </button>

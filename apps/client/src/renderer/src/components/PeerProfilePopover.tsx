@@ -76,7 +76,7 @@ export function PeerProfilePopover({
               <span
                 className="rv-status"
                 data-status={friend?.isOnline ? undefined : "offline"}
-                style={{ position: "absolute", bottom: -1, right: -1, border: "2px solid var(--bg-elev)" }}
+                style={{ position: "absolute", bottom: -1, right: -1, boxShadow: "0 0 0 2px var(--bg-elev)" }}
               />
             )}
           </div>
