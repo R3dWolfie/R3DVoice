@@ -13,6 +13,7 @@ const bridge: R3DVoiceBridge = {
   setPttKeybind: (accelerator) => ipcRenderer.invoke("keybind:set-ptt", accelerator),
   setCompatibilityEnv: (enabled) => ipcRenderer.invoke("app:set-compatibility-env", enabled),
   relaunch: () => ipcRenderer.invoke("app:relaunch"),
+  updaterInfo: () => ipcRenderer.invoke("updater:info"),
   onPttEvent: (cb) => {
     const handler = (_evt: Electron.IpcRendererEvent, pressed: boolean): void => cb(pressed);
     ipcRenderer.on("keybind:ptt", handler);

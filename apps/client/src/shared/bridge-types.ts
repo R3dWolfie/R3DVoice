@@ -41,6 +41,12 @@ export interface R3DVoiceBridge {
   setCompatibilityEnv(enabled: boolean): Promise<void>;
   relaunch(): Promise<void>;
   /**
+   * Updater capability. canSelfUpdate is true only for a packaged build whose
+   * in-app updater is active (standalone AppImage/exe/dmg) — false for AUR/deb
+   * (pacman/apt own updates) and for web. Drives the required-update gate's UX.
+   */
+  updaterInfo(): Promise<{ canSelfUpdate: boolean }>;
+  /**
    * Subscribe to splash-window status updates from the main process.
    * Used by the splash renderer; harmless to call from the main window.
    * Returns an unsubscribe function.

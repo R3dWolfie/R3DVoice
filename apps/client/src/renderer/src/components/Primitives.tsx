@@ -1,4 +1,4 @@
-import type { CSSProperties, ReactElement, ReactNode } from "react";
+import { useEffect, useRef, useState, type CSSProperties, type ReactElement, type ReactNode } from "react";
 
 // Vite-injected at build time from apps/client/package.json.
 declare const __APP_VERSION__: string;
@@ -28,19 +28,7 @@ export function WindowChrome({
           <span className="rv-titlebar-title">{title}</span>
         </div>
         <div className="rv-titlebar-right" style={{ display: "flex", alignItems: "center", gap: "var(--s-3)" }}>
-          {IS_WEB && (
-            <a
-              href="https://github.com/R3dWolfie/R3DVoice/releases/latest"
-              target="_blank"
-              rel="noopener noreferrer"
-              title="Download the desktop app (Windows · macOS · Linux)"
-              className="rv-btn"
-              data-variant="ghost"
-              style={{ height: "1.4rem", padding: "0 var(--s-2)", fontSize: "var(--t-2xs)", lineHeight: 1 }}
-            >
-              ↓ Download app
-            </a>
-          )}
+          {IS_WEB && <DownloadMenu />}
           <span className="rv-titlebar-title" style={{ opacity: 0.6 }}>
             {version}
             {serverLabel ? ` · ${serverLabel}` : ""}
@@ -48,6 +36,96 @@ export function WindowChrome({
         </div>
       </div>
       {children}
+    </div>
+  );
+}
+
+const RELEASES = "https://github.com/R3dWolfie/R3DVoice/releases";
+const dl = (asset: string): string => `${RELEASES}/latest/download/${asset}`;
+const PLATFORMS = [
+  { key: "windows", label: "Windows", sub: ".exe installer", url: dl("R3DVoice-Setup.exe") },
+  { key: "mac", label: "macOS", sub: ".dmg", url: dl("R3DVoice.dmg") },
+  { key: "linux", label: "Linux", sub: ".AppImage", url: dl("R3DVoice.AppImage") },
+] as const;
+
+function detectOS(): "windows" | "mac" | "linux" | "other" {
+  if (typeof navigator === "undefined") return "other";
+  const ua = navigator.userAgent;
+  if (/windows|win32|win64/i.test(ua)) return "windows";
+  if (/mac os|macintosh|iphone|ipad/i.test(ua)) return "mac";
+  if (/linux|x11|android/i.test(ua)) return "linux";
+  return "other";
+}
+
+const DL_ITEM: CSSProperties = {
+  display: "flex",
+  alignItems: "baseline",
+  gap: "var(--s-2)",
+  padding: "var(--s-2) var(--s-3)",
+  borderRadius: "var(--r-sm)",
+  color: "var(--text)",
+  textDecoration: "none",
+  fontSize: "var(--t-xs)",
+  whiteSpace: "nowrap",
+};
+
+/** Web-only: OS-detecting desktop-download popup (detected build + others + GitHub). */
+function DownloadMenu(): ReactElement {
+  const [open, setOpen] = useState(false);
+  const ref = useRef<HTMLDivElement>(null);
+  useEffect(() => {
+    if (!open) return;
+    const onDoc = (e: MouseEvent): void => {
+      if (ref.current && !ref.current.contains(e.target as Node)) setOpen(false);
+    };
+    document.addEventListener("mousedown", onDoc);
+    return () => document.removeEventListener("mousedown", onDoc);
+  }, [open]);
+
+  const os = detectOS();
+  const detected = PLATFORMS.find((p) => p.key === os) ?? null;
+  const others = PLATFORMS.filter((p) => p.key !== os);
+
+  return (
+    <div ref={ref} style={{ position: "relative" }}>
+      <button
+        type="button"
+        className="rv-btn"
+        data-variant="ghost"
+        data-active={open}
+        title="Download the desktop app"
+        onClick={() => setOpen((v) => !v)}
+        style={{ height: "1.4rem", padding: "0 var(--s-2)", fontSize: "var(--t-2xs)", lineHeight: 1 }}
+      >
+        ↓ Download app ▾
+      </button>
+      {open && (
+        <div
+          className="rv-menu rv-fade-in"
+          style={{ position: "absolute", top: "calc(100% + 6px)", right: 0, minWidth: 230, zIndex: 60, padding: "var(--s-1)" }}
+          onClick={() => setOpen(false)}
+        >
+          {detected && (
+            <a href={detected.url} style={{ ...DL_ITEM, fontWeight: 600, color: "var(--accent)" }}>
+              ↓ Download for {detected.label}
+              <span style={{ color: "var(--text-faint)", fontWeight: 400 }}>{detected.sub}</span>
+            </a>
+          )}
+          <div className="rv-label" style={{ padding: "var(--s-1) var(--s-3)", fontSize: "var(--t-2xs)", opacity: 0.7 }}>
+            {detected ? "Other platforms" : "Choose your platform"}
+          </div>
+          {others.map((p) => (
+            <a key={p.key} href={p.url} style={DL_ITEM}>
+              {p.label}
+              <span style={{ color: "var(--text-faint)" }}>{p.sub}</span>
+            </a>
+          ))}
+          <div style={{ height: 1, background: "var(--border-soft)", margin: "var(--s-1) 0" }} />
+          <a href={`${RELEASES}/latest`} target="_blank" rel="noopener noreferrer" style={{ ...DL_ITEM, color: "var(--text-mid)" }}>
+            GitHub Download →
+          </a>
+        </div>
+      )}
     </div>
   );
 }

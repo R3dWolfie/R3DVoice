@@ -363,6 +363,13 @@ function registerIpcHandlers(): void {
     app.relaunch();
     app.exit(0);
   });
+  // The required-update gate asks whether this build can self-update. True only
+  // for a packaged build with the in-app updater active (standalone AppImage/
+  // exe/dmg); AUR/deb set R3DVOICE_DISABLE_UPDATER and update via the package
+  // manager, so the gate shows "run yay -Syu" instead of a Restart button.
+  ipcMain.handle("updater:info", () => ({
+    canSelfUpdate: app.isPackaged && !process.env["R3DVOICE_DISABLE_UPDATER"],
+  }));
 }
 
 let mainWindow: BrowserWindow | null = null;

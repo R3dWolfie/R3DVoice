@@ -16,6 +16,7 @@ import { SettingsModal } from "./components/SettingsModal.js";
 import { UpdateToast } from "./components/UpdateToast.js";
 import { ToastHost } from "./components/ToastHost.js";
 import { ConnectionBanner } from "./components/ConnectionBanner.js";
+import { UpdateGate } from "./components/UpdateGate.js";
 import { InviteQueue } from "./components/InviteQueue.js";
 import { DiagnosticsOverlay } from "./components/DiagnosticsOverlay.js";
 import { startTelemetry } from "./lib/telemetry.js";
@@ -216,17 +217,19 @@ function Chrome(): ReactElement {
   }
 
   return (
-    <WindowChrome title={chromeTitle} serverLabel={serverLabel}>
-      <div style={{ display: "flex", flexDirection: "column", minHeight: 0, height: "100%" }}>
-        {/* App-wide connection banner slot, directly under the titlebar
-            (system/connection-banners.html) — renders nothing when healthy. */}
-        <ConnectionBanner />
-        <div key={status} className="rv-fade-in" style={{ flex: 1, minHeight: 0 }}>
-          <Router topPage={topPage} setTopPage={setTopPage} />
+    <UpdateGate serverUrl={serverUrl}>
+      <WindowChrome title={chromeTitle} serverLabel={serverLabel}>
+        <div style={{ display: "flex", flexDirection: "column", minHeight: 0, height: "100%" }}>
+          {/* App-wide connection banner slot, directly under the titlebar
+              (system/connection-banners.html) — renders nothing when healthy. */}
+          <ConnectionBanner />
+          <div key={status} className="rv-fade-in" style={{ flex: 1, minHeight: 0 }}>
+            <Router topPage={topPage} setTopPage={setTopPage} />
+          </div>
         </div>
-      </div>
-      <ToastHost />
-    </WindowChrome>
+        <ToastHost />
+      </WindowChrome>
+    </UpdateGate>
   );
 }
 

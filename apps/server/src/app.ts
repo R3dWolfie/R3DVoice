@@ -6,6 +6,7 @@ import rateLimit from "@fastify/rate-limit";
 import fastifyStatic from "@fastify/static";
 import compress from "@fastify/compress";
 import { registerErrorHandler } from "./errors.js";
+import { getConfig } from "./config.js";
 import { authRoutes } from "./auth/routes.js";
 import { roomRoutes } from "./rooms/routes.js";
 import { chatRoutes } from "./chat/routes.js";
@@ -42,7 +43,11 @@ export async function buildApp(options: BuildAppOptions = {}): Promise<FastifyIn
 
   registerErrorHandler(app);
 
-  app.get("/health", async () => ({ status: "ok" }));
+  app.get("/health", async () => ({
+    status: "ok",
+    // The client polls this to enforce the required-update gate.
+    minClientVersion: getConfig().MIN_CLIENT_VERSION,
+  }));
 
   // Web client: when WEB_CLIENT_DIR points at the built renderer bundle
   // (apps/client/out/renderer), the SPA takes over "/" and unknown GET

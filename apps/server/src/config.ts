@@ -26,6 +26,11 @@ const configSchema = z.object({
   SMTP_USER: z.string().optional(),
   SMTP_PASS: z.string().optional(),
   SMTP_FROM: z.string().default("R3DVoice <noreply@r3dwolfie.com>"),
+
+  // Minimum client version allowed to use the app. Clients older than this get
+  // a blocking "update required" gate (and, once they send X-Client-Version,
+  // are refused at the API). "0.0.0" (default) disables the floor.
+  MIN_CLIENT_VERSION: z.string().default("0.0.0"),
 });
 
 export type Config = z.infer<typeof configSchema>;

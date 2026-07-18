@@ -13,6 +13,7 @@ describe("GET /health", () => {
     app = await makeTestApp();
     const res = await app.inject({ method: "GET", url: "/health" });
     expect(res.statusCode).toBe(200);
-    expect(res.json()).toEqual({ status: "ok" });
+    // Also carries the required-update floor for the client version gate.
+    expect(res.json()).toEqual({ status: "ok", minClientVersion: "0.0.0" });
   });
 });
