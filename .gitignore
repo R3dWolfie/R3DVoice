@@ -16,3 +16,4 @@ apps/server/prisma/*.db-journal
 # Vitest
 coverage/
 
+result
