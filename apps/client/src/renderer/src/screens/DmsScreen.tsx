@@ -1,7 +1,8 @@
-import { useCallback, useEffect, useState, type ReactElement } from "react";
+import { useCallback, useEffect, useMemo, useState, type ReactElement } from "react";
 import type { DmThreadEntry, FriendDTO } from "@r3dvoice/shared";
 import { useAuthStore } from "../lib/auth-context.js";
 import { ApiClient } from "../lib/api.js";
+import { loadKeyPair } from "../lib/key-storage.js";
 import { getTransport } from "../lib/chat-transport.js";
 import { dmThreadId } from "../lib/dm-thread-id.js";
 import { Avatar } from "../components/Avatar.js";
@@ -47,6 +48,42 @@ export function DmsScreen({ onJoinRoom, openUserId, onOpenUserConsumed }: DmsScr
   // them so the sidebar can show a distinct error + retry instead.
   const [threadsError, setThreadsError] = useState<string | null>(null);
   const [friendsError, setFriendsError] = useState<string | null>(null);
+
+  // E2EE: the rail preview decrypts the last message too (not just the open
+  // thread). Our own sent messages need the peer's public key, so fetch + cache
+  // one per thread peer.
+  const myKeyPair = useMemo(() => loadKeyPair(), []);
+  const [peerKeys, setPeerKeys] = useState<Record<string, string | null>>({});
+  useEffect(() => {
+    if (!token || !myKeyPair) return;
+    const missing = [...new Set(threads.map((t) => t.otherParticipant.id))].filter(
+      (id) => !(id in peerKeys),
+    );
+    if (missing.length === 0) return;
+    const api = new ApiClient(serverUrl);
+    api.setToken(token);
+    let cancelled = false;
+    void Promise.all(
+      missing.map(async (id) => {
+        try {
+          const r = await api.getUserPublicKey(id);
+          return [id, r.publicKey] as const;
+        } catch {
+          return [id, null] as const;
+        }
+      }),
+    ).then((entries) => {
+      if (cancelled) return;
+      setPeerKeys((prev) => {
+        const next = { ...prev };
+        for (const [id, k] of entries) next[id] = k;
+        return next;
+      });
+    });
+    return () => {
+      cancelled = true;
+    };
+  }, [threads, token, serverUrl, myKeyPair, peerKeys]);
 
   const refresh = useCallback(async () => {
     if (!token) return;
@@ -349,6 +386,8 @@ export function DmsScreen({ onJoinRoom, openUserId, onOpenUserConsumed }: DmsScr
                   splitThreadId={split}
                   onSelect={setActive}
                   onContextMenu={(threadId, x, y) => setRowMenu({ threadId, x, y })}
+                  myKeyPair={myKeyPair}
+                  peerKeys={peerKeys}
                 />
               )}
               {/* Friends without a thread yet — start-new affordance */}

@@ -4,6 +4,11 @@ import type { CSSProperties, ReactElement, ReactNode } from "react";
 declare const __APP_VERSION__: string;
 export const APP_VERSION = typeof __APP_VERSION__ === "string" ? __APP_VERSION__ : "dev";
 
+// True in the browser build, false inside the Electron desktop app (whose
+// renderer UA carries "Electron"). Drives the web-only "Download app" link.
+export const IS_WEB =
+  typeof navigator !== "undefined" && !/electron/i.test(navigator.userAgent);
+
 export function WindowChrome({
   title,
   version = `v${APP_VERSION}`,
@@ -22,7 +27,20 @@ export function WindowChrome({
         <div className="rv-titlebar-left">
           <span className="rv-titlebar-title">{title}</span>
         </div>
-        <div className="rv-titlebar-right">
+        <div className="rv-titlebar-right" style={{ display: "flex", alignItems: "center", gap: "var(--s-3)" }}>
+          {IS_WEB && (
+            <a
+              href="https://github.com/R3dWolfie/R3DVoice/releases/latest"
+              target="_blank"
+              rel="noopener noreferrer"
+              title="Download the desktop app (Windows · macOS · Linux)"
+              className="rv-btn"
+              data-variant="ghost"
+              style={{ height: "1.4rem", padding: "0 var(--s-2)", fontSize: "var(--t-2xs)", lineHeight: 1 }}
+            >
+              ↓ Download app
+            </a>
+          )}
           <span className="rv-titlebar-title" style={{ opacity: 0.6 }}>
             {version}
             {serverLabel ? ` · ${serverLabel}` : ""}
