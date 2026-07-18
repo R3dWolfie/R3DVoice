@@ -2272,11 +2272,62 @@ function ResetThemeModal({
   );
 }
 
+// Load, cover-crop to a square, and re-encode small so uploaded avatars stay
+// tiny (~10–30 KB webp) — fits the upload limit and loads fast.
+function resizeImageToDataUrl(file: File, size: number): Promise<string> {
+  return new Promise((resolvePromise, reject) => {
+    const url = URL.createObjectURL(file);
+    const img = new Image();
+    img.onload = () => {
+      URL.revokeObjectURL(url);
+      const canvas = document.createElement("canvas");
+      canvas.width = size;
+      canvas.height = size;
+      const ctx = canvas.getContext("2d");
+      if (!ctx) {
+        reject(new Error("canvas unavailable"));
+        return;
+      }
+      const scale = Math.max(size / img.width, size / img.height);
+      const w = img.width * scale;
+      const h = img.height * scale;
+      ctx.drawImage(img, (size - w) / 2, (size - h) / 2, w, h);
+      resolvePromise(canvas.toDataURL("image/webp", 0.85));
+    };
+    img.onerror = () => {
+      URL.revokeObjectURL(url);
+      reject(new Error("couldn't read that image"));
+    };
+    img.src = url;
+  });
+}
+
 function AccountTab({ onClose }: { onClose: () => void }): ReactElement {
   const user = useAuthStore((s) => s.user);
   const serverUrl = useAuthStore((s) => s.serverUrl);
+  const token = useAuthStore((s) => s.token);
+  const refreshUser = useAuthStore((s) => s.refreshUser);
   const logout = useAuthStore((s) => s.logout);
   const updateAvatarUrl = useAuthStore((s) => s.updateAvatarUrl);
+  const avatarFileRef = useRef<HTMLInputElement | null>(null);
+
+  const onPickAvatarFile = async (file: File): Promise<void> => {
+    if (!token) return;
+    setAvatarBusy(true);
+    setAvatarError(null);
+    try {
+      const dataUrl = await resizeImageToDataUrl(file, 256);
+      const api = new ApiClient(serverUrl);
+      api.setToken(token);
+      const { avatarUrl } = await api.uploadAvatar(dataUrl);
+      setAvatarUrlDraft(avatarUrl);
+      await refreshUser();
+    } catch (e) {
+      setAvatarError(e instanceof Error ? e.message : "upload failed");
+    } finally {
+      setAvatarBusy(false);
+    }
+  };
   // UX audit #4 — live presence for the current user (DND from dndUntil + a
   // client-side idle timer). Friends' idle/DND need server work (see presence.tsx).
   const presence = usePresence();
@@ -2356,6 +2407,26 @@ function AccountTab({ onClose }: { onClose: () => void }): ReactElement {
             type="button"
             className="rv-btn"
             data-variant="primary"
+            disabled={avatarBusy}
+            onClick={() => avatarFileRef.current?.click()}
+          >
+            {avatarBusy ? "Uploading…" : "Upload image"}
+          </button>
+          <input
+            ref={avatarFileRef}
+            type="file"
+            accept="image/png,image/jpeg,image/webp,image/gif"
+            style={{ display: "none" }}
+            onChange={(e) => {
+              const f = e.target.files?.[0];
+              if (f) void onPickAvatarFile(f);
+              e.target.value = "";
+            }}
+          />
+          <button
+            type="button"
+            className="rv-btn"
+            data-variant="ghost"
             disabled={avatarBusy || avatarUrlDraft === (user?.avatarUrl ?? "")}
             onClick={async () => {
               setAvatarBusy(true);
@@ -2370,7 +2441,7 @@ function AccountTab({ onClose }: { onClose: () => void }): ReactElement {
               }
             }}
           >
-            Save
+            Save URL
           </button>
           {(user?.avatarUrl ?? null) !== null && (
             <button

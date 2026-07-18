@@ -1,7 +1,7 @@
 # Maintainer: R3dWolfie <arui939@gmail.com>
 pkgname=r3dvoice-bin
 _appname=R3DVoice
-pkgver=0.12.1
+pkgver=0.12.2
 pkgrel=1
 pkgdesc="Discord-style low-latency voice, video & screenshare for gamers (Electron + LiveKit)"
 arch=('x86_64')

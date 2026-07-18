@@ -1,4 +1,4 @@
-import { existsSync } from "node:fs";
+import { existsSync, mkdirSync } from "node:fs";
 import { join, resolve } from "node:path";
 import Fastify, { type FastifyInstance } from "fastify";
 import cors from "@fastify/cors";
@@ -48,6 +48,22 @@ export async function buildApp(options: BuildAppOptions = {}): Promise<FastifyIn
     // The client polls this to enforce the required-update gate.
     minClientVersion: getConfig().MIN_CLIENT_VERSION,
   }));
+
+  // Uploaded files (avatars, message attachments) — written by the upload
+  // routes, served read-only at /uploads. URLs carry a ?v=<hash> so a changed
+  // file busts caches despite the stable filename. decorateReply:false because
+  // the web-client static below already owns reply.sendFile.
+  const uploadsDir = resolve(getConfig().UPLOADS_DIR);
+  mkdirSync(uploadsDir, { recursive: true });
+  await app.register(fastifyStatic, {
+    root: uploadsDir,
+    prefix: "/uploads/",
+    decorateReply: false,
+    setHeaders: (res) => {
+      const r = res as unknown as { setHeader?: (n: string, v: string) => void };
+      r.setHeader?.("Cache-Control", "public, max-age=86400");
+    },
+  });
 
   // Web client: when WEB_CLIENT_DIR points at the built renderer bundle
   // (apps/client/out/renderer), the SPA takes over "/" and unknown GET

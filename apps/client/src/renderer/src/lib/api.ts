@@ -140,6 +140,10 @@ export class ApiClient {
   updateMe(patch: { avatarUrl?: string | null; displayName?: string }): Promise<UserDTO> {
     return this.request("PATCH", "/me", patch);
   }
+  /** Upload a profile picture (a client-resized image as a data: URL). */
+  uploadAvatar(dataUrl: string): Promise<{ avatarUrl: string }> {
+    return this.request("POST", "/me/avatar", { dataUrl });
+  }
   twoFAEnrollStart(): Promise<TotpEnrollStartResponse> {
     return this.request("POST", "/auth/2fa/enroll-start");
   }

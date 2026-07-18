@@ -6,6 +6,10 @@ import { Prisma } from "@prisma/client";
 import { requireAuth } from "../auth/middleware.js";
 import { verifyPassword } from "../auth/password.js";
 import { AuthError, ConflictError, NotFoundError, ValidationError } from "../errors.js";
+import { writeFile, mkdir, rm } from "node:fs/promises";
+import { join, resolve } from "node:path";
+import { createHash } from "node:crypto";
+import { getConfig } from "../config.js";
 
 const setHandleSchema = z.object({ handle: userHandleSchema });
 const handleParamSchema = z.object({ handle: z.string() });
@@ -94,6 +98,44 @@ export async function userRoutes(app: FastifyInstance): Promise<void> {
       hasE2eeKey: user.e2eePublicKey !== null,
     };
   });
+
+  // Upload a profile picture. The client resizes to a small square and sends a
+  // data: URL; we decode, cap the size, write it under <UPLOADS_DIR>/avatars,
+  // and point avatarUrl at the served file (with a content hash so the stable
+  // filename still busts caches when the picture changes).
+  const avatarUploadSchema = z.object({
+    dataUrl: z.string().startsWith("data:image/").max(1_400_000),
+  });
+  app.post(
+    "/me/avatar",
+    { preHandler: requireAuth, config: { rateLimit: { max: 20, timeWindow: "1 hour" } } },
+    async (request) => {
+      const parsed = avatarUploadSchema.safeParse(request.body);
+      if (!parsed.success) throw new ValidationError("invalid image");
+      const userId = request.auth!.userId;
+
+      const m = /^data:image\/(png|jpeg|webp);base64,(.+)$/s.exec(parsed.data.dataUrl);
+      if (!m) throw new ValidationError("unsupported image (png, jpeg or webp only)");
+      const ext = m[1] === "jpeg" ? "jpg" : m[1]!;
+      const bytes = Buffer.from(m[2]!, "base64");
+      if (bytes.length === 0) throw new ValidationError("empty image");
+      if (bytes.length > 1_000_000) throw new ValidationError("image too large (max 1 MB)");
+
+      const cfg = getConfig();
+      const dir = join(resolve(cfg.UPLOADS_DIR), "avatars");
+      await mkdir(dir, { recursive: true });
+      // Drop any prior avatar for this user (the extension may differ).
+      await Promise.all(
+        ["png", "jpg", "webp"].map((e) => rm(join(dir, `${userId}.${e}`), { force: true }).catch(() => {})),
+      );
+      await writeFile(join(dir, `${userId}.${ext}`), bytes);
+
+      const v = createHash("sha1").update(bytes).digest("hex").slice(0, 10);
+      const avatarUrl = `${cfg.APP_URL.replace(/\/$/, "")}/uploads/avatars/${userId}.${ext}?v=${v}`;
+      const user = await prisma.user.update({ where: { id: userId }, data: { avatarUrl } });
+      return { avatarUrl: user.avatarUrl };
+    },
+  );
 
   app.get<{ Params: { handle: string } }>(
     "/users/by-handle/:handle",

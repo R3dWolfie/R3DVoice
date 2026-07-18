@@ -31,6 +31,10 @@ const configSchema = z.object({
   // a blocking "update required" gate (and, once they send X-Client-Version,
   // are refused at the API). "0.0.0" (default) disables the floor.
   MIN_CLIENT_VERSION: z.string().default("0.0.0"),
+
+  // Where uploaded files (avatars, message attachments) are written and served
+  // from at /uploads. Keep it OUTSIDE the app checkout so deploys don't wipe it.
+  UPLOADS_DIR: z.string().default("uploads"),
 });
 
 export type Config = z.infer<typeof configSchema>;
