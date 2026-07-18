@@ -1762,7 +1762,10 @@ const ChatBubble = memo(function ChatBubble({
           style={{
             position: "absolute",
             top: -14,
-            [me ? "left" : "right"]: 40,
+            // Sit on the bubble's own side (row is full-width): me's bubble is
+            // on the right, theirs on the left. Was inverted → the bar floated
+            // off to the opposite edge of the app.
+            [me ? "right" : "left"]: 40,
             display: "flex",
             gap: 2,
             background: "var(--bg-elev)",
@@ -1949,30 +1952,59 @@ function AttachmentList({ attachments, me }: { attachments: MessageAttachment[];
         maxWidth: "100%",
       }}
     >
-      {attachments.map((a) =>
-        a.mime.startsWith("image/") ? (
-          <a
-            key={a.url}
-            href={a.url}
-            target="_blank"
-            rel="noreferrer noopener"
-            style={{ display: "block", maxWidth: 320, lineHeight: 0 }}
-          >
-            <img
+      {attachments.map((a) => {
+        if (a.mime.startsWith("image/")) {
+          return (
+            <a
+              key={a.url}
+              href={a.url}
+              target="_blank"
+              rel="noreferrer noopener"
+              style={{ display: "block", maxWidth: 320, lineHeight: 0 }}
+            >
+              <img
+                src={a.url}
+                alt={a.name}
+                style={{
+                  maxWidth: 320,
+                  maxHeight: 320,
+                  width: "auto",
+                  height: "auto",
+                  borderRadius: 12,
+                  display: "block",
+                  border: "1px solid var(--border-soft)",
+                }}
+              />
+            </a>
+          );
+        }
+        // In-app video player — play mp4/webm inline instead of a download card.
+        if (a.mime.startsWith("video/")) {
+          return (
+            <video
+              key={a.url}
               src={a.url}
-              alt={a.name}
+              controls
+              preload="metadata"
               style={{
-                maxWidth: 320,
-                maxHeight: 320,
-                width: "auto",
-                height: "auto",
+                maxWidth: 360,
+                width: "100%",
+                maxHeight: 340,
                 borderRadius: 12,
-                display: "block",
                 border: "1px solid var(--border-soft)",
+                background: "#000",
+                display: "block",
               }}
             />
-          </a>
-        ) : (
+          );
+        }
+        // Inline audio player.
+        if (a.mime.startsWith("audio/")) {
+          return (
+            <audio key={a.url} src={a.url} controls preload="metadata" style={{ maxWidth: 320, width: "100%" }} />
+          );
+        }
+        return (
           <a
             key={a.url}
             href={a.url}
@@ -2012,8 +2044,8 @@ function AttachmentList({ attachments, me }: { attachments: MessageAttachment[];
               </span>
             </span>
           </a>
-        ),
-      )}
+        );
+      })}
     </div>
   );
 }
