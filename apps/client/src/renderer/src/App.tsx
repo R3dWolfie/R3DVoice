@@ -1,6 +1,9 @@
-import { useEffect, useState, type ReactElement } from "react";
+import { useEffect, useMemo, useState, type ReactElement } from "react";
 import { AuthProvider, useAuthStore, useNeedsHandle, useNeedsEmailVerify } from "./lib/auth-context.js";
 import { usePrefs } from "./lib/prefs-singleton.js";
+import { getRoomsStore, useRoomsStore } from "./lib/rooms-singleton.js";
+import { buildJoinSelection } from "./lib/join-selection.js";
+import { InRoomScreen } from "./screens/InRoomScreen.js";
 import { applyThemeOverrides } from "./lib/theme-tokens.js";
 import { disconnectTransport, ensureTransport, setCurrentUserForNotifications } from "./lib/chat-transport.js";
 import { ApiClient } from "./lib/api.js";
@@ -64,6 +67,39 @@ function Router({ topPage, setTopPage }: { topPage: TopPage; setTopPage: (p: Top
   const [pendingJoinRoomId, setPendingJoinRoomId] = useState<string | null>(null);
   const [pendingDmUserId, setPendingDmUserId] = useState<string | null>(null);
   const [settingsOpen, setSettingsOpen] = useState(false);
+
+  // Persistent call (#35): the shared rooms store owns activeRoomId, so the
+  // in-room screen mounts here at shell level and survives navigation. When the
+  // user browses another page mid-call it collapses to a floating mini bar
+  // instead of tearing the connection down.
+  const roomsStore = getRoomsStore(serverUrl, token);
+  const activeRoomId = useRoomsStore(roomsStore, (s) => s.activeRoomId);
+  const [callMinimized, setCallMinimized] = useState(false);
+  // A fresh join (or a leave) always resets to the full call view.
+  useEffect(() => {
+    setCallMinimized(false);
+  }, [activeRoomId]);
+  const joinMicDeviceId = usePrefs((s) => s.micDeviceId);
+  const joinSpeakerDeviceId = usePrefs((s) => s.speakerDeviceId);
+  const joinResolution = usePrefs((s) => s.resolution);
+  const joinFrameRate = usePrefs((s) => s.frameRate);
+  // Freeze the join selection for the lifetime of one call: it must rebuild
+  // only when activeRoomId flips, never when a device/quality pref changes
+  // mid-call — the in-room join effect keys on this object and a new reference
+  // would tear down and rejoin the live call.
+  const callSelection = useMemo(
+    () =>
+      activeRoomId
+        ? buildJoinSelection({
+            micDeviceId: joinMicDeviceId,
+            speakerDeviceId: joinSpeakerDeviceId,
+            resolution: joinResolution,
+            frameRate: joinFrameRate,
+          })
+        : null,
+    // eslint-disable-next-line react-hooks/exhaustive-deps -- capture prefs once per call, keyed on activeRoomId
+    [activeRoomId],
+  );
 
   // Password-reset deep link (1.7): emailed as APP_URL/reset?token=… and
   // opened in the web client. Takes over the whole shell until dismissed.
@@ -130,18 +166,23 @@ function Router({ topPage, setTopPage }: { topPage: TopPage; setTopPage: (p: Top
     if (needsHandle) {
       return <HandlePickGate />;
     }
+    // Navigating while in a call must not end it — collapse to the mini bar.
+    const goPage = (p: TopPage): void => {
+      if (activeRoomId) setCallMinimized(true);
+      setTopPage(p);
+    };
     return (
       <div style={{ display: "flex", height: "100%" }}>
         <LeftIconColumn
           active={topPage}
-          onNavigate={setTopPage}
+          onNavigate={goPage}
           onOpenSettings={() => setSettingsOpen(true)}
           onJoinRoom={(roomId) => {
             setPendingJoinRoomId(roomId);
             setTopPage("lobby");
           }}
         />
-        <div style={{ flex: 1, minWidth: 0 }}>
+        <div style={{ flex: 1, minWidth: 0, position: "relative" }}>
           {topPage === "lobby" ? (
             <LobbyScreen
               pendingInviteCode={pendingInviteCode}
@@ -180,6 +221,30 @@ function Router({ topPage, setTopPage }: { topPage: TopPage; setTopPage: (p: Top
               openUserId={pendingDmUserId}
               onOpenUserConsumed={() => setPendingDmUserId(null)}
             />
+          )}
+          {/* Persistent call (#35): stays mounted across page switches. Full
+              view is an overlay covering the content area (not the rail); when
+              minimized it renders only its floating mini bar. Never unmounted
+              by navigation — only by leaving, which clears activeRoomId. */}
+          {activeRoomId && callSelection && (
+            <div
+              style={
+                callMinimized
+                  ? undefined
+                  : { position: "absolute", inset: 0, zIndex: 30, background: "var(--bg)" }
+              }
+            >
+              <InRoomScreen
+                roomId={activeRoomId}
+                selection={callSelection}
+                minimized={callMinimized}
+                onRestore={() => setCallMinimized(false)}
+                onLeave={() => {
+                  roomsStore.getState().clearActive();
+                  setCallMinimized(false);
+                }}
+              />
+            </div>
           )}
         </div>
         {settingsOpen && <SettingsModal onClose={() => setSettingsOpen(false)} />}

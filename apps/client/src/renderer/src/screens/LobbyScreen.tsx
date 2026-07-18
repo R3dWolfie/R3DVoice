@@ -1,7 +1,8 @@
-import { useCallback, useEffect, useMemo, useRef, useState, useSyncExternalStore, type FormEvent, type ReactElement } from "react";
+import { useCallback, useEffect, useMemo, useRef, useState, type FormEvent, type ReactElement } from "react";
 import type { FriendDTO, RoomDTO } from "@r3dvoice/shared";
 import { ApiClient } from "../lib/api.js";
-import { createRoomsStore, extractInviteCode, type RoomsState } from "../lib/rooms-store.js";
+import { extractInviteCode } from "../lib/rooms-store.js";
+import { getRoomsStore, useRoomsStore } from "../lib/rooms-singleton.js";
 import { useAuthStore } from "../lib/auth-context.js";
 import { getTransport } from "../lib/chat-transport.js";
 import { usePrefs, prefsActions } from "../lib/prefs-singleton.js";
@@ -14,19 +15,15 @@ import { CreateRoomModal } from "../components/CreateRoomModal.js";
 import { InviteCreateModal } from "../components/InviteCreateModal.js";
 import { RoomSettingsModal } from "../components/RoomSettingsModal.js";
 import { PublicRoomsModal } from "../components/PublicRoomsModal.js";
-import { InRoomScreen } from "./InRoomScreen.js";
-import { buildJoinSelection, type JoinSelection } from "../lib/join-selection.js";
 import { InvitePreviewScreen } from "./InvitePreviewScreen.js";
 import { LiveActivityRow, type LiveRoom } from "../components/LiveActivityRow.js";
 
-function useRoomsStore<T>(store: ReturnType<typeof createRoomsStore>, selector: (s: RoomsState) => T): T {
-  return useSyncExternalStore(store.subscribe, () => selector(store.getState()), () => selector(store.getState()));
-}
-
+// The in-room screen and its live LiveKit connection live at the app shell
+// (App.tsx) now, driven by the shared rooms store's activeRoomId, so a call
+// survives navigation. The lobby only owns lobby/invite phases.
 type Phase =
   | { kind: "lobby" }
-  | { kind: "invite"; code: string }
-  | { kind: "inroom"; roomId: string; selection: JoinSelection };
+  | { kind: "invite"; code: string };
 
 function initialsFromName(name: string): string {
   return name.split(" ").map((s) => s[0] ?? "").slice(0, 2).join("").toUpperCase() || "?";
@@ -83,17 +80,14 @@ export function LobbyScreen({ pendingInviteCode, pendingJoinRoomId, onInviteCode
   const token = useAuthStore((s) => s.token);
   const serverUrl = useAuthStore((s) => s.serverUrl);
 
-  const store = useMemo(() => {
-    const api = new ApiClient(serverUrl);
-    api.setToken(token);
-    return createRoomsStore(api);
-  }, [serverUrl, token]);
+  // Shared module-level store (survives navigation). App.tsx renders the
+  // in-room screen from the same instance's activeRoomId.
+  const store = getRoomsStore(serverUrl, token);
 
   const owned = useRoomsStore(store, (s) => s.owned);
   const recent = useRoomsStore(store, (s) => s.recent);
   const status = useRoomsStore(store, (s) => s.status);
   const error = useRoomsStore(store, (s) => s.error);
-  const activeRoomId = useRoomsStore(store, (s) => s.activeRoomId);
 
   const [phase, setPhase] = useState<Phase>({ kind: "lobby" });
   const [filter, setFilter] = useState("");
@@ -175,26 +169,10 @@ export function LobbyScreen({ pendingInviteCode, pendingJoinRoomId, onInviteCode
     }
   }, [pendingInviteCode, phase.kind]);
 
-  // Deck rule: no pre-join screen (4.5 removed) — joins go straight in,
-  // muted, with the persisted device/quality prefs.
-  const joinMicDeviceId = usePrefs((s) => s.micDeviceId);
-  const joinSpeakerDeviceId = usePrefs((s) => s.speakerDeviceId);
-  const joinResolution = usePrefs((s) => s.resolution);
-  const joinFrameRate = usePrefs((s) => s.frameRate);
-  useEffect(() => {
-    if (activeRoomId && phase.kind === "lobby") {
-      setPhase({
-        kind: "inroom",
-        roomId: activeRoomId,
-        selection: buildJoinSelection({
-          micDeviceId: joinMicDeviceId,
-          speakerDeviceId: joinSpeakerDeviceId,
-          resolution: joinResolution,
-          frameRate: joinFrameRate,
-        }),
-      });
-    }
-  }, [activeRoomId, phase.kind, joinMicDeviceId, joinSpeakerDeviceId, joinResolution, joinFrameRate]);
+  // Deck rule: no pre-join screen (4.5 removed) — joins go straight in, muted,
+  // with the persisted device/quality prefs. store.join() flips activeRoomId;
+  // App.tsx watches it, freezes the join selection, and mounts the in-room
+  // screen at shell level so the call outlives navigation.
 
   // Membership and ownership change while a room screen is up (join, delete,
   // transfer) — refetch the sidebar on every phase flip so deleted rooms
@@ -325,19 +303,6 @@ export function LobbyScreen({ pendingInviteCode, pendingJoinRoomId, onInviteCode
         }}
         onCancel={() => {
           onInviteCodeConsumed?.();
-          setPhase({ kind: "lobby" });
-        }}
-      />
-    );
-  }
-
-  if (phase.kind === "inroom") {
-    return (
-      <InRoomScreen
-        roomId={phase.roomId}
-        selection={phase.selection}
-        onLeave={() => {
-          store.getState().clearActive();
           setPhase({ kind: "lobby" });
         }}
       />

@@ -256,6 +256,41 @@ export interface EnableOptions {
   includeProcessId?: string;
 }
 
+const GENERIC_APP_NAME_RE = /^(chromium|electron|mozilla|firefox|webkit|wine|wine64|alsa[- ]plug[- ]?in|pipewire alsa|pulseaudio|jack)$/i;
+
+/**
+ * Turn a picked process.id into robust include rules. A single app can emit
+ * audio under several PIDs (wine/proton, ALSA-plugin wrappers, XDG sandboxes),
+ * so the PID the picker captured may not be the exact one the audio node runs
+ * on. Resolve the PID to its node's identity and OR-match the whole app:
+ *   - node.name          (specific per-node, stable within a session)
+ *   - application.process.binary  (unless a generic wrapper like "wine")
+ * plus the raw PID as a fallback facet. If the node can't be found (stale
+ * pick), fall back to the raw PID match — i.e. the previous behavior. Every
+ * rule is scoped to the chosen app, so this can only broaden capture to that
+ * app, never leak another app's audio in.
+ */
+function resolveIncludeRules(pb: PatchBayType, processId: string): Node[] {
+  try {
+    const nodes = pb.list();
+    const match = nodes.find((n) => n["application.process.id"] === processId);
+    if (!match) return [{ "application.process.id": processId }];
+    const rules: Node[] = [];
+    const nodeName = match["node.name"]?.trim();
+    const binary = match["application.process.binary"]?.trim();
+    if (nodeName) rules.push({ "node.name": nodeName });
+    if (binary && !GENERIC_APP_NAME_RE.test(binary.replace(/\.(bin|exe)$/i, ""))) {
+      rules.push({ "application.process.binary": binary });
+    }
+    rules.push({ "application.process.id": processId });
+    safeLog(`[linux-audio] per-app include resolved to ${rules.length} facet(s) for PID ${processId}`);
+    return rules;
+  } catch (err) {
+    safeLog("[linux-audio] resolveIncludeRules failed, using raw PID:", err);
+    return [{ "application.process.id": processId }];
+  }
+}
+
 /** Idempotent. Returns null if venmic isn't available (no PipeWire / load failed). */
 export function enableLinuxAudioRouting(options: EnableOptions = {}): EnableResult | null {
   const pb = obtainPatchBay();
@@ -271,7 +306,7 @@ export function enableLinuxAudioRouting(options: EnableOptions = {}): EnableResu
 
   const data: LinkData = options.includeProcessId
     ? {
-        include: [{ "application.process.id": options.includeProcessId }],
+        include: resolveIncludeRules(pb, options.includeProcessId),
         exclude: excludeRules,
         ignore_devices: true,
       }

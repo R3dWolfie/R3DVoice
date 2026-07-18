@@ -1,7 +1,7 @@
 {
   "name": "r3dvoice",
   "private": true,
-  "version": "0.12.8",
+  "version": "0.13.0",
   "description": "Open-source, self-hostable voice + screenshare for friends (Electron + LiveKit)",
   "license": "AGPL-3.0-or-later",
   "author": "R3dWolfie",

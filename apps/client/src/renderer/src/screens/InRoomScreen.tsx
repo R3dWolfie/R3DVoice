@@ -61,6 +61,14 @@ export interface InRoomScreenProps {
   roomId: string;
   selection: JoinSelection;
   onLeave(): void;
+  /**
+   * Persistent-call mode (#35): when true, the call is running in the
+   * background while the user views another page. The full room UI collapses
+   * to a floating mini bar; every hook still runs, so the LiveKit connection
+   * stays live. onRestore returns to the full call view.
+   */
+  minimized?: boolean;
+  onRestore?: () => void;
 }
 
 interface ConnectionState {
@@ -1641,7 +1649,26 @@ export function InRoomScreen(props: InRoomScreenProps): ReactElement {
   // volume-apply effects below can respect it.
   const deafened = snapshot.local?.attributes?.["ghost"] === "1";
 
+  // Remote-audio sink. This MUST outlive any single render branch: when the
+  // call is minimized (#35) or a tile is maximized, the full room UI unmounts,
+  // and if the sink lived in that JSX the attached <audio> elements would be
+  // ripped out of the DOM — you'd stop hearing the call. So it's a detached
+  // node parented to document.body, owned imperatively for this screen's life.
   const audioMountRef = useRef<HTMLDivElement | null>(null);
+  if (audioMountRef.current === null && typeof document !== "undefined") {
+    const sink = document.createElement("div");
+    sink.style.display = "none";
+    sink.setAttribute("aria-hidden", "true");
+    sink.dataset["rvAudioSink"] = "";
+    audioMountRef.current = sink;
+  }
+  useEffect(() => {
+    const sink = audioMountRef.current;
+    if (sink && sink.parentNode === null) document.body.appendChild(sink);
+    return () => {
+      sink?.remove();
+    };
+  }, []);
   const e2eeSessionRef = useRef<RoomE2EE | null>(null);
   const micPipelineRef = useRef<MicPipeline | null>(null);
 
@@ -2320,6 +2347,131 @@ export function InRoomScreen(props: InRoomScreenProps): ReactElement {
   // not dismissed, within the first minute.
   const showMuteHint =
     conn.phase === "connected" && muted && !everUnmuted && !muteHintDismissed && elapsed < 60;
+
+  // Persistent-call mini bar (#35). The connection lives at the app shell now,
+  // so navigating away doesn't unmount this screen — it just flips to minimized.
+  // Render a compact floating dock (mic / ghost / leave + "return to call")
+  // while the user browses another page. All hooks above still ran, so the
+  // LiveKit session, media, and E2EE are untouched.
+  if (props.minimized) {
+    const connected = conn.phase === "connected";
+    const dotColor = connected
+      ? "var(--rv-green, #3ba55d)"
+      : conn.phase === "error"
+        ? "var(--rv-red, #ed4245)"
+        : "var(--rv-amber, #faa61a)";
+    const statusText = connected
+      ? (roomName ?? "In call")
+      : conn.phase === "error"
+        ? "Connection lost"
+        : "Connecting…";
+    const miniBtn: CSSProperties = {
+      width: 34,
+      height: 34,
+      flexShrink: 0,
+      borderRadius: 10,
+      display: "grid",
+      placeItems: "center",
+      border: "1px solid var(--border)",
+      background: "var(--bg-elev-2)",
+      color: "var(--text)",
+      cursor: "pointer",
+      font: "inherit",
+    };
+    return (
+      <div
+        className="rv-fade-in"
+        style={{
+          position: "fixed",
+          left: 60,
+          bottom: 16,
+          zIndex: 400,
+          display: "flex",
+          alignItems: "center",
+          gap: "var(--s-3)",
+          padding: "8px 10px 8px 14px",
+          background: "var(--bg-elev-1, var(--bg))",
+          border: "1px solid var(--border)",
+          borderRadius: 14,
+          boxShadow: "0 10px 34px rgba(0,0,0,.5)",
+          maxWidth: "min(92vw, 380px)",
+        }}
+      >
+        <button
+          type="button"
+          onClick={() => props.onRestore?.()}
+          title="Return to call"
+          style={{
+            display: "flex",
+            alignItems: "center",
+            gap: 9,
+            background: "none",
+            border: "none",
+            color: "var(--text)",
+            cursor: "pointer",
+            font: "inherit",
+            padding: 0,
+            minWidth: 0,
+          }}
+        >
+          <span
+            style={{
+              width: 9,
+              height: 9,
+              flexShrink: 0,
+              borderRadius: "50%",
+              background: dotColor,
+              boxShadow: connected ? `0 0 8px ${dotColor}` : "none",
+            }}
+          />
+          <span style={{ display: "flex", flexDirection: "column", alignItems: "flex-start", minWidth: 0 }}>
+            <span
+              style={{
+                fontSize: 13,
+                fontWeight: 600,
+                whiteSpace: "nowrap",
+                overflow: "hidden",
+                textOverflow: "ellipsis",
+                maxWidth: 170,
+              }}
+            >
+              {statusText}
+            </span>
+            <span style={{ fontSize: 10, color: "var(--text-faint)", letterSpacing: ".03em" }}>
+              Tap to return{sharing ? " · sharing" : ""}
+            </span>
+          </span>
+        </button>
+        <span style={{ width: 1, height: 26, flexShrink: 0, background: "var(--border)" }} />
+        <button
+          type="button"
+          onClick={handleToggleMute}
+          disabled={!connected}
+          title={muted ? "Unmute" : "Mute"}
+          style={{ ...miniBtn, color: muted ? "var(--rv-red, #ed4245)" : "var(--text)", opacity: connected ? 1 : 0.5 }}
+        >
+          {muted ? <I.MicOff size={17} /> : <I.Mic size={17} />}
+        </button>
+        <button
+          type="button"
+          onClick={() => void roomWrapper.setGhost(!localGhost)}
+          disabled={!connected}
+          title="Ghost — mic and camera off"
+          style={{ ...miniBtn, fontSize: 17, lineHeight: 1, color: localGhost ? "var(--rv-amber, #faa61a)" : "var(--text)", opacity: connected ? 1 : 0.5 }}
+        >
+          👻
+        </button>
+        <button
+          type="button"
+          onClick={() => void handleLeave()}
+          title="Leave call"
+          style={{ ...miniBtn, background: "var(--rv-red, #ed4245)", border: "none", color: "#fff" }}
+        >
+          <I.Leave size={17} />
+        </button>
+      </div>
+    );
+  }
 
   // Full-viewport maximized layout — no sidebar/topbar/control bar, single tile
   // fills the whole app window. OS fullscreen (requestFullscreen) is preferred
@@ -3249,8 +3401,8 @@ export function InRoomScreen(props: InRoomScreenProps): ReactElement {
         </div>
       )}
 
-      {/* Hidden audio mount */}
-      <div ref={audioMountRef} style={{ display: "none" }} aria-hidden="true" />
+      {/* Remote-audio sink lives on document.body (see audioMountRef init) so
+          it survives minimize/maximize — not rendered here. */}
 
       {/* 2.5j connecting overlay: step list over the room while we negotiate */}
       {conn.phase === "connecting" && (
