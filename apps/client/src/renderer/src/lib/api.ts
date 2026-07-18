@@ -20,6 +20,7 @@ import type {
   ChatThreadType,
   DmThreadsResponse,
   ChatMessageDTO,
+  MessageAttachment,
   FriendsListResponse,
   FriendRequestResponse,
   InviteDTO,
@@ -144,6 +145,10 @@ export class ApiClient {
   uploadAvatar(dataUrl: string): Promise<{ avatarUrl: string }> {
     return this.request("POST", "/me/avatar", { dataUrl });
   }
+  /** Upload a chat message attachment (a file as a data: URL) — returns its stored descriptor (#30). */
+  uploadAttachment(dataUrl: string, name: string): Promise<MessageAttachment> {
+    return this.request("POST", "/uploads/attachment", { dataUrl, name });
+  }
   twoFAEnrollStart(): Promise<TotpEnrollStartResponse> {
     return this.request("POST", "/auth/2fa/enroll-start");
   }
@@ -263,8 +268,19 @@ export class ApiClient {
     if (opts.limit) params.set("limit", String(opts.limit));
     return this.request("GET", `/chat/messages?${params.toString()}`);
   }
-  chatSend(body: ChatSendRequest): Promise<ChatSendResponse> {
+  chatSend(
+    body: ChatSendRequest & {
+      // Room-only extras (#29/#30). A message may carry an empty body when it
+      // has attachments or a poll.
+      attachments?: MessageAttachment[];
+      poll?: { question: string; options: string[] };
+    },
+  ): Promise<ChatSendResponse> {
     return this.request("POST", "/chat/messages", body);
+  }
+  /** Cast a poll vote — re-selecting the current option retracts it (server toggles) (#29). */
+  votePoll(messageId: string, optionId: string): Promise<ChatMessageDTO> {
+    return this.request("POST", `/chat/messages/${encodeURIComponent(messageId)}/vote`, { optionId });
   }
   chatEdit(id: string, body: string): Promise<ChatSendResponse> {
     return this.requestWithMethod("PATCH", `/chat/messages/${encodeURIComponent(id)}`, { body });

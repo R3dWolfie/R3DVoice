@@ -120,6 +120,32 @@ export interface LiveKitTokenResponse {
 // Chat DTOs
 export type ChatThreadType = "room" | "dm";
 
+/** A file attached to a message (#30). */
+export interface MessageAttachment {
+  url: string;
+  name: string;
+  mime: string;
+  size: number;
+}
+
+/** A poll option, stable id + label. */
+export interface PollOption {
+  id: string;
+  text: string;
+}
+
+/** A poll as served to the client — raw voter map is collapsed to counts. */
+export interface PollDTO {
+  question: string;
+  options: PollOption[];
+  /** optionId → number of votes. */
+  tally: Record<string, number>;
+  /** The caller's chosen optionId, or null if they haven't voted. */
+  myVote: string | null;
+  /** Total distinct voters. */
+  totalVotes: number;
+}
+
 export interface ChatMessageDTO {
   id: string;
   threadType: ChatThreadType;
@@ -136,6 +162,10 @@ export interface ChatMessageDTO {
   /** Aggregated per-emoji reactions; mine = caller has reacted. */
   reactions?: Array<{ emoji: string; count: number; mine: boolean }>;
   mentions?: string[];
+  /** File attachments (#30). */
+  attachments?: MessageAttachment[];
+  /** Poll payload (#29), null/absent for normal messages. */
+  poll?: PollDTO | null;
 }
 
 export interface ChatHistoryResponse {

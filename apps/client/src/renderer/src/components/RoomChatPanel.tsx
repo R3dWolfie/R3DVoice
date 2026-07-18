@@ -1,5 +1,5 @@
 import { memo, useCallback, useEffect, useMemo, useRef, useState, type CSSProperties, type ReactElement, type ReactNode } from "react";
-import type { ChatMessageDTO } from "@r3dvoice/shared";
+import type { ChatMessageDTO, MessageAttachment, PollDTO } from "@r3dvoice/shared";
 import { ApiClient } from "../lib/api.js";
 import { ensureTransport, setCurrentlyViewingThread, type ChatTransport } from "../lib/chat-transport.js";
 import { useAuthStore } from "../lib/auth-context.js";
@@ -25,6 +25,36 @@ const PLUS_ITEM_STYLE: CSSProperties = {
   fontSize: "var(--t-sm)",
   cursor: "pointer",
 };
+
+// #30 attachment upload cap — matched to the server's accepted size.
+const MAX_ATTACHMENT_BYTES = 8 * 1024 * 1024;
+
+/** Read a File into a `data:` URL for the upload endpoint. */
+function readFileAsDataUrl(file: File): Promise<string> {
+  return new Promise((resolve, reject) => {
+    const reader = new FileReader();
+    reader.onload = () => resolve(String(reader.result ?? ""));
+    reader.onerror = () => reject(new Error("Couldn't read that file."));
+    reader.readAsDataURL(file);
+  });
+}
+
+/** Compact human-readable file size (e.g. "3.4 MB"). */
+function humanSize(bytes: number): string {
+  if (bytes < 1024) return `${bytes} B`;
+  if (bytes < 1024 * 1024) return `${(bytes / 1024).toFixed(1)} KB`;
+  return `${(bytes / (1024 * 1024)).toFixed(1)} MB`;
+}
+
+/** Pick a glyph for a non-image attachment from its MIME type. */
+function fileGlyph(mime: string): string {
+  if (mime.startsWith("video/")) return "🎞️";
+  if (mime.startsWith("audio/")) return "🎧";
+  if (mime === "application/pdf") return "📄";
+  if (mime.startsWith("text/")) return "📃";
+  if (mime.includes("zip")) return "🗜️";
+  return "📎";
+}
 
 /** A message the local user is sending — shown optimistically before the
  *  server echoes it back. `text` is the plaintext (used for display + retry;
@@ -195,6 +225,14 @@ export function RoomChatPanel({
   const plusBtnRef = useRef<HTMLButtonElement>(null);
   const plusMenuRef = useRef<HTMLDivElement>(null);
   useDismiss(plusOpen, () => setPlusOpen(false), [plusMenuRef, plusBtnRef]);
+  // #29/#30 — attachments + polls. Room-only: DMs are E2EE and the server
+  // rejects them, so the composer's "+" items are disabled in DM threads.
+  const attachmentsAllowed = threadType === "room";
+  const attachInputRef = useRef<HTMLInputElement | null>(null);
+  const [uploading, setUploading] = useState(false);
+  const [pollOpen, setPollOpen] = useState(false);
+  const [pollQuestion, setPollQuestion] = useState("");
+  const [pollOptions, setPollOptions] = useState<string[]>(["", ""]);
   const [mentionQuery, setMentionQuery] = useState<string | null>(null);
   const [mentionAnchor, setMentionAnchor] = useState<number>(0);
   const [error, setError] = useState<string | null>(null);
@@ -490,6 +528,55 @@ export function RoomChatPanel({
     setPending((p) => p.filter((x) => x.clientId !== clientId));
   };
 
+  // #30 attachments — read the picked file as a data URL, upload it, then send
+  // a room message carrying the returned descriptor. Room-only, so no E2EE
+  // encrypt step: the body is the plain draft (may be empty).
+  const onPickAttachment = async (file: File): Promise<void> => {
+    const api = apiRef.current;
+    if (!api) return;
+    if (file.size > MAX_ATTACHMENT_BYTES) {
+      pushToast({ kind: "error", text: `“${file.name}” is too large — 8 MB max.` });
+      return;
+    }
+    setUploading(true);
+    setError(null);
+    try {
+      const dataUrl = await readFileAsDataUrl(file);
+      const attachment = await api.uploadAttachment(dataUrl, file.name);
+      const body = draft.trim();
+      setDraft("");
+      const res = await api.chatSend({ threadType, threadId, body, attachments: [attachment] });
+      setMessages((prev) => (prev.some((m) => m.id === res.message.id) ? prev : [...prev, res.message]));
+    } catch (e) {
+      pushToast({ kind: "error", text: e instanceof Error ? e.message : "Upload failed." });
+    } finally {
+      setUploading(false);
+    }
+  };
+
+  // #29 poll composer helpers.
+  const resetPoll = (): void => {
+    setPollOpen(false);
+    setPollQuestion("");
+    setPollOptions(["", ""]);
+  };
+  const nonEmptyPollOptions = pollOptions.map((o) => o.trim()).filter((o) => o.length > 0);
+  const canCreatePoll = pollQuestion.trim().length > 0 && nonEmptyPollOptions.length >= 2;
+  const submitPoll = async (): Promise<void> => {
+    const api = apiRef.current;
+    if (!api || !canCreatePoll) return;
+    const question = pollQuestion.trim();
+    const options = nonEmptyPollOptions;
+    resetPoll();
+    setError(null);
+    try {
+      const res = await api.chatSend({ threadType, threadId, body: "", poll: { question, options } });
+      setMessages((prev) => (prev.some((m) => m.id === res.message.id) ? prev : [...prev, res.message]));
+    } catch (e) {
+      setError(e instanceof Error ? e.message : "Couldn't create the poll.");
+    }
+  };
+
   // Restore an E2EE key backup (Settings → "Download key backup" on the device
   // that has the key) directly from the DM view, so a keyless device can unlock
   // its history in place instead of having to log out and use the login screen.
@@ -595,6 +682,37 @@ export function RoomChatPanel({
     void call?.catch(() => {
       /* WS truth wins on next event; worst case a refresh corrects */
     });
+  }, []);
+
+  // #29 poll vote — optimistically toggle the caller's choice, then reconcile
+  // with the server DTO. Re-clicking the current option retracts the vote.
+  const handleVote = useCallback((msg: ChatMessageDTO, optionId: string): void => {
+    const api = apiRef.current;
+    if (!api || !msg.poll) return;
+    setMessages((prev) =>
+      prev.map((m) => {
+        if (m.id !== msg.id || !m.poll) return m;
+        const poll = m.poll;
+        const tally = { ...poll.tally };
+        const prevVote = poll.myVote;
+        let totalVotes = poll.totalVotes;
+        if (prevVote === optionId) {
+          tally[optionId] = Math.max(0, (tally[optionId] ?? 0) - 1);
+          totalVotes = Math.max(0, totalVotes - 1);
+          return { ...m, poll: { ...poll, tally, myVote: null, totalVotes } };
+        }
+        if (prevVote) tally[prevVote] = Math.max(0, (tally[prevVote] ?? 0) - 1);
+        else totalVotes += 1;
+        tally[optionId] = (tally[optionId] ?? 0) + 1;
+        return { ...m, poll: { ...poll, tally, myVote: optionId, totalVotes } };
+      }),
+    );
+    void api
+      .votePoll(msg.id, optionId)
+      .then((updated) => {
+        setMessages((prev) => prev.map((m) => (m.id === updated.id ? { ...updated } : m)));
+      })
+      .catch((e: unknown) => setError(e instanceof Error ? e.message : "Vote failed."));
   }, []);
 
   // Stable per-render handlers so the memoized ChatBubble holds across composer
@@ -913,6 +1031,7 @@ export function RoomChatPanel({
                     followup={!dayChanged && !showUnread && prev !== null && prev.authorId === m.authorId}
                     onToggleReaction={handleBubbleToggleReaction}
                     onContextMenu={handleBubbleContextMenu}
+                    onVote={handleVote}
                   />
                 </div>
               );
@@ -1058,6 +1177,141 @@ export function RoomChatPanel({
             <EmojiPicker onPick={insertEmoji} />
           </div>
         )}
+        {/* #29 poll composer — question + 2–6 options, room threads only. */}
+        {pollOpen && attachmentsAllowed && (
+          <div
+            style={{
+              display: "flex",
+              flexDirection: "column",
+              gap: "var(--s-2)",
+              padding: "var(--s-3)",
+              borderRadius: "var(--r-md)",
+              border: "1px solid var(--border)",
+              background: "var(--bg-elev)",
+            }}
+          >
+            <div style={{ display: "flex", alignItems: "center", justifyContent: "space-between" }}>
+              <span className="rv-label" style={{ display: "flex", alignItems: "center", gap: 6 }}>
+                <span aria-hidden>📊</span> Create a poll
+              </span>
+              <button
+                type="button"
+                onClick={resetPoll}
+                aria-label="Cancel poll"
+                style={{
+                  appearance: "none",
+                  background: "transparent",
+                  border: 0,
+                  padding: 0,
+                  color: "var(--text-dim)",
+                  cursor: "pointer",
+                  fontSize: "var(--t-sm)",
+                  lineHeight: 1,
+                }}
+              >
+                ✕
+              </button>
+            </div>
+            <input
+              className="rv-input"
+              placeholder="Ask a question…"
+              value={pollQuestion}
+              maxLength={200}
+              onChange={(e) => setPollQuestion(e.target.value)}
+            />
+            {pollOptions.map((opt, i) => (
+              <div key={i} style={{ display: "flex", gap: "var(--s-2)", alignItems: "center" }}>
+                <input
+                  className="rv-input"
+                  placeholder={`Option ${i + 1}`}
+                  value={opt}
+                  maxLength={100}
+                  onChange={(e) =>
+                    setPollOptions((o) => o.map((x, idx) => (idx === i ? e.target.value : x)))
+                  }
+                  style={{ flex: 1 }}
+                />
+                {pollOptions.length > 2 && (
+                  <button
+                    type="button"
+                    aria-label={`Remove option ${i + 1}`}
+                    onClick={() => setPollOptions((o) => o.filter((_, idx) => idx !== i))}
+                    style={{
+                      appearance: "none",
+                      background: "transparent",
+                      border: 0,
+                      padding: "0 var(--s-1)",
+                      color: "var(--text-dim)",
+                      cursor: "pointer",
+                      fontSize: "var(--t-sm)",
+                      lineHeight: 1,
+                    }}
+                  >
+                    ✕
+                  </button>
+                )}
+              </div>
+            ))}
+            <div style={{ display: "flex", alignItems: "center", justifyContent: "space-between" }}>
+              {pollOptions.length < 6 ? (
+                <button
+                  type="button"
+                  onClick={() => setPollOptions((o) => (o.length >= 6 ? o : [...o, ""]))}
+                  style={{
+                    appearance: "none",
+                    background: "transparent",
+                    border: 0,
+                    padding: 0,
+                    font: "inherit",
+                    fontSize: "var(--t-xs)",
+                    color: "var(--accent)",
+                    cursor: "pointer",
+                  }}
+                >
+                  + Add option
+                </button>
+              ) : (
+                <span style={{ fontSize: "var(--t-2xs)", color: "var(--text-faint)" }}>Max 6 options</span>
+              )}
+              <button
+                type="button"
+                className="rv-btn"
+                data-variant="primary"
+                disabled={!canCreatePoll}
+                onClick={() => void submitPoll()}
+              >
+                Create poll
+              </button>
+            </div>
+          </div>
+        )}
+        {uploading && (
+          <div
+            style={{
+              fontSize: "var(--t-2xs)",
+              color: "var(--text-dim)",
+              fontFamily: "var(--font-mono)",
+              letterSpacing: ".08em",
+              display: "flex",
+              alignItems: "center",
+              gap: 6,
+            }}
+          >
+            <span className="rv-skeleton" style={{ width: 18, height: 6, borderRadius: 3 }} />
+            uploading…
+          </div>
+        )}
+        <input
+          ref={attachInputRef}
+          type="file"
+          accept="image/*,video/mp4,audio/*,.pdf,.txt,.zip"
+          style={{ display: "none" }}
+          onChange={(e) => {
+            const f = e.target.files?.[0];
+            if (f) void onPickAttachment(f);
+            e.target.value = "";
+          }}
+        />
         <div style={{ display: "flex", gap: "var(--s-2)", alignItems: "center" }}>
           <div style={{ position: "relative" }}>
             <button
@@ -1089,24 +1343,34 @@ export function RoomChatPanel({
                 <button
                   type="button"
                   className="rv-menu-item"
+                  disabled={!attachmentsAllowed || uploading}
+                  title={attachmentsAllowed ? undefined : "Not available in encrypted DMs"}
                   onClick={() => {
+                    if (!attachmentsAllowed) return;
                     setPlusOpen(false);
-                    // TODO(attachments): open the file picker + upload pipeline.
-                    pushToast({ kind: "info", text: "File uploads are coming — building it next." });
+                    attachInputRef.current?.click();
                   }}
-                  style={PLUS_ITEM_STYLE}
+                  style={{
+                    ...PLUS_ITEM_STYLE,
+                    ...(attachmentsAllowed && !uploading ? {} : { opacity: 0.45, cursor: "not-allowed" }),
+                  }}
                 >
                   <span aria-hidden style={{ width: 18 }}>📎</span> Upload a File
                 </button>
                 <button
                   type="button"
                   className="rv-menu-item"
+                  disabled={!attachmentsAllowed}
+                  title={attachmentsAllowed ? undefined : "Not available in encrypted DMs"}
                   onClick={() => {
+                    if (!attachmentsAllowed) return;
                     setPlusOpen(false);
-                    // TODO(polls): open the poll composer.
-                    pushToast({ kind: "info", text: "Polls are coming — building it next." });
+                    setPollOpen(true);
                   }}
-                  style={PLUS_ITEM_STYLE}
+                  style={{
+                    ...PLUS_ITEM_STYLE,
+                    ...(attachmentsAllowed ? {} : { opacity: 0.45, cursor: "not-allowed" }),
+                  }}
                 >
                   <span aria-hidden style={{ width: 18 }}>📊</span> Create Poll
                 </button>
@@ -1438,12 +1702,14 @@ const ChatBubble = memo(function ChatBubble({
   followup,
   onContextMenu,
   onToggleReaction,
+  onVote,
 }: {
   msg: ChatMessageDTO;
   me: boolean;
   followup: boolean;
   onContextMenu?: (msg: ChatMessageDTO, x: number, y: number) => void;
   onToggleReaction?: (msg: ChatMessageDTO, emoji: string, mine: boolean) => void;
+  onVote?: (msg: ChatMessageDTO, optionId: string) => void;
 }): ReactElement {
   const [hovered, setHovered] = useState(false);
   // Arbitrary-emoji reaction picker, opened from the hover menu's "＋".
@@ -1458,6 +1724,12 @@ const ChatBubble = memo(function ChatBubble({
     minute: "2-digit",
   });
   const deleted = msg.deletedAt !== null || msg.body === null;
+  // A room message may carry only an attachment or a poll (empty body). Skip the
+  // text bubble in that case so an empty grey pill never renders (#29/#30).
+  const attachments = deleted ? [] : msg.attachments ?? [];
+  const poll = deleted ? null : msg.poll ?? null;
+  const bodyText = msg.body ?? "";
+  const showTextBubble = deleted || bodyText.trim().length > 0;
   return (
     <div
       onContextMenu={(e) => {
@@ -1592,25 +1864,34 @@ const ChatBubble = memo(function ChatBubble({
             )}
           </div>
         )}
-        <div
-          style={{
-            padding: "8px 13px",
-            borderRadius: 14,
-            fontSize: "var(--t-sm)",
-            lineHeight: 1.5,
-            wordBreak: "break-word",
-            background: deleted ? "transparent" : me ? "var(--bubble-me)" : "var(--bubble-them)",
-            color: deleted ? "var(--text-faint)" : me ? "#fff" : "var(--text)",
-            border: deleted
-              ? "1px dashed var(--border-soft)"
-              : me
-                ? "1px solid var(--bubble-me)"
-                : "1px solid var(--border-soft)",
-            fontStyle: deleted ? "italic" : "normal",
-          }}
-        >
-          {deleted ? "(deleted)" : renderRichBody(msg.body ?? "", (msg.mentions?.length ?? 0) > 0, me)}
-        </div>
+        {showTextBubble && (
+          <div
+            style={{
+              padding: "8px 13px",
+              borderRadius: 14,
+              fontSize: "var(--t-sm)",
+              lineHeight: 1.5,
+              wordBreak: "break-word",
+              background: deleted ? "transparent" : me ? "var(--bubble-me)" : "var(--bubble-them)",
+              color: deleted ? "var(--text-faint)" : me ? "#fff" : "var(--text)",
+              border: deleted
+                ? "1px dashed var(--border-soft)"
+                : me
+                  ? "1px solid var(--bubble-me)"
+                  : "1px solid var(--border-soft)",
+              fontStyle: deleted ? "italic" : "normal",
+            }}
+          >
+            {deleted ? "(deleted)" : renderRichBody(bodyText, (msg.mentions?.length ?? 0) > 0, me)}
+          </div>
+        )}
+        {attachments.length > 0 && <AttachmentList attachments={attachments} me={me} />}
+        {poll && (
+          <PollCard
+            poll={poll}
+            onVote={onVote ? (optionId) => onVote(msg, optionId) : undefined}
+          />
+        )}
         {/* Reaction chips — click to toggle; mine = Cherry-tinted */}
         {(msg.reactions?.length ?? 0) > 0 && (
           <div style={{ display: "flex", flexWrap: "wrap", gap: 4, marginTop: 1 }}>
@@ -1646,6 +1927,192 @@ const ChatBubble = memo(function ChatBubble({
     </div>
   );
 });
+
+// #30 message attachments — images render inline (click to open full size),
+// everything else as a compact download card.
+function AttachmentList({ attachments, me }: { attachments: MessageAttachment[]; me: boolean }): ReactElement {
+  return (
+    <div
+      style={{
+        display: "flex",
+        flexDirection: "column",
+        gap: "var(--s-2)",
+        alignItems: me ? "flex-end" : "flex-start",
+        maxWidth: "100%",
+      }}
+    >
+      {attachments.map((a) =>
+        a.mime.startsWith("image/") ? (
+          <a
+            key={a.url}
+            href={a.url}
+            target="_blank"
+            rel="noreferrer noopener"
+            style={{ display: "block", maxWidth: 320, lineHeight: 0 }}
+          >
+            <img
+              src={a.url}
+              alt={a.name}
+              style={{
+                maxWidth: 320,
+                maxHeight: 320,
+                width: "auto",
+                height: "auto",
+                borderRadius: 12,
+                display: "block",
+                border: "1px solid var(--border-soft)",
+              }}
+            />
+          </a>
+        ) : (
+          <a
+            key={a.url}
+            href={a.url}
+            target="_blank"
+            rel="noreferrer noopener"
+            download={a.name}
+            style={{
+              display: "flex",
+              alignItems: "center",
+              gap: "var(--s-2)",
+              maxWidth: 320,
+              padding: "var(--s-2) var(--s-3)",
+              borderRadius: "var(--r-md)",
+              border: "1px solid var(--border)",
+              background: "var(--bg-elev)",
+              textDecoration: "none",
+              color: "var(--text)",
+            }}
+          >
+            <span aria-hidden style={{ fontSize: 20, lineHeight: 1, flexShrink: 0 }}>
+              {fileGlyph(a.mime)}
+            </span>
+            <span style={{ display: "flex", flexDirection: "column", minWidth: 0 }}>
+              <span
+                style={{
+                  fontSize: "var(--t-xs)",
+                  fontWeight: 600,
+                  whiteSpace: "nowrap",
+                  overflow: "hidden",
+                  textOverflow: "ellipsis",
+                }}
+              >
+                {a.name}
+              </span>
+              <span className="rv-mono" style={{ fontSize: "var(--t-2xs)", color: "var(--text-dim)" }}>
+                {humanSize(a.size)}
+              </span>
+            </span>
+          </a>
+        ),
+      )}
+    </div>
+  );
+}
+
+// #29 poll card — click a bar to vote; the bar fill is proportional to the
+// leading option, the caller's pick is highlighted, re-clicking retracts.
+function PollCard({ poll, onVote }: { poll: PollDTO; onVote?: ((optionId: string) => void) | undefined }): ReactElement {
+  const counts = poll.options.map((o) => poll.tally[o.id] ?? 0);
+  const max = Math.max(1, ...counts);
+  return (
+    <div
+      style={{
+        width: "100%",
+        minWidth: 220,
+        maxWidth: 320,
+        padding: "var(--s-3)",
+        borderRadius: 14,
+        border: "1px solid var(--border)",
+        background: "var(--bg-elev)",
+      }}
+    >
+      <div
+        style={{
+          display: "flex",
+          alignItems: "center",
+          gap: 6,
+          fontWeight: 700,
+          fontSize: "var(--t-sm)",
+          marginBottom: "var(--s-2)",
+          wordBreak: "break-word",
+        }}
+      >
+        <span aria-hidden style={{ flexShrink: 0 }}>📊</span>
+        <span>{poll.question}</span>
+      </div>
+      <div style={{ display: "flex", flexDirection: "column", gap: 6 }}>
+        {poll.options.map((opt) => {
+          const count = poll.tally[opt.id] ?? 0;
+          const pct = (count / max) * 100;
+          const voted = poll.myVote === opt.id;
+          return (
+            <button
+              key={opt.id}
+              type="button"
+              onClick={() => onVote?.(opt.id)}
+              disabled={!onVote}
+              style={{
+                position: "relative",
+                overflow: "hidden",
+                appearance: "none",
+                textAlign: "left",
+                padding: "6px 10px",
+                borderRadius: 8,
+                border: voted
+                  ? "1px solid color-mix(in srgb, var(--accent) 55%, var(--border))"
+                  : "1px solid var(--border)",
+                background: "var(--bg)",
+                color: "var(--text)",
+                cursor: onVote ? "pointer" : "default",
+                font: "inherit",
+                fontSize: "var(--t-xs)",
+              }}
+            >
+              <span
+                aria-hidden
+                style={{
+                  position: "absolute",
+                  insetBlock: 0,
+                  insetInlineStart: 0,
+                  width: `${pct}%`,
+                  background: voted
+                    ? "color-mix(in srgb, var(--accent) 32%, transparent)"
+                    : "color-mix(in srgb, var(--accent) 16%, transparent)",
+                  transition: "width var(--d-mid, .2s) var(--ease-out, ease)",
+                  zIndex: 0,
+                }}
+              />
+              <span
+                style={{
+                  position: "relative",
+                  zIndex: 1,
+                  display: "flex",
+                  alignItems: "center",
+                  justifyContent: "space-between",
+                  gap: "var(--s-2)",
+                }}
+              >
+                <span style={{ display: "flex", alignItems: "center", gap: 6, minWidth: 0 }}>
+                  {voted && <span aria-hidden style={{ color: "var(--accent)" }}>✓</span>}
+                  <span style={{ overflow: "hidden", textOverflow: "ellipsis", whiteSpace: "nowrap" }}>
+                    {opt.text}
+                  </span>
+                </span>
+                <span className="rv-mono" style={{ fontSize: "var(--t-2xs)", color: "var(--text-mid)", flexShrink: 0 }}>
+                  {count}
+                </span>
+              </span>
+            </button>
+          );
+        })}
+      </div>
+      <div style={{ fontSize: "var(--t-2xs)", color: "var(--text-faint)", marginTop: "var(--s-2)" }}>
+        {poll.totalVotes} vote{poll.totalVotes === 1 ? "" : "s"}
+      </div>
+    </div>
+  );
+}
 
 // 2.5m emoji picker — search, category tabs (deck: 🕒😀🐱🍔⚽🚗💡🎵🚩),
 // stacked sections, and a preview foot (emoji + name + :shortcode:).

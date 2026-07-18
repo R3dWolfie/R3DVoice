@@ -152,7 +152,7 @@ export async function notificationRoutes(app: FastifyInstance): Promise<void> {
     const roomName = new Map(rooms.map((r) => [r.id, r.name]));
 
     const mentions: MentionFeedItemDTO[] = mentionRows.map((m) => ({
-      message: messageToDTO(m),
+      message: messageToDTO(m, { viewerId: userId }),
       roomId: m.threadType === "room" ? m.threadId : null,
       roomName: m.threadType === "room" ? (roomName.get(m.threadId) ?? null) : null,
     }));

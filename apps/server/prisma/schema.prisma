@@ -130,6 +130,10 @@ model Message {
   authorId   String
   body       String
   mentions   String?
+  /** JSON array of {url,name,mime,size} — message file attachments (#30). */
+  attachments String?
+  /** JSON {question,options:[{id,text}],votes:{userId:optionId}} — poll (#29). */
+  poll       String?
   createdAt  DateTime @default(now())
   editedAt   DateTime?
   deletedAt  DateTime?
