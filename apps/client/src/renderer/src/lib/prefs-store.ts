@@ -13,7 +13,7 @@ export type InputProfile = "voice-isolation" | "studio" | "custom";
 /** Deck 3.6 presets: Light · Dark · Grey · Match OS. */
 export type ThemePreset = "light" | "dark" | "grey" | "system";
 /** Camera preview/capture resolution (Settings › Devices › Video, 3.1). */
-export type CameraResolution = "480p" | "720p" | "1080p";
+export type CameraResolution = "144p" | "240p" | "480p" | "720p" | "1080p" | "1440p";
 /** Default room-notification behavior (Settings › Notifications, 3.7). */
 export type RoomNotifDefault = "all" | "mentions" | "none";
 

@@ -11,6 +11,9 @@ import {
   Track,
   type RemoteTrack,
   type RemoteTrackPublication,
+  type VideoCaptureOptions,
+  type LocalVideoTrack,
+  type LocalAudioTrack,
 } from "livekit-client";
 
 /** Receiver-side quality request for an incoming video (#8, two-sided). */
@@ -1192,8 +1195,17 @@ export class LiveKitRoom {
     }
   }
 
-  async setCamera(enabled: boolean, deviceId?: string): Promise<void> {
-    const opts = enabled && deviceId ? { deviceId: { exact: deviceId } } : undefined;
+  async setCamera(
+    enabled: boolean,
+    deviceId?: string,
+    resolution?: { width: number; height: number },
+  ): Promise<void> {
+    const opts: VideoCaptureOptions | undefined = enabled
+      ? {
+          ...(deviceId ? { deviceId: { exact: deviceId } } : {}),
+          ...(resolution ? { resolution: { width: resolution.width, height: resolution.height } } : {}),
+        }
+      : undefined;
     try {
       await this.room.localParticipant.setCameraEnabled(enabled, opts);
     } catch (err) {
@@ -1221,6 +1233,27 @@ export class LiveKitRoom {
         deviceId: { exact: deviceId },
       });
     }
+    this.emit();
+  }
+
+  /** Swap the published microphone's source track in place (no unpublish /
+   *  renegotiation) — used to live-apply mic-processing changes (noise
+   *  suppression / AGC / echo / mono) that require re-opening getUserMedia.
+   *  No-op if the mic isn't published yet. */
+  async replaceMicTrack(newTrack: MediaStreamTrack): Promise<void> {
+    const pub = this.room.localParticipant.getTrackPublication(Track.Source.Microphone);
+    const track = pub?.audioTrack as LocalAudioTrack | undefined;
+    if (!track) return;
+    await track.replaceTrack(newTrack);
+  }
+
+  /** Live-apply a new camera resolution without unpublishing — restarts the
+   *  underlying getUserMedia track. No-op if the camera isn't on. */
+  async restartCameraResolution(resolution: { width: number; height: number }): Promise<void> {
+    const pub = this.room.localParticipant.getTrackPublication(Track.Source.Camera);
+    const track = pub?.videoTrack as LocalVideoTrack | undefined;
+    if (!track) return;
+    await track.restartTrack({ resolution: { width: resolution.width, height: resolution.height } });
     this.emit();
   }
 

@@ -1924,8 +1924,6 @@ export function InRoomScreen(props: InRoomScreenProps): ReactElement {
 
   useEffect(() => {
     let cancelled = false;
-    // eslint-disable-next-line no-console
-    console.log("[call] join effect RUN — room=%s (connect to LiveKit)", props.roomId);
     // 2.5j step-list: reset, then mark real phases done as they complete.
     setConnSteps(freshConnSteps());
     let stepStart = performance.now();
@@ -2018,23 +2016,10 @@ export function InRoomScreen(props: InRoomScreenProps): ReactElement {
       }
     })();
     return () => {
-      // eslint-disable-next-line no-console
-      console.warn("[call] join effect CLEANUP → roomWrapper.leave() — room=%s (this ends the call!)", props.roomId);
       cancelled = true;
       void roomWrapper.leave();
     };
   }, [roomWrapper, props.roomId, props.selection, token, serverUrl, retryNonce]);
-
-  // Diagnostic (#35): confirm the screen truly persists across navigation.
-  useEffect(() => {
-    // eslint-disable-next-line no-console
-    console.log("[call] InRoomScreen MOUNTED — room=%s", props.roomId);
-    return () => {
-      // eslint-disable-next-line no-console
-      console.warn("[call] InRoomScreen UNMOUNTED — room=%s", props.roomId);
-    };
-    // eslint-disable-next-line react-hooks/exhaustive-deps
-  }, []);
 
   useEffect(() => {
     const room = roomWrapper.room;
@@ -2110,6 +2095,8 @@ export function InRoomScreen(props: InRoomScreenProps): ReactElement {
   const leaveRoomKeybind = usePrefs((s) => s.leaveRoomKeybind);
   const prefMic = usePrefs((s) => s.micDeviceId);
   const cameraDeviceId = usePrefs((s) => s.cameraDeviceId);
+  const cameraResolution = usePrefs((s) => s.cameraResolution);
+  const cameraDims = RESOLUTIONS[cameraResolution] ?? RESOLUTIONS["720p"]!;
   // Select primitives individually — a selector that returns a fresh object
   // literal triggers React #185 because useSyncExternalStore's Object.is
   // snapshot check sees a new reference every render and loops forever.
@@ -2241,6 +2228,56 @@ export function InRoomScreen(props: InRoomScreenProps): ReactElement {
   useEffect(() => {
     micPipelineRef.current?.setVad(micProcessing.vadEnabled, micProcessing.inputSensitivity);
   }, [micProcessing.vadEnabled, micProcessing.inputSensitivity]);
+
+  // Live-apply the mic-processing toggles that CAN'T be tweaked in place —
+  // noise suppression, echo cancellation, AGC and mono all live in the
+  // getUserMedia constraints / RNNoise graph, so they need a fresh pipeline.
+  // Re-open with the current settings and swap the published track in place
+  // (replaceTrack — no renegotiation). Gain + VAD have their own live paths
+  // above, so they're NOT in the deps. Skips the initial mount (the join
+  // effect already opened the pipeline with these values).
+  const micReopenReady = useRef(false);
+  useEffect(() => {
+    if (!micReopenReady.current) {
+      micReopenReady.current = true;
+      return;
+    }
+    if (conn.phase !== "connected" || !props.selection.micDeviceId) return;
+    const micDeviceId = props.selection.micDeviceId;
+    let cancelled = false;
+    void (async () => {
+      try {
+        const pipeline = await openMicPipeline(micDeviceId, {
+          noiseSuppression: micProcessing.noiseSuppression,
+          echoCancellation: micProcessing.echoCancellation,
+          autoGainControl: micProcessing.autoGainControl,
+          gain: micProcessing.gain,
+          mono: micProcessing.mono,
+          vad: { enabled: micProcessing.vadEnabled, threshold: micProcessing.inputSensitivity },
+        });
+        if (cancelled) {
+          pipeline.close();
+          return;
+        }
+        const [track] = pipeline.stream.getAudioTracks();
+        if (track) await roomWrapper.replaceMicTrack(track);
+        micPipelineRef.current?.close();
+        micPipelineRef.current = pipeline;
+      } catch (err) {
+        // eslint-disable-next-line no-console
+        console.warn("[mic] live re-apply failed:", err);
+      }
+    })();
+    return () => {
+      cancelled = true;
+    };
+    // eslint-disable-next-line react-hooks/exhaustive-deps -- re-open only for NS/echo/AGC/mono; gain+VAD apply live above
+  }, [
+    micProcessing.noiseSuppression,
+    micProcessing.echoCancellation,
+    micProcessing.autoGainControl,
+    micProcessing.mono,
+  ]);
 
   // Server-initiated disconnect (owner removed us, owner deleted the room,
   // server shutdown) — show a banner for a beat then bounce back to lobby.
@@ -2486,10 +2523,24 @@ export function InRoomScreen(props: InRoomScreenProps): ReactElement {
     });
   }
 
+  // Live-apply camera resolution changes while the camera is on (mirrors the
+  // mic-gain live-apply): restart the video track at the new resolution. Only
+  // on an actual resolution change — not when the camera turns on (it already
+  // starts at the chosen resolution via handleToggleCamera).
+  const lastCamRes = useRef(cameraResolution);
+  useEffect(() => {
+    if (cameraOn && lastCamRes.current !== cameraResolution) {
+      void roomWrapper.restartCameraResolution(cameraDims).catch(() => {
+        /* best-effort — keep the current stream if the restart fails */
+      });
+    }
+    lastCamRes.current = cameraResolution;
+  }, [roomWrapper, cameraResolution, cameraDims, cameraOn]);
+
   function handleToggleCamera(): void {
     const next = !cameraOn;
     setPendingCam(next);
-    void roomWrapper.setCamera(next, cameraDeviceId ?? undefined).catch((err) => {
+    void roomWrapper.setCamera(next, cameraDeviceId ?? undefined, next ? cameraDims : undefined).catch((err) => {
       setPendingCam(null);
       if (err instanceof DOMException && err.name === "NotAllowedError") {
         pushToast({ kind: "error", text: "Camera permission denied", sub: "Allow camera access for this site, then try again." });

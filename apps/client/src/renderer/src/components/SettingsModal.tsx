@@ -510,10 +510,14 @@ function SpeakerTestButton({ deviceId }: { deviceId: string | null }): ReactElem
   );
 }
 
+// Same resolution ladder as the screenshare picker (join-selection RESOLUTIONS).
 const CAMERA_RES: Array<{ key: CameraResolution; label: string; w: number; h: number }> = [
-  { key: "480p", label: "640 × 480 · 30 fps", w: 640, h: 480 },
+  { key: "144p", label: "256 × 144 · 30 fps", w: 256, h: 144 },
+  { key: "240p", label: "426 × 240 · 30 fps", w: 426, h: 240 },
+  { key: "480p", label: "854 × 480 · 30 fps", w: 854, h: 480 },
   { key: "720p", label: "1280 × 720 · 30 fps", w: 1280, h: 720 },
   { key: "1080p", label: "1920 × 1080 · 30 fps", w: 1920, h: 1080 },
+  { key: "1440p", label: "2560 × 1440 · 30 fps", w: 2560, h: 1440 },
 ];
 
 // 3.1 / 3.1a — Video: camera select, live preview (released on stop/unmount),

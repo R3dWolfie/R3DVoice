@@ -79,12 +79,6 @@ function Router({ topPage, setTopPage }: { topPage: TopPage; setTopPage: (p: Top
   useEffect(() => {
     setCallMinimized(false);
   }, [activeRoomId]);
-  // Diagnostic (#35): if this logs activeRoomId=null mid-session, the store got
-  // reset (call drops because InRoomScreen unmounts).
-  useEffect(() => {
-    // eslint-disable-next-line no-console
-    console.log("[call] shell state — activeRoomId=%s minimized=%s", activeRoomId, callMinimized);
-  }, [activeRoomId, callMinimized]);
   const joinMicDeviceId = usePrefs((s) => s.micDeviceId);
   const joinSpeakerDeviceId = usePrefs((s) => s.speakerDeviceId);
   const joinResolution = usePrefs((s) => s.resolution);
