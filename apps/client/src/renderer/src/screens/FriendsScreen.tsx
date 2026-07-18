@@ -12,6 +12,7 @@ import { InviteCreateModal } from "../components/InviteCreateModal.js";
 import { MyInvitesList } from "../components/MyInvitesList.js";
 import { Modal } from "../components/Modal.js";
 import { PeerProfilePopover } from "../components/PeerProfilePopover.js";
+import { PresenceDot, formatLastSeen, type PresenceState } from "../components/presence.js";
 import { UserContextMenu } from "../components/UserContextMenu.js";
 import { useNotificationsStore } from "../lib/notifications-store.js";
 
@@ -161,7 +162,7 @@ export function FriendsScreen({ onJoinRoom, onOpenDms }: Props = {}): ReactEleme
           gap: "var(--s-3)",
         }}
       >
-        <span style={{ fontSize: "var(--t-base)", fontWeight: 600 }}>
+        <span style={{ fontSize: "var(--t-lg)", fontWeight: 600 }}>
           Friends{" "}
           <span className="rv-mono" style={{ fontSize: "var(--t-xs)", color: "var(--text-dim)", fontWeight: 500 }}>
             {accepted.length} · {online} online
@@ -321,8 +322,10 @@ export function FriendsScreen({ onJoinRoom, onOpenDms }: Props = {}): ReactEleme
             style={{
               margin: "var(--s-3) var(--s-6) 0",
               padding: "var(--s-3) var(--s-4)",
-              background: "var(--accent-tint)",
-              border: "1px solid color-mix(in srgb, var(--accent) 35%, var(--border))",
+              // Deck 2.2: an incoming request is a POSITIVE prompt → green tint,
+              // not the red accent used for alerts.
+              background: "color-mix(in srgb, var(--ok) 8%, transparent)",
+              border: "1px solid color-mix(in srgb, var(--ok) 35%, var(--border))",
               borderRadius: "var(--r-md)",
               display: "flex",
               alignItems: "center",
@@ -365,7 +368,11 @@ export function FriendsScreen({ onJoinRoom, onOpenDms }: Props = {}): ReactEleme
               <span className="rv-empty-hint">Add someone by @handle, or send them a room invite link.</span>
             </div>
           ) : (
-            accepted.map((f) => (
+            accepted.map((f) => {
+              // Prefer the server's coarse presence; fall back to the isOnline
+              // boolean on older servers that don't send presenceState yet.
+              const presenceState: PresenceState = f.presenceState ?? (f.isOnline ? "online" : "offline");
+              return (
               <div
                 key={f.friendshipId}
                 className="rv-list-item"
@@ -387,10 +394,17 @@ export function FriendsScreen({ onJoinRoom, onOpenDms }: Props = {}): ReactEleme
                     size={36}
                   />
                   <span
-                    className="rv-status"
-                    data-status={f.isOnline ? undefined : "offline"}
-                    style={{ position: "absolute", bottom: -1, right: -1, boxShadow: "0 0 0 2px var(--bg)" }}
-                  />
+                    style={{
+                      position: "absolute",
+                      bottom: -1,
+                      right: -1,
+                      display: "inline-flex",
+                      borderRadius: "50%",
+                      boxShadow: "0 0 0 2px var(--bg)",
+                    }}
+                  >
+                    <PresenceDot state={presenceState} size={10} />
+                  </span>
                 </div>
                 <div style={{ display: "flex", flexDirection: "column", gap: 2, minWidth: 0 }}>
                   <span style={{ fontSize: "var(--t-sm)", display: "flex", gap: 6, alignItems: "baseline" }}>
@@ -402,14 +416,16 @@ export function FriendsScreen({ onJoinRoom, onOpenDms }: Props = {}): ReactEleme
                     )}
                   </span>
                   <span style={{ fontSize: "var(--t-xs)", color: "var(--text-dim)" }}>
-                    {f.user.currentRoom ? (
+                    {presenceState === "dnd" ? (
+                      "Do Not Disturb"
+                    ) : f.user.currentRoom ? (
                       <>
                         in <span style={{ color: "var(--text)", fontWeight: 500 }}>{f.user.currentRoom.name}</span>
                       </>
-                    ) : f.isOnline ? (
+                    ) : presenceState === "online" ? (
                       "online"
                     ) : (
-                      "offline"
+                      formatLastSeen(f.lastSeenAt)
                     )}
                   </span>
                 </div>
@@ -450,7 +466,8 @@ export function FriendsScreen({ onJoinRoom, onOpenDms }: Props = {}): ReactEleme
                   </button>
                 </div>
               </div>
-            ))
+              );
+            })
           )}
 
           {accepted.length > 0 && (

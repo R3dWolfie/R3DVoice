@@ -11,6 +11,7 @@ import {
   unsubscribeAll,
   markOnline,
   markOffline,
+  isUserOnline,
   sendToUser,
   broadcastToThread,
   type ConnectedSocket,
@@ -112,12 +113,22 @@ export async function chatWsRoutes(app: FastifyInstance): Promise<void> {
     sock.on("close", () => {
       unsubscribeAll(conn);
       markOffline(conn);
+      // Was that this user's last live socket? markOffline already removed it,
+      // so isUserOnline now reflects the post-close state. Fully offline →
+      // stamp lastSeenAt for the friends-list "last seen 2h ago" label.
+      const nowOffline = !isUserOnline(userId);
       // Clear the user's currentRoomId on disconnect — otherwise crashed/
       // network-dropped clients leave their friends seeing them "in
       // <Room>" forever. We also broadcast presence.update so friends'
       // friend cards refresh immediately.
       void (async () => {
         try {
+          if (nowOffline) {
+            // Best-effort — user row may have been deleted mid-session.
+            await prisma.user
+              .update({ where: { id: userId }, data: { lastSeenAt: new Date() } })
+              .catch(() => undefined);
+          }
           const before = await prisma.user.findUnique({
             where: { id: userId },
             select: { currentRoomId: true },

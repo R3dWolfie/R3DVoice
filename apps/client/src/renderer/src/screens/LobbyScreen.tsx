@@ -1,5 +1,5 @@
-import { useEffect, useMemo, useRef, useState, useSyncExternalStore, type FormEvent, type ReactElement } from "react";
-import type { RoomDTO } from "@r3dvoice/shared";
+import { useCallback, useEffect, useMemo, useRef, useState, useSyncExternalStore, type FormEvent, type ReactElement } from "react";
+import type { FriendDTO, RoomDTO } from "@r3dvoice/shared";
 import { ApiClient } from "../lib/api.js";
 import { createRoomsStore, extractInviteCode, type RoomsState } from "../lib/rooms-store.js";
 import { useAuthStore } from "../lib/auth-context.js";
@@ -17,6 +17,7 @@ import { PublicRoomsModal } from "../components/PublicRoomsModal.js";
 import { InRoomScreen } from "./InRoomScreen.js";
 import { buildJoinSelection, type JoinSelection } from "../lib/join-selection.js";
 import { InvitePreviewScreen } from "./InvitePreviewScreen.js";
+import { LiveActivityRow, type LiveRoom } from "../components/LiveActivityRow.js";
 
 function useRoomsStore<T>(store: ReturnType<typeof createRoomsStore>, selector: (s: RoomsState) => T): T {
   return useSyncExternalStore(store.subscribe, () => selector(store.getState()), () => selector(store.getState()));
@@ -114,6 +115,23 @@ export function LobbyScreen({ pendingInviteCode, pendingJoinRoomId, onInviteCode
   const favoriteRoomIds = usePrefs((s) => s.favoriteRoomIds);
   // Unread/mention badges on room rows — the store is keyed room:<id>.
   const unreadCounts = useUnreadStore((s) => s.counts);
+
+  // Friends power the "live · people talking now" feed highlight (2.1): a
+  // friend's presence carries `currentRoom`, so we can surface rooms where
+  // friends are talking right now. Refetched on presence.update below.
+  const [friends, setFriends] = useState<FriendDTO[]>([]);
+  const loadFriends = useCallback((): void => {
+    const api = new ApiClient(serverUrl);
+    api.setToken(token);
+    void api
+      .friends()
+      .then((r) => setFriends(r.friends.filter((f) => f.status === "accepted")))
+      .catch(() => {});
+  }, [serverUrl, token]);
+  useEffect(() => {
+    loadFriends();
+  }, [loadFriends]);
+
   useEffect(() => {
     void store.getState().refresh();
   }, [store]);
@@ -232,14 +250,17 @@ export function LobbyScreen({ pendingInviteCode, pendingJoinRoomId, onInviteCode
     const off = t.on((event) => {
       if (event.type === "presence.update") {
         if (timer) clearTimeout(timer);
-        timer = setTimeout(() => void store.getState().refresh(), 800);
+        timer = setTimeout(() => {
+          void store.getState().refresh();
+          loadFriends();
+        }, 800);
       }
     });
     return () => {
       off();
       if (timer) clearTimeout(timer);
     };
-  }, [store]);
+  }, [store, loadFriends]);
 
   // Close the + menu on outside click.
   useEffect(() => {
@@ -366,6 +387,29 @@ export function LobbyScreen({ pendingInviteCode, pendingJoinRoomId, onInviteCode
   ]
     .sort((a, b) => b.at - a.at)
     .slice(0, 25);
+
+  // "Live now" highlight (2.1 centerpiece): rooms with people talking right
+  // now, derived from friend presence (`currentRoom`) and our own rooms'
+  // occupancy (`inCall`). Omitted entirely when nothing is live.
+  const liveRooms: LiveRoom[] = (() => {
+    const map = new Map<string, LiveRoom>();
+    for (const f of friends) {
+      const cr = f.user.currentRoom;
+      if (!cr) continue;
+      const existing = map.get(cr.id);
+      if (existing) existing.friends.push(f);
+      else map.set(cr.id, { roomId: cr.id, name: cr.name, friends: [f], inCall: 0 });
+    }
+    for (const r of [...owned, ...recent]) {
+      const n = r.inCall ?? 0;
+      if (n <= 0) continue;
+      const existing = map.get(r.id);
+      if (existing) existing.inCall = Math.max(existing.inCall, n);
+      else map.set(r.id, { roomId: r.id, name: r.name, friends: [], inCall: n });
+    }
+    for (const lr of map.values()) lr.inCall = Math.max(lr.inCall, lr.friends.length);
+    return [...map.values()].filter((lr) => lr.inCall > 0);
+  })();
 
   const copyRoomLink = (roomId: string): void => {
     const url = `${serverUrl.replace(/\/$/, "")}/join/${roomId}`;
@@ -662,19 +706,55 @@ export function LobbyScreen({ pendingInviteCode, pendingJoinRoomId, onInviteCode
         {online !== "down" && <div />}
 
         <div className="rv-scroll" style={{ overflow: "auto", paddingTop: "var(--s-4)" }}>
-          <div
-            style={{
-              padding: "var(--s-2) var(--s-8) var(--s-2)",
-              display: "flex",
-              alignItems: "baseline",
-              gap: "var(--s-3)",
-            }}
-          >
-            <span className="rv-label" style={{ fontSize: "var(--t-2xs)" }}>Activity</span>
-            <span className="rv-mono" style={{ fontSize: "var(--t-2xs)", color: "var(--text-faint)" }}>
-              recent
-            </span>
-          </div>
+          {liveRooms.length > 0 && (
+            <>
+              <div
+                style={{
+                  padding: "var(--s-2) var(--s-8) var(--s-2)",
+                  display: "flex",
+                  alignItems: "center",
+                  gap: "var(--s-3)",
+                }}
+              >
+                <span
+                  aria-hidden
+                  style={{ width: 6, height: 6, borderRadius: "50%", background: "var(--ok)", flexShrink: 0 }}
+                />
+                <span className="rv-label" style={{ fontSize: "var(--t-2xs)", color: "var(--ok)" }}>
+                  Live now
+                </span>
+                <span className="rv-mono" style={{ fontSize: "var(--t-2xs)", color: "var(--text-faint)" }}>
+                  people talking now · {liveRooms.length}
+                </span>
+              </div>
+              {liveRooms.map((lr) => (
+                <LiveActivityRow
+                  key={`live-${lr.roomId}`}
+                  room={lr}
+                  joining={joiningId === lr.roomId}
+                  onJoin={() => void attemptJoin(lr.roomId)}
+                />
+              ))}
+            </>
+          )}
+
+          {feed.length > 0 && (
+            <div
+              style={{
+                padding: "var(--s-2) var(--s-8) var(--s-2)",
+                display: "flex",
+                alignItems: "baseline",
+                gap: "var(--s-3)",
+                borderTop: liveRooms.length > 0 ? "1px solid var(--border-soft)" : "none",
+                marginTop: liveRooms.length > 0 ? "var(--s-3)" : 0,
+              }}
+            >
+              <span className="rv-label" style={{ fontSize: "var(--t-2xs)" }}>Activity</span>
+              <span className="rv-mono" style={{ fontSize: "var(--t-2xs)", color: "var(--text-faint)" }}>
+                recent
+              </span>
+            </div>
+          )}
 
           {error && (
             <div style={{ padding: "0 var(--s-8) var(--s-3)" }}>
@@ -685,12 +765,12 @@ export function LobbyScreen({ pendingInviteCode, pendingJoinRoomId, onInviteCode
             </div>
           )}
 
-          {feed.length === 0 ? (
+          {feed.length === 0 && liveRooms.length === 0 ? (
             <div className="rv-empty" style={{ paddingTop: "var(--s-10)" }}>
               <span className="rv-empty-title">Nothing here yet</span>
               <span className="rv-empty-hint">Create a room or join one — your activity shows up here.</span>
             </div>
-          ) : (
+          ) : feed.length === 0 ? null : (
             feed.map((f, i) => (
               <div
                 key={f.key}

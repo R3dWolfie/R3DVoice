@@ -46,6 +46,10 @@ model User {
   handle      String?
   handleLower String?  @unique
   dndUntil    DateTime?
+  // Last moment this user had at least one live WebSocket, stamped when their
+  // final socket closes (they go fully offline). Powers the friends list
+  // "last seen 2h ago" label. Null until the first disconnect.
+  lastSeenAt  DateTime?
   avatarUrl   String?
   currentRoomId   String?
   currentRoom     Room?    @relation("UserCurrentRoom", fields: [currentRoomId], references: [id], onDelete: SetNull)

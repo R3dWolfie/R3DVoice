@@ -35,6 +35,10 @@ export function RoomSettingsModal({
   const meId = useAuthStore((s) => s.user?.id);
   const [tab, setTab] = useState<Tab>("overview");
   const [error, setError] = useState<string | null>(null);
+  // Nav-rail count badges (deck 4.9: "Members 12" / "Invites 3"). Re-fetched on
+  // tab switches so kicks / new links keep the badges roughly in sync.
+  const [memberCount, setMemberCount] = useState<number | null>(null);
+  const [inviteCount, setInviteCount] = useState<number | null>(null);
 
   const api = useCallback(() => {
     const a = new ApiClient(serverUrl);
@@ -44,12 +48,40 @@ export function RoomSettingsModal({
 
   const isOwner = room.isOwner;
 
-  const navItem = (key: Tab, label: string, danger?: boolean): ReactElement => (
+  useEffect(() => {
+    let cancelled = false;
+    void api()
+      .listRoomMembers(room.id)
+      .then((m) => {
+        if (!cancelled) setMemberCount(m.length);
+      })
+      .catch(() => {});
+    if (isOwner) {
+      void api()
+        .listMyInvites()
+        .then((r) => {
+          if (!cancelled)
+            setInviteCount(
+              r.invites.filter((i) => i.targetRoomId === room.id && i.revokedAt === null).length,
+            );
+        })
+        .catch(() => {});
+    }
+    return () => {
+      cancelled = true;
+    };
+  }, [api, room.id, isOwner, tab]);
+
+  const navItem = (
+    key: Tab,
+    label: string,
+    opts?: { danger?: boolean; count?: number | null },
+  ): ReactElement => (
     <button
       key={key}
       type="button"
       className="rv-menu-item"
-      data-tone={danger ? "danger" : undefined}
+      data-tone={opts?.danger ? "danger" : undefined}
       onClick={() => setTab(key)}
       style={{
         fontWeight: tab === key ? 600 : 500,
@@ -57,8 +89,24 @@ export function RoomSettingsModal({
       }}
     >
       {label}
+      {opts?.count != null && (
+        <span className="rv-mono" style={{ marginLeft: "auto", fontSize: "var(--t-2xs)", color: "var(--text-faint)" }}>
+          {opts.count}
+        </span>
+      )}
     </button>
   );
+
+  const paneTitle =
+    tab === "overview"
+      ? "Overview"
+      : tab === "members"
+        ? "Members"
+        : tab === "invites"
+          ? "Invites"
+          : isOwner
+            ? "Delete room"
+            : "Leave room";
 
   return (
     <Modal
@@ -67,23 +115,33 @@ export function RoomSettingsModal({
       title={room.name}
       subtitle={isOwner ? "Room settings · you own this room" : "Room settings"}
       width="min(94vw, 640px)"
+      hideHeader
     >
-      <div style={{ display: "grid", gridTemplateColumns: "160px 1fr", minHeight: 340 }}>
+      <div style={{ display: "grid", gridTemplateColumns: "180px 1fr", height: "min(500px, 78vh)" }}>
         <nav
           style={{
             borderRight: "1px solid var(--border-soft)",
-            padding: "var(--s-3) var(--s-2)",
+            padding: "var(--s-4) 0",
             display: "flex",
             flexDirection: "column",
-            gap: 2,
+            minHeight: 0,
           }}
         >
-          {navItem("overview", "Overview")}
-          {navItem("members", "Members")}
-          {isOwner && navItem("invites", "Invites")}
-          {isOwner ? navItem("delete", "Delete room", true) : navItem("delete", "Leave room", true)}
+          <div className="rv-label" style={{ padding: "0 var(--s-4) var(--s-3)" }}>Room</div>
+          <div
+            className="rv-scroll"
+            style={{ display: "flex", flexDirection: "column", gap: 2, padding: "0 var(--s-2)", overflowY: "auto", minHeight: 0 }}
+          >
+            {navItem("overview", "Overview")}
+            {navItem("members", "Members", { count: memberCount })}
+            {isOwner && navItem("invites", "Invites", { count: inviteCount })}
+            {isOwner ? navItem("delete", "Delete room", { danger: true }) : navItem("delete", "Leave room", { danger: true })}
+          </div>
+          <RoomIdentityFoot room={room} isOwner={isOwner} />
         </nav>
-        <div className="rv-scroll" style={{ padding: "var(--s-5) var(--s-6)", overflowY: "auto", minHeight: 0 }}>
+        <div style={{ display: "grid", gridTemplateRows: "auto 1fr", minHeight: 0 }}>
+          <PaneHead title={paneTitle} onClose={onClose} />
+          <div className="rv-scroll" style={{ padding: "var(--s-5) var(--s-6)", overflowY: "auto", minHeight: 0 }}>
           {error && (
             <div className="rv-err-banner" role="alert" style={{ marginBottom: "var(--s-4)" }}>
               <span className="ic">!</span>
@@ -121,9 +179,71 @@ export function RoomSettingsModal({
               onCancel={() => setTab("overview")}
             />
           )}
+          </div>
         </div>
       </div>
     </Modal>
+  );
+}
+
+// Per-pane header (deck .pane-head): 18px pane title + close-✕, bordered below.
+function PaneHead({ title, onClose }: { title: string; onClose: () => void }): ReactElement {
+  return (
+    <div
+      style={{
+        display: "flex",
+        alignItems: "center",
+        justifyContent: "space-between",
+        gap: "var(--s-3)",
+        padding: "var(--s-4) var(--s-6) var(--s-3)",
+        borderBottom: "1px solid var(--border-soft)",
+        flexShrink: 0,
+      }}
+    >
+      <span style={{ fontSize: "var(--t-lg)", fontWeight: 600, letterSpacing: "-0.005em", color: "var(--text)" }}>
+        {title}
+      </span>
+      <button className="rv-btn rv-btn-icon" data-variant="ghost" onClick={onClose} aria-label="Close">
+        <I.X size={16} />
+      </button>
+    </div>
+  );
+}
+
+// Nav-rail identity foot (deck .nav-foot) — room avatar + name + owner/member
+// role, pinned to the bottom of the rail.
+function RoomIdentityFoot({ room, isOwner }: { room: RoomDTO; isOwner: boolean }): ReactElement {
+  return (
+    <div
+      style={{
+        marginTop: "auto",
+        display: "flex",
+        alignItems: "center",
+        gap: "var(--s-3)",
+        padding: "var(--s-3) var(--s-4)",
+        borderTop: "1px solid var(--border-soft)",
+        minWidth: 0,
+      }}
+    >
+      <Avatar src={null} fallbackInitials={room.name} fallbackColorSeed={room.id} size={32} shape="rounded" />
+      <div style={{ display: "flex", flexDirection: "column", minWidth: 0 }}>
+        <span
+          style={{
+            fontSize: "var(--t-sm)",
+            fontWeight: 600,
+            color: "var(--text)",
+            overflow: "hidden",
+            textOverflow: "ellipsis",
+            whiteSpace: "nowrap",
+          }}
+        >
+          {room.name}
+        </span>
+        <span className="rv-label" style={{ fontSize: "var(--t-2xs)" }}>
+          {isOwner ? "Owner" : "Member"}
+        </span>
+      </div>
+    </div>
   );
 }
 

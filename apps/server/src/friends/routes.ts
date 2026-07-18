@@ -17,6 +17,11 @@ interface FriendDTO {
   status: "pending-incoming" | "pending-outgoing" | "accepted" | "blocked";
   user: { id: string; displayName: string; email: string; handle: string | null; currentRoom: { id: string; name: string } | null };
   isOnline: boolean;
+  // Coarse presence for the list (2.2): "online" | "dnd" | "offline". Derived
+  // from the live socket set + dndUntil; "offline" when they have no socket.
+  presenceState: "online" | "dnd" | "offline";
+  // ISO timestamp of when they were last online, or null if never recorded.
+  lastSeenAt: string | null;
   requestedAt: string;
   respondedAt: string | null;
 }
@@ -38,6 +43,8 @@ export async function friendsRoutes(app: FastifyInstance): Promise<void> {
               displayName: true,
               email: true,
               handle: true,
+              dndUntil: true,
+              lastSeenAt: true,
               currentRoom: { select: { id: true, name: true } },
             },
           },
@@ -47,6 +54,8 @@ export async function friendsRoutes(app: FastifyInstance): Promise<void> {
               displayName: true,
               email: true,
               handle: true,
+              dndUntil: true,
+              lastSeenAt: true,
               currentRoom: { select: { id: true, name: true } },
             },
           },
@@ -67,6 +76,15 @@ export async function friendsRoutes(app: FastifyInstance): Promise<void> {
         } else {
           status = "accepted";
         }
+        const online = isUserOnline(other.id);
+        // dnd only applies while they're online AND their DND window is still
+        // in the future; otherwise online → "online", no socket → "offline".
+        const inDnd = other.dndUntil != null && other.dndUntil.getTime() > Date.now();
+        const presenceState: FriendDTO["presenceState"] = online
+          ? inDnd
+            ? "dnd"
+            : "online"
+          : "offline";
         return {
           friendshipId: f.id,
           status,
@@ -77,7 +95,9 @@ export async function friendsRoutes(app: FastifyInstance): Promise<void> {
             handle: other.handle ?? null,
             currentRoom: other.currentRoom ?? null,
           },
-          isOnline: isUserOnline(other.id),
+          isOnline: online,
+          presenceState,
+          lastSeenAt: other.lastSeenAt?.toISOString() ?? null,
           requestedAt: f.requestedAt.toISOString(),
           respondedAt: f.respondedAt?.toISOString() ?? null,
         };

@@ -94,7 +94,28 @@ export function VerifyEmailGate(): ReactElement {
             )}
           </button>
           {note && <div style={{ fontSize: "var(--t-xs)", color: "var(--text-mid)" }}>{note}</div>}
+          {/* 1.5 escape hatch: bail on this address entirely. Same logout path as
+              Sign out, so it drops back to register/login for a fresh email. */}
           <button className="rv-btn" data-variant="ghost" onClick={() => void logout()} style={{ height: "2.25rem" }}>
+            Use a different email
+          </button>
+          <button
+            type="button"
+            onClick={() => void logout()}
+            style={{
+              alignSelf: "center",
+              marginTop: "var(--s-1)",
+              background: "none",
+              border: "none",
+              padding: 0,
+              color: "var(--text-dim)",
+              font: "inherit",
+              fontSize: "var(--t-xs)",
+              textDecoration: "underline",
+              textUnderlineOffset: 2,
+              cursor: "pointer",
+            }}
+          >
             Sign out
           </button>
         </div>

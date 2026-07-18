@@ -39,6 +39,27 @@ export function presenceMeta(state: PresenceState): { label: string; color: stri
 }
 
 /**
+ * Relative "last seen" for an offline friend's status line (WireFrames 2.2:
+ * "offline · last seen 2h ago"). Falls back to a bare "offline" when the server
+ * gives us no timestamp. Buckets: <1m → "just now", then minutes / hours / days,
+ * else a short date.
+ */
+export function formatLastSeen(lastSeenAt: string | null | undefined): string {
+  if (!lastSeenAt) return "offline";
+  const then = new Date(lastSeenAt).getTime();
+  if (Number.isNaN(then)) return "offline";
+  const ms = Date.now() - then;
+  const mins = Math.floor(ms / 60_000);
+  if (mins < 1) return "last seen just now";
+  if (mins < 60) return `last seen ${mins}m ago`;
+  const hours = Math.floor(mins / 60);
+  if (hours < 24) return `last seen ${hours}h ago`;
+  const days = Math.floor(hours / 24);
+  if (days < 30) return `last seen ${days}d ago`;
+  return `last seen ${new Date(then).toLocaleDateString(undefined, { month: "short", day: "numeric" })}`;
+}
+
+/**
  * True after `thresholdMs` with no pointer/keyboard activity, or whenever the
  * window is hidden/minimized. Resets on any interaction.
  */

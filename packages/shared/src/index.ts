@@ -266,6 +266,14 @@ export interface FriendDTO {
     currentRoom?: { id: string; name: string } | null;
   };
   isOnline: boolean;
+  /**
+   * Coarse presence for the friends list (2.2). Idle needs client self-reporting
+   * so the server only distinguishes these three; the UI still has an idle state
+   * for the local user. Absent on older servers → fall back to isOnline.
+   */
+  presenceState?: "online" | "dnd" | "offline";
+  /** When this friend was last seen online, for "last seen 2h ago". */
+  lastSeenAt?: string | null;
   requestedAt: string;
   respondedAt: string | null;
 }

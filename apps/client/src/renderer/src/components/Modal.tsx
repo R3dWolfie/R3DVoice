@@ -14,6 +14,7 @@ export function Modal({
   icon,
   footer,
   dismissible = true,
+  hideHeader = false,
   width = "min(94vw, 720px)",
   children,
 }: {
@@ -26,6 +27,9 @@ export function Modal({
   /** Footer band content (deck: hint left, actions right). */
   footer?: ReactNode;
   dismissible?: boolean;
+  /** Drop the built-in title header (the surface supplies its own chrome,
+      e.g. the Settings / Room-settings nav-rail + per-pane header). */
+  hideHeader?: boolean;
   width?: string;
   children: ReactNode;
 }): ReactElement | null {
@@ -108,7 +112,7 @@ export function Modal({
         ref={contentRef}
         role="dialog"
         aria-modal="true"
-        aria-labelledby={titleId}
+        {...(hideHeader ? { "aria-label": title } : { "aria-labelledby": titleId })}
         tabIndex={-1}
         onClick={(e) => e.stopPropagation()}
         style={{
@@ -119,11 +123,18 @@ export function Modal({
           borderRadius: "var(--r-xl)",
           boxShadow: "var(--shadow-3)",
           display: "grid",
-          gridTemplateRows: footer ? "auto 1fr auto" : "auto 1fr",
+          gridTemplateRows: hideHeader
+            ? footer
+              ? "1fr auto"
+              : "1fr"
+            : footer
+              ? "auto 1fr auto"
+              : "auto 1fr",
           overflow: "hidden",
           animation: "rv-modal-in var(--d-mid) var(--ease-out) both",
         }}
       >
+        {!hideHeader && (
         <header
           style={{
             padding: "var(--s-5) var(--s-6) var(--s-4)",
@@ -174,6 +185,7 @@ export function Modal({
             </button>
           )}
         </header>
+        )}
         <div style={{ overflow: "auto", minHeight: 0 }} className="rv-scroll">
           {children}
         </div>

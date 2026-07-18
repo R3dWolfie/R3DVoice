@@ -48,80 +48,149 @@ const kbdStyle: CSSProperties = {
   color: "var(--text)",
 };
 
+// Deck 3.x pane titles — the per-pane header (.pane-title) shows the active
+// tab's name, sized at the deck's 18px page-title tier (var(--t-lg)).
+const SETTINGS_TAB_TITLES: Record<Tab, string> = {
+  devices: "Devices",
+  keybinds: "Keybinds",
+  account: "Account",
+  theme: "Appearance",
+  notifications: "Notifications",
+  compat: "Advanced",
+  about: "About",
+};
+
 export function SettingsModal({ onClose }: { onClose: () => void }): ReactElement {
   const [tab, setTab] = useState<Tab>("devices");
 
   return (
-    <Modal open={true} onClose={onClose} title="Settings">
+    <Modal open={true} onClose={onClose} title="Settings" hideHeader width="min(94vw, 760px)">
       {/* Clamp to the viewport so the modal never clips off-screen and only
           the tab pane scrolls (single scrollbar). */}
-      <div style={{ display: "grid", gridTemplateColumns: "200px 1fr", height: "min(540px, calc(82vh - 6rem))" }}>
-        {/* Side nav */}
+      <div style={{ display: "grid", gridTemplateColumns: "200px 1fr", height: "min(560px, 80vh)" }}>
+        {/* Left nav rail — mono head, items, identity foot pinned to the bottom */}
         <nav
           style={{
             borderRight: "1px solid var(--border-soft)",
-            padding: "var(--s-4) var(--s-3)",
+            padding: "var(--s-4) 0",
             display: "flex",
             flexDirection: "column",
-            gap: 2,
+            minHeight: 0,
           }}
         >
-          <NavButton
-            active={tab === "devices"}
-            onClick={() => setTab("devices")}
-            icon={<I.Mic size={14} />}
-            label="Devices"
-          />
-          <NavButton
-            active={tab === "keybinds"}
-            onClick={() => setTab("keybinds")}
-            icon={<I.Settings size={14} />}
-            label="Keybinds"
-          />
-          <NavButton
-            active={tab === "account"}
-            onClick={() => setTab("account")}
-            icon={<I.Logout size={14} />}
-            label="Account"
-          />
-          <NavButton
-            active={tab === "theme"}
-            onClick={() => setTab("theme")}
-            icon={<I.StarFilled size={14} />}
-            label="Theme"
-          />
-          <NavButton
-            active={tab === "notifications"}
-            onClick={() => setTab("notifications")}
-            icon={<I.Bell size={14} />}
-            label="Notifications"
-          />
-          <NavButton
-            active={tab === "compat"}
-            onClick={() => setTab("compat")}
-            icon={<I.Grid size={14} />}
-            label="Advanced"
-          />
-          <NavButton
-            active={tab === "about"}
-            onClick={() => setTab("about")}
-            icon={<I.Star size={14} />}
-            label="About"
-          />
+          <div className="rv-label" style={{ padding: "0 var(--s-4) var(--s-3)" }}>Settings</div>
+          <div
+            className="rv-scroll"
+            style={{ display: "flex", flexDirection: "column", gap: 2, padding: "0 var(--s-3)", overflowY: "auto", minHeight: 0 }}
+          >
+            <NavButton active={tab === "devices"} onClick={() => setTab("devices")} icon={<I.Mic size={14} />} label="Devices" />
+            <NavButton active={tab === "keybinds"} onClick={() => setTab("keybinds")} icon={<I.Settings size={14} />} label="Keybinds" />
+            <NavButton active={tab === "account"} onClick={() => setTab("account")} icon={<I.Logout size={14} />} label="Account" />
+            <NavButton active={tab === "theme"} onClick={() => setTab("theme")} icon={<I.StarFilled size={14} />} label="Appearance" />
+            <NavButton active={tab === "notifications"} onClick={() => setTab("notifications")} icon={<I.Bell size={14} />} label="Notifications" />
+            <NavButton active={tab === "compat"} onClick={() => setTab("compat")} icon={<I.Grid size={14} />} label="Advanced" />
+            <NavButton active={tab === "about"} onClick={() => setTab("about")} icon={<I.Star size={14} />} label="About" />
+          </div>
+          <SettingsIdentityFoot />
         </nav>
 
-        {/* Body */}
-        <div className="rv-scroll" style={{ padding: "var(--s-6) var(--s-7)", overflowY: "auto", minHeight: 0 }}>
-          {tab === "devices" && <DevicesTab />}
-          {tab === "keybinds" && <KeybindsTab />}
-          {tab === "account" && <AccountTab onClose={onClose} />}
-          {tab === "theme" && <ThemeTab />}
-          {tab === "notifications" && <NotificationsTab />}
-          {tab === "compat" && <CompatTab />}
-          {tab === "about" && <AboutTab />}
+        {/* Right pane — per-tab header (.pane-head) over the scrollable body */}
+        <div style={{ display: "grid", gridTemplateRows: "auto 1fr", minHeight: 0 }}>
+          <PaneHead title={SETTINGS_TAB_TITLES[tab]} onClose={onClose} />
+          <div className="rv-scroll" style={{ padding: "var(--s-6) var(--s-7)", overflowY: "auto", minHeight: 0 }}>
+            {tab === "devices" && <DevicesTab />}
+            {tab === "keybinds" && <KeybindsTab />}
+            {tab === "account" && <AccountTab onClose={onClose} />}
+            {tab === "theme" && <ThemeTab />}
+            {tab === "notifications" && <NotificationsTab />}
+            {tab === "compat" && <CompatTab />}
+            {tab === "about" && <AboutTab />}
+          </div>
         </div>
       </div>
     </Modal>
+  );
+}
+
+// Per-pane header (deck .pane-head): 18px pane title + close-✕, bordered below.
+function PaneHead({ title, onClose }: { title: string; onClose: () => void }): ReactElement {
+  return (
+    <div
+      style={{
+        display: "flex",
+        alignItems: "center",
+        justifyContent: "space-between",
+        gap: "var(--s-3)",
+        padding: "var(--s-4) var(--s-6) var(--s-3)",
+        borderBottom: "1px solid var(--border-soft)",
+        flexShrink: 0,
+      }}
+    >
+      <span style={{ fontSize: "var(--t-lg)", fontWeight: 600, letterSpacing: "-0.005em", color: "var(--text)" }}>
+        {title}
+      </span>
+      <button className="rv-btn rv-btn-icon" data-variant="ghost" onClick={onClose} aria-label="Close">
+        <I.X size={16} />
+      </button>
+    </div>
+  );
+}
+
+// Nav-rail identity foot (deck .nav-foot) — signed-in user pinned to the bottom
+// of the rail: avatar + presence dot, display name, @handle.
+function SettingsIdentityFoot(): ReactElement {
+  const user = useAuthStore((s) => s.user);
+  const presence = usePresence();
+  return (
+    <div
+      style={{
+        marginTop: "auto",
+        display: "flex",
+        alignItems: "center",
+        gap: "var(--s-3)",
+        padding: "var(--s-3) var(--s-4)",
+        borderTop: "1px solid var(--border-soft)",
+        minWidth: 0,
+      }}
+    >
+      <span style={{ position: "relative", flexShrink: 0, display: "inline-flex" }}>
+        <Avatar
+          src={user?.avatarUrl ?? null}
+          fallbackInitials={user?.displayName ?? ""}
+          fallbackColorSeed={user?.id ?? ""}
+          size={32}
+        />
+        <span style={{ position: "absolute", bottom: -1, right: -1 }}>
+          <PresenceDot state={presence.state} size={10} />
+        </span>
+      </span>
+      <div style={{ display: "flex", flexDirection: "column", minWidth: 0 }}>
+        <span
+          style={{
+            fontSize: "var(--t-sm)",
+            fontWeight: 600,
+            color: "var(--text)",
+            overflow: "hidden",
+            textOverflow: "ellipsis",
+            whiteSpace: "nowrap",
+          }}
+        >
+          {user?.displayName ?? "(unknown)"}
+        </span>
+        <span
+          className="rv-mono"
+          style={{
+            fontSize: "var(--t-2xs)",
+            color: "var(--text-dim)",
+            overflow: "hidden",
+            textOverflow: "ellipsis",
+            whiteSpace: "nowrap",
+          }}
+        >
+          {user?.handle ? `@${user.handle}` : (user?.email ?? "")}
+        </span>
+      </div>
+    </div>
   );
 }
 
