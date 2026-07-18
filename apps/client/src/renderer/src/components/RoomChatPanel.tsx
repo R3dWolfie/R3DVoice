@@ -186,6 +186,9 @@ interface Props {
   variant?: "overlay" | "fill" | "dock";
   /** Channel name for the composer placeholder ("Message #<name>…"). */
   channelName?: string | undefined;
+  /** DM peer's display name — labels the overlay header so an Open-DM panel
+   *  reads as a conversation with that person rather than the generic chrome. */
+  peerName?: string | undefined;
 }
 
 // Persistent chat panel backed by REST + WebSocket (P5 T20).
@@ -201,6 +204,7 @@ export function RoomChatPanel({
   mentionCandidates = [],
   variant = "overlay",
   channelName,
+  peerName,
 }: Props): ReactElement {
   const serverUrl = useAuthStore((s) => s.serverUrl);
   const token = useAuthStore((s) => s.token);
@@ -893,14 +897,19 @@ export function RoomChatPanel({
             justifyContent: "space-between",
           }}
         >
-          <div style={{ display: "flex", alignItems: "center", gap: "var(--s-2)" }}>
+          <div style={{ display: "flex", alignItems: "center", gap: "var(--s-2)", minWidth: 0 }}>
             <I.Chat size={14} />
-            <span className="rv-label">Room chat</span>
+            <span
+              className="rv-label"
+              style={{ overflow: "hidden", textOverflow: "ellipsis", whiteSpace: "nowrap" }}
+            >
+              {threadType === "dm" ? (peerName ?? "Direct message") : "Room chat"}
+            </span>
             <span
               className="rv-mono"
-              style={{ fontSize: "var(--t-2xs)", color: "var(--text-faint)" }}
+              style={{ fontSize: "var(--t-2xs)", color: "var(--text-faint)", flexShrink: 0 }}
             >
-              persistent
+              {threadType === "dm" ? "direct" : "persistent"}
             </span>
           </div>
           <button

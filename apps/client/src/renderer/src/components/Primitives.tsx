@@ -1,4 +1,5 @@
 import { useEffect, useRef, useState, type CSSProperties, type ReactElement, type ReactNode } from "react";
+import { UpdateButton } from "./UpdateButton.js";
 
 // Vite-injected at build time from apps/client/package.json.
 declare const __APP_VERSION__: string;
@@ -28,6 +29,7 @@ export function WindowChrome({
           <span className="rv-titlebar-title">{title}</span>
         </div>
         <div className="rv-titlebar-right" style={{ display: "flex", alignItems: "center", gap: "var(--s-3)" }}>
+          <UpdateButton />
           {IS_WEB && <DownloadMenu />}
           <span className="rv-titlebar-title" style={{ opacity: 0.6 }}>
             {version}

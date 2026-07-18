@@ -31,3 +31,19 @@ export async function fetchMinClientVersion(serverUrl: string): Promise<string |
     return null;
   }
 }
+
+/**
+ * Fetch the server's own (latest) build version, or null on any failure. Drives
+ * the ambient, non-blocking "update available" affordance — unlike
+ * fetchMinClientVersion, this never gates the app.
+ */
+export async function fetchLatestClientVersion(serverUrl: string): Promise<string | null> {
+  try {
+    const res = await fetch(`${serverUrl.replace(/\/$/, "")}/health`, { cache: "no-store" });
+    if (!res.ok) return null;
+    const body = (await res.json()) as { latestClientVersion?: unknown };
+    return typeof body.latestClientVersion === "string" ? body.latestClientVersion : null;
+  } catch {
+    return null;
+  }
+}

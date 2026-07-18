@@ -206,12 +206,14 @@ async function captureLinuxMonitorSource(
   const findTarget = (devices: MediaDeviceInfo[]): MediaDeviceInfo | undefined => {
     if (preferLabelContains) {
       const needle = preferLabelContains.toLowerCase();
-      const t = devices.find(
+      // ONLY the venmic device when routing was set up. Falling back to a raw
+      // system-mix monitor here captures R3DVoice's OWN playback too → the
+      // sharer echoes everyone back. Better to get no share-audio than an echo.
+      return devices.find(
         (d) => d.kind === "audioinput" && d.label.toLowerCase().includes(needle),
       );
-      if (t) return t;
     }
-    // Fallback: any monitor source (system mix).
+    // No venmic routing (it failed to link) — last-ditch system-mix monitor.
     const monitors = devices.filter(
       (d) => d.kind === "audioinput" && /monitor/i.test(d.label),
     );

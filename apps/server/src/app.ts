@@ -7,6 +7,7 @@ import fastifyStatic from "@fastify/static";
 import compress from "@fastify/compress";
 import { registerErrorHandler } from "./errors.js";
 import { getConfig } from "./config.js";
+import { SERVER_VERSION } from "./version.js";
 import { authRoutes } from "./auth/routes.js";
 import { roomRoutes } from "./rooms/routes.js";
 import { chatRoutes } from "./chat/routes.js";
@@ -47,6 +48,9 @@ export async function buildApp(options: BuildAppOptions = {}): Promise<FastifyIn
     status: "ok",
     // The client polls this to enforce the required-update gate.
     minClientVersion: getConfig().MIN_CLIENT_VERSION,
+    // The server's own build version — surfaced by the ambient, non-blocking
+    // in-app "update available" affordance (distinct from the floor above).
+    latestClientVersion: SERVER_VERSION,
   }));
 
   // Uploaded files (avatars, message attachments) — written by the upload

@@ -123,6 +123,14 @@ export function Modal({
           borderRadius: "var(--r-xl)",
           boxShadow: "var(--shadow-3)",
           display: "grid",
+          // Single column pinned to the card width. Without an explicit column
+          // the implicit track is `auto` (min = min-content): a header/body/
+          // footer child whose content can't shrink (a flex row missing
+          // min-width:0) would push the track wider than the card, and the
+          // overflow:hidden below then clips it — the "content shoved off the
+          // left edge" bug. minmax(0, 1fr) forces the column to exactly the
+          // card width so every row stays inside its padding.
+          gridTemplateColumns: "minmax(0, 1fr)",
           gridTemplateRows: hideHeader
             ? footer
               ? "1fr auto"

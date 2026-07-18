@@ -2828,12 +2828,19 @@ export function InRoomScreen(props: InRoomScreenProps): ReactElement {
 
         {/* Layout switcher removed per Red — layout stays "auto". */}
 
-        {dmTarget && snapshot.local && (
+        {/* Open-DM (2.5g): right-side overlay anchored to this body div, which
+            is position:relative so the panel's absolute box resolves here (not
+            the viewport). Gate on dmTarget only — snapshot.local is created with
+            the Room and is effectively always present in-room, so also gating on
+            it just risked a blank click; fall back to a stable identity like the
+            room-chat dock does. */}
+        {dmTarget && (
           <RoomChatPanel
             threadType="dm"
-            threadId={canonicalDmThreadId(snapshot.local.identity, dmTarget.id)}
-            localIdentity={snapshot.local.identity}
+            threadId={canonicalDmThreadId(snapshot.local?.identity ?? "you", dmTarget.id)}
+            localIdentity={snapshot.local?.identity ?? "you"}
             localName={localDisplayName}
+            peerName={dmTarget.name}
             onClose={() => setDmTarget(null)}
           />
         )}
