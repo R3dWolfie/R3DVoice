@@ -48,6 +48,7 @@ function makeWebBridge(): R3DVoiceBridge {
       return Promise.resolve();
     },
     updaterInfo: () => Promise.resolve({ canSelfUpdate: false }),
+    runPackageUpdate: () => Promise.resolve({ launched: false }),
     onSplashStatus: noopUnsub,
     onDeepLink: noopUnsub,
     getMediaPermission: async (kind): Promise<MediaPermissionStatus> => {

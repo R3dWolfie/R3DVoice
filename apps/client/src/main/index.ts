@@ -1,6 +1,7 @@
 import { app, BrowserWindow, crashReporter, desktopCapturer, dialog, ipcMain, Menu, screen, session, shell, systemPreferences } from "electron";
 import { join } from "node:path";
 import { existsSync, writeFileSync, rmSync } from "node:fs";
+import { spawn } from "node:child_process";
 import { saveToken, getToken, clearToken } from "./token-store.js";
 import { openScreenPicker, registerScreenPickerHandlers } from "./screen-picker.js";
 import { setPttKeybind, teardownKeybinds } from "./keybinds.js";
@@ -374,6 +375,43 @@ function registerIpcHandlers(): void {
   ipcMain.handle("updater:info", () => ({
     canSelfUpdate: app.isPackaged && !process.env["R3DVOICE_DISABLE_UPDATER"],
   }));
+
+  // AUR/pacman installs can't self-update (/opt is root-owned, and the app must
+  // not fight pacman). Best effort so "Update" is one click, not copy-paste:
+  // launch the user's package manager in a real terminal. Returns launched:false
+  // if no terminal is found, so the UI can fall back to showing the command.
+  ipcMain.handle("updater:run-package-update", async () => {
+    const script =
+      "yay -Syu; echo; echo '--- update finished — restart R3DVoice to apply. ---'; read -n1 -s -r -p 'Press any key to close…'";
+    const term = process.env["TERMINAL"];
+    const candidates: Array<{ bin: string; args: string[] }> = [
+      ...(term ? [{ bin: term, args: ["-e", "bash", "-lc", script] }] : []),
+      { bin: "konsole", args: ["-e", "bash", "-lc", script] },
+      { bin: "gnome-terminal", args: ["--", "bash", "-lc", script] },
+      { bin: "alacritty", args: ["-e", "bash", "-lc", script] },
+      { bin: "kitty", args: ["bash", "-lc", script] },
+      { bin: "foot", args: ["bash", "-lc", script] },
+      { bin: "wezterm", args: ["start", "--", "bash", "-lc", script] },
+      { bin: "xterm", args: ["-e", "bash", "-lc", script] },
+      { bin: "x-terminal-emulator", args: ["-e", "bash", "-lc", script] },
+    ];
+    for (const c of candidates) {
+      const ok = await new Promise<boolean>((resolve) => {
+        try {
+          const child = spawn(c.bin, c.args, { detached: true, stdio: "ignore" });
+          child.on("error", () => resolve(false));
+          child.on("spawn", () => {
+            child.unref();
+            resolve(true);
+          });
+        } catch {
+          resolve(false);
+        }
+      });
+      if (ok) return { launched: true, terminal: c.bin };
+    }
+    return { launched: false };
+  });
 }
 
 let mainWindow: BrowserWindow | null = null;

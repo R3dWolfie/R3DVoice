@@ -14,6 +14,7 @@ const bridge: R3DVoiceBridge = {
   setCompatibilityEnv: (enabled) => ipcRenderer.invoke("app:set-compatibility-env", enabled),
   relaunch: () => ipcRenderer.invoke("app:relaunch"),
   updaterInfo: () => ipcRenderer.invoke("updater:info"),
+  runPackageUpdate: () => ipcRenderer.invoke("updater:run-package-update"),
   onPttEvent: (cb) => {
     const handler = (_evt: Electron.IpcRendererEvent, pressed: boolean): void => cb(pressed);
     ipcRenderer.on("keybind:ptt", handler);

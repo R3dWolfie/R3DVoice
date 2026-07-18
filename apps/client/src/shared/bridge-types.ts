@@ -47,6 +47,12 @@ export interface R3DVoiceBridge {
    */
   updaterInfo(): Promise<{ canSelfUpdate: boolean }>;
   /**
+   * Launch the system package manager (yay -Syu) in a terminal for installs
+   * that can't self-update (AUR/deb). Resolves launched:false when no terminal
+   * emulator is found, so the UI can fall back to showing the command.
+   */
+  runPackageUpdate(): Promise<{ launched: boolean; terminal?: string }>;
+  /**
    * Subscribe to splash-window status updates from the main process.
    * Used by the splash renderer; harmless to call from the main window.
    * Returns an unsubscribe function.

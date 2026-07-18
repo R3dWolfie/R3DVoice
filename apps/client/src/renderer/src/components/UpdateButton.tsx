@@ -56,6 +56,7 @@ export function UpdateButton(): ReactElement | null {
   const [canSelfUpdate, setCanSelfUpdate] = useState(false);
   const [open, setOpen] = useState(false);
   const [copied, setCopied] = useState(false);
+  const [pkgMsg, setPkgMsg] = useState<string | null>(null);
   const btnRef = useRef<HTMLButtonElement>(null);
   const menuRef = useRef<HTMLDivElement>(null);
   const [pos, setPos] = useState<{ top: number; right: number } | null>(null);
@@ -171,12 +172,45 @@ export function UpdateButton(): ReactElement | null {
               </button>
             ) : (
               <div style={{ display: "flex", flexDirection: "column", gap: "var(--s-2)" }}>
-                <div style={{ fontSize: "var(--t-2xs)", color: "var(--text-mid)" }}>
-                  Update with your package manager:
-                </div>
-                <code style={CODE}>{PKG_CMD}</code>
-                <button type="button" className="rv-btn" data-variant="ghost" style={ACTION} onClick={copyCmd}>
-                  {copied ? "Copied!" : "Copy command"}
+                <button
+                  type="button"
+                  className="rv-btn"
+                  data-variant="primary"
+                  style={ACTION}
+                  onClick={async () => {
+                    setPkgMsg("Opening a terminal…");
+                    let launched = false;
+                    try {
+                      const r = await window.r3dvoice?.runPackageUpdate?.();
+                      launched = Boolean(r?.launched);
+                    } catch {
+                      /* fall through to the copy fallback */
+                    }
+                    if (launched) {
+                      setPkgMsg("Running yay -Syu — confirm in the terminal, then restart R3DVoice.");
+                    } else {
+                      setPkgMsg("No terminal found — copied the command instead.");
+                      copyCmd();
+                    }
+                  }}
+                >
+                  ↑ Update now
+                </button>
+                {pkgMsg ? (
+                  <div style={{ fontSize: "var(--t-2xs)", color: "var(--text-mid)" }}>{pkgMsg}</div>
+                ) : (
+                  <div style={{ fontSize: "var(--t-2xs)", color: "var(--text-mid)" }}>
+                    Runs <code style={{ ...CODE, display: "inline", padding: "1px 6px" }}>{PKG_CMD}</code> in your terminal.
+                  </div>
+                )}
+                <button
+                  type="button"
+                  className="rv-btn"
+                  data-variant="ghost"
+                  style={{ ...ACTION, height: "1.7rem", fontSize: "var(--t-2xs)" }}
+                  onClick={copyCmd}
+                >
+                  {copied ? "Copied!" : "Copy command instead"}
                 </button>
               </div>
             )}
