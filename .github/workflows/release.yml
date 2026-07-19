@@ -101,7 +101,7 @@ jobs:
             cd /home/builder
             sed -i 's/^pkgver=.*/pkgver=${VER}/;s/^pkgrel=.*/pkgrel=1/' PKGBUILD
             updpkgsums PKGBUILD
-            makepkg -f --noconfirm --skippgpcheck
+            makepkg -f --noconfirm --skippgpcheck --nodeps
           "
           cp /home/builder/r3dvoice-bin-*.pkg.tar.zst R3DVoice.pkg.tar.zst
           gh release upload "${GITHUB_REF_NAME}" R3DVoice.pkg.tar.zst --clobber -R "${GITHUB_REPOSITORY}"
