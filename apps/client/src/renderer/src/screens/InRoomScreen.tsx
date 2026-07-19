@@ -620,7 +620,7 @@ function TileImpl({
           padding: "4px 8px",
           background: "color-mix(in oklch, var(--rv-ink-0) 65%, transparent)",
           backdropFilter: "blur(8px)",
-          borderRadius: 999,
+          borderRadius: "var(--r-pill)",
           border: "1px solid var(--border-soft)",
           fontSize: "var(--t-xs)",
           width: "fit-content",
@@ -658,6 +658,8 @@ function TileImpl({
           e.stopPropagation();
           callbacks.onDoubleClick(tile.id, videoRef.current);
         }}
+        onFocus={() => setHover(true)}
+        onBlur={() => setHover(false)}
         style={{
           position: "absolute",
           top: 8,
@@ -934,6 +936,7 @@ function CameraControl({
           background: "transparent",
           color: cameraOn ? "var(--text)" : "var(--text-faint)",
           cursor: disabled ? "not-allowed" : "pointer",
+          opacity: disabled ? 0.45 : 1,
           padding: "0 4px",
           marginLeft: -6,
           height: "100%",
@@ -2687,20 +2690,9 @@ export function InRoomScreen(props: InRoomScreenProps): ReactElement {
           <Tile tile={maximizedTile} big callbacks={tileCallbacks} />
         </div>
         <button
+          className="rv-btn"
           onClick={() => setMaximizedId(null)}
-          style={{
-            position: "absolute",
-            top: 16,
-            right: 16,
-            background: "rgba(0,0,0,0.7)",
-            border: "1px solid var(--border)",
-            color: "white",
-            borderRadius: 6,
-            padding: "6px 14px",
-            cursor: "pointer",
-            font: "inherit",
-            zIndex: 501,
-          }}
+          style={{ position: "absolute", top: 16, right: 16, zIndex: 501 }}
         >
           ✕ Exit (ESC)
         </button>
@@ -3241,7 +3233,7 @@ export function InRoomScreen(props: InRoomScreenProps): ReactElement {
                 color: "var(--danger)",
                 padding: "3px 8px",
                 border: "1px solid color-mix(in srgb, var(--danger) 45%, transparent)",
-                borderRadius: 999,
+                borderRadius: "var(--r-pill)",
                 background: "color-mix(in srgb, var(--danger) 10%, transparent)",
               }}
             >
@@ -3258,7 +3250,7 @@ export function InRoomScreen(props: InRoomScreenProps): ReactElement {
                 color: "var(--rv-amber)",
                 padding: "3px 8px",
                 border: "1px solid color-mix(in srgb, var(--rv-amber) 45%, transparent)",
-                borderRadius: 999,
+                borderRadius: "var(--r-pill)",
                 background: "color-mix(in srgb, var(--rv-amber) 10%, transparent)",
               }}
             >

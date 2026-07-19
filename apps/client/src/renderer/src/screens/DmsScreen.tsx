@@ -741,19 +741,19 @@ function DmPane({
               marginLeft: 6,
               height: "1.15rem",
               padding: "0 7px",
-              borderRadius: 999,
+              borderRadius: "var(--r-pill)",
               background: "color-mix(in srgb, var(--ok) 8%, transparent)",
               border: "1px solid color-mix(in srgb, var(--ok) 40%, transparent)",
               color: "var(--ok)",
               fontFamily: "var(--font-mono)",
-              fontSize: 9,
+              fontSize: "var(--t-2xs)",
               letterSpacing: ".12em",
               display: "inline-flex",
               alignItems: "center",
               gap: 3,
             }}
           >
-            🔒 E2EE
+            <I.Lock size={10} /> E2EE
           </span>
           </>
         }

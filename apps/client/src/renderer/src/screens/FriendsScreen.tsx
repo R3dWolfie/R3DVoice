@@ -263,7 +263,9 @@ export function FriendsScreen({ onJoinRoom, onOpenDms }: Props = {}): ReactEleme
           onClick={() => setInvitesOpen(true)}
           style={{ height: "2rem", fontSize: "var(--t-xs)" }}
         >
-          🔗 Invite links
+          <span style={{ display: "inline-flex", alignItems: "center", gap: 5 }}>
+            <I.Link size={13} /> Invite links
+          </span>
         </button>
         {/* 2.2 top-bar overflow (⋮): pending-sent + manage links */}
         <div ref={overflowRef} style={{ position: "relative" }}>
@@ -592,7 +594,7 @@ export function FriendsScreen({ onJoinRoom, onOpenDms }: Props = {}): ReactEleme
       <Modal
         open={invitesOpen}
         onClose={() => setInvitesOpen(false)}
-        icon="🔗"
+        icon={<I.Link size={16} />}
         title="Invite links"
         subtitle="Share a link — friends land in your room or your friend list."
         width="min(92vw, 560px)"

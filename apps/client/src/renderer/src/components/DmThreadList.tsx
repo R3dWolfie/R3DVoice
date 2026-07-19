@@ -50,8 +50,9 @@ export function DmThreadList({ threads, activeThreadId, splitThreadId, onSelect,
   const counts = useUnreadStore((s) => s.counts);
   if (threads.length === 0) {
     return (
-      <div style={{ padding: "var(--s-4)", color: "var(--text-faint)", fontSize: "var(--t-sm)" }}>
-        No conversations yet.
+      <div className="rv-empty">
+        <div className="rv-empty-title">No conversations yet</div>
+        <div className="rv-empty-hint">Start a DM from a friend&apos;s profile.</div>
       </div>
     );
   }

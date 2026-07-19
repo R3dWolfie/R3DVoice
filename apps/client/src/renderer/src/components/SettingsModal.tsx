@@ -2211,7 +2211,7 @@ function ThemePreviewCard(): ReactElement {
         {/* Row 2: message w/ mention + code */}
         <span style={{ fontSize: "var(--t-sm)", color: "var(--text)", lineHeight: 1.5 }}>
           Hey{" "}
-          <span style={{ background: "rgba(31,111,235,0.15)", color: "var(--text)", padding: "1px 4px", borderRadius: 3 }}>
+          <span style={{ background: "color-mix(in srgb, currentColor 14%, transparent)", color: "var(--text)", padding: "1px 4px", borderRadius: "var(--r-sm)" }}>
             @bob
           </span>{" "}
           can you check the link in{" "}

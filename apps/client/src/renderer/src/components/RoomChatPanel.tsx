@@ -2313,6 +2313,7 @@ function EmojiPicker({ onPick, embedded = false }: { onPick: (e: string) => void
       <div className="rv-ep-search">
         <input
           className="rv-input"
+          aria-label="Search emoji"
           placeholder="Search emoji…"
           value={query}
           onChange={(e) => setQuery(e.target.value)}
