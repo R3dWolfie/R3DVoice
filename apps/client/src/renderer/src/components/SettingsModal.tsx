@@ -1409,7 +1409,7 @@ function CompatTab(): ReactElement {
             width: 36,
             height: 20,
             borderRadius: 999,
-            background: enabled ? "var(--accent)" : "var(--bg-elev-3)",
+            background: enabled ? "var(--accent)" : "color-mix(in oklch, var(--text) 28%, transparent)",
             border:
               "1px solid " +
               (enabled
@@ -1430,7 +1430,8 @@ function CompatTab(): ReactElement {
               width: 16,
               height: 16,
               borderRadius: "50%",
-              background: "var(--text)",
+              background: "#fff",
+              boxShadow: "0 1px 3px rgba(0,0,0,.4)",
               transition: "left var(--d-base) var(--ease-out)",
             }}
           />
@@ -1543,7 +1544,7 @@ function CrashReportingRow(): ReactElement {
             width: 36,
             height: 20,
             borderRadius: 999,
-            background: enabled ? "var(--accent)" : "var(--bg-elev-3)",
+            background: enabled ? "var(--accent)" : "color-mix(in oklch, var(--text) 28%, transparent)",
             border:
               "1px solid " +
               (enabled
@@ -1564,7 +1565,8 @@ function CrashReportingRow(): ReactElement {
               width: 16,
               height: 16,
               borderRadius: "50%",
-              background: "var(--text)",
+              background: "#fff",
+              boxShadow: "0 1px 3px rgba(0,0,0,.4)",
               transition: "left var(--d-base) var(--ease-out)",
             }}
           />

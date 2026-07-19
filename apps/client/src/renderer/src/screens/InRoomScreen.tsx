@@ -1258,6 +1258,7 @@ function ControlButton({
   label,
   active,
   danger,
+  amber,
   leave,
   emphasis,
   disabled,
@@ -1268,6 +1269,7 @@ function ControlButton({
   label: string;
   active?: boolean;
   danger?: boolean;
+  amber?: boolean;
   leave?: boolean;
   emphasis?: boolean;
   disabled?: boolean;
@@ -1278,19 +1280,23 @@ function ControlButton({
   // active = filled ink · danger = red-tinted outline · leave = filled --leave.
   const bg = leave
     ? "var(--leave)"
-    : danger
-      ? "color-mix(in srgb, var(--danger) 10%, transparent)"
-      : active || emphasis
-        ? "var(--text)"
-        : "var(--bg-elev)";
+    : amber
+      ? "color-mix(in srgb, var(--rv-amber) 12%, transparent)"
+      : danger
+        ? "color-mix(in srgb, var(--danger) 10%, transparent)"
+        : active || emphasis
+          ? "var(--text)"
+          : "var(--bg-elev)";
   const br = leave
     ? "var(--leave)"
-    : danger
-      ? "var(--danger)"
-      : active || emphasis
-        ? "var(--text)"
-        : "var(--border)";
-  const co = leave ? "#fff" : danger ? "var(--danger)" : active || emphasis ? "var(--bg)" : "var(--text)";
+    : amber
+      ? "var(--rv-amber)"
+      : danger
+        ? "var(--danger)"
+        : active || emphasis
+          ? "var(--text)"
+          : "var(--border)";
+  const co = leave ? "#fff" : amber ? "var(--rv-amber)" : danger ? "var(--danger)" : active || emphasis ? "var(--bg)" : "var(--text)";
   // Instant hover + press feedback. Without this the buttons looked dead —
   // their state only changed after the LiveKit event round-tripped, so a click
   // felt like nothing happened. The press transform registers on pointerdown.
@@ -3266,7 +3272,7 @@ export function InRoomScreen(props: InRoomScreenProps): ReactElement {
             <ControlButton
               icon={<span style={{ fontSize: 20, lineHeight: 1 }}>👻</span>}
               label="Ghost"
-              danger={localGhost}
+              amber={localGhost}
               disabled={conn.phase !== "connected"}
               title={withBind("Ghost — mic and camera off together", deafenKeybind)}
               onClick={() => void roomWrapper.setGhost(!localGhost)}

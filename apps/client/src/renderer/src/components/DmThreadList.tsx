@@ -64,7 +64,17 @@ export function DmThreadList({ threads, activeThreadId, splitThreadId, onSelect,
         return (
           <li
             key={t.threadId}
+            className="rv-dm-row"
+            data-active={active ? "true" : undefined}
+            role="button"
+            tabIndex={0}
             onClick={() => onSelect(t.threadId)}
+            onKeyDown={(e) => {
+              if (e.key === "Enter" || e.key === " ") {
+                e.preventDefault();
+                onSelect(t.threadId);
+              }
+            }}
             onContextMenu={(e) => {
               if (!onContextMenu) return;
               e.preventDefault();
@@ -77,8 +87,10 @@ export function DmThreadList({ threads, activeThreadId, splitThreadId, onSelect,
               padding: "var(--s-2) var(--s-3)",
               borderRadius: "var(--r-md)",
               cursor: "pointer",
-              background: active ? "color-mix(in oklch, var(--accent) 14%, transparent)" : "transparent",
-              border: active ? "1px solid var(--accent)" : "1px solid transparent",
+              // background (hover + active) handled by .rv-dm-row in styles.css
+              border: active
+                ? "1px solid color-mix(in srgb, var(--accent) 35%, var(--border))"
+                : "1px solid transparent",
             }}
           >
             <Avatar

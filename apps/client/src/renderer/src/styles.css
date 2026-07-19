@@ -44,6 +44,12 @@
   --rv-amber:   #c98410;   /* warn / idle / ghost */
   --rv-error:   #c43d3d;   /* errors */
   --danger:     #c43d3d;   /* destructive (≠ brand Cherry) */
+  /* Aliases — these were referenced with hardcoded Discord-hex fallbacks
+     (var(--rv-red,#ed4245) etc.) that shipped off-brand. Defining them as
+     theme tokens routes every such use to the Cherry palette in both themes. */
+  --rv-red:     var(--danger);
+  --rv-green:   var(--rv-live);
+  --bg-elev-1:  var(--bg-elev);
   --leave:      #b13030;   /* leave-room */
 
   /* ── Semantic ─────────────────────────────────────────── */
@@ -328,11 +334,17 @@ input, select, textarea { font: inherit; color: inherit; }
   --br-btn: var(--danger);
 }
 /* Disabled stays clickable so the UI can explain why (deck rule) */
-.rv-btn[data-disabled="true"] {
+.rv-btn[data-disabled="true"],
+.rv-btn:disabled {
   opacity: .55; cursor: default;
 }
-.rv-btn[data-disabled="true"]:hover { --bg-btn: var(--bg-elev); border-color: var(--border); }
-.rv-btn[data-state="active"] {
+.rv-btn[data-disabled="true"]:hover, .rv-btn:disabled:hover { --bg-btn: var(--bg-elev); border-color: var(--border); }
+/* Native disabled inputs/selects/segments read as inert too. */
+.rv-input:disabled, .rv-select:disabled, .rv-seg-btn:disabled { opacity: .55; cursor: default; }
+/* Every raw <button> that isn't a .rv-btn still gets a keyboard focus ring. */
+button:not(.rv-btn):focus-visible { outline: 2px solid var(--accent); outline-offset: 2px; border-radius: var(--r-sm); }
+/* Some toggle/menu buttons use data-active instead of data-state — alias it. */
+.rv-btn[data-state="active"], .rv-btn[data-active="true"] {
   --bg-btn: var(--accent-tint);
   --br-btn: color-mix(in srgb, var(--accent) 40%, var(--border));
   --tx-btn: var(--accent-press);
@@ -509,6 +521,10 @@ input, select, textarea { font: inherit; color: inherit; }
   background: color-mix(in oklch, var(--bg-elev-2) 80%, transparent);
   color: var(--text);
 }
+/* DM sidebar rows (flex layout, so not .rv-list-item) — hover + tokened active. */
+.rv-dm-row { transition: background var(--d-base) var(--ease-out); }
+.rv-dm-row:hover { background: color-mix(in oklch, var(--bg-elev-2) 80%, transparent); }
+.rv-dm-row[data-active="true"] { background: var(--accent-tint); }
 .rv-list-item[data-active="true"] {
   background: var(--accent-tint);
   border-color: color-mix(in srgb, var(--accent) 35%, var(--border));

@@ -408,7 +408,7 @@ export function FriendsScreen({ onJoinRoom, onOpenDms }: Props = {}): ReactEleme
                 </div>
                 <div style={{ display: "flex", flexDirection: "column", gap: 2, minWidth: 0 }}>
                   <span style={{ fontSize: "var(--t-sm)", display: "flex", gap: 6, alignItems: "baseline" }}>
-                    <span style={{ fontWeight: 500 }}>{f.user.displayName}</span>
+                    <span style={{ fontWeight: 500, color: "var(--text)" }}>{f.user.displayName}</span>
                     {f.user.handle && (
                       <span className="rv-mono" style={{ fontSize: "var(--t-2xs)", color: "var(--text-dim)" }}>
                         @{f.user.handle}

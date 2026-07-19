@@ -101,6 +101,8 @@ export function FriendsPane({ onJoinRoom }: Props = {}): ReactElement {
             type="button"
             className="rv-btn"
             data-variant="primary"
+            title="Send friend request"
+            aria-label="Send friend request"
             onClick={() => void sendRequest()}
             disabled={busy || !addInput.trim()}
           >
