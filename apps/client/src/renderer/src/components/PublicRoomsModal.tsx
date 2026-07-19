@@ -104,7 +104,7 @@ export function PublicRoomsModal({
           </label>
         </div>
         {error && rooms !== null && (
-          // A refresh failed while a prior list is on screen — banner over the
+          // A refresh failed while a prior list is on screen - banner over the
           // stale grid. The empty-first-load case is owned by the body below.
           <div className="rv-err-banner" role="alert">
             <span className="ic">!</span>
@@ -113,7 +113,7 @@ export function PublicRoomsModal({
         )}
         <div className="rv-scroll" style={{ overflowY: "auto", minHeight: 0, maxHeight: 440 }}>
           {error && rooms === null ? (
-            // A failed first load must not leave the skeletons pulsing forever —
+            // A failed first load must not leave the skeletons pulsing forever -
             // give the user a way out instead.
             <div className="rv-empty" style={{ padding: "var(--s-8) 0", gap: "var(--s-3)" }}>
               <span className="rv-empty-title">Couldn’t load the directory</span>

@@ -109,7 +109,7 @@ function mapDisconnectReason(reason: DisconnectReason | undefined): DisconnectKi
 
 /**
  * Max bitrate for screenshare publish. Sized for *gaming* content at native
- * framerate — receivers see 0.5 fps blocky garbage when the cap is too low,
+ * framerate - receivers see 0.5 fps blocky garbage when the cap is too low,
  * because the encoder either skips frames or quantises into a brick wall.
  *
  * Reference points (industry):
@@ -118,7 +118,7 @@ function mapDisconnectReason(reason: DisconnectReason | undefined): DisconnectKi
  *   Twitch ingest   ≈ 6 Mbps  H.264 1080p60
  *
  * WebRTC's bandwidth estimator (BWE) will throttle the encoder below this
- * cap on slow links — a generous cap is safe for users with broadband, and
+ * cap on slow links - a generous cap is safe for users with broadband, and
  * never pushes more than the link can carry.
  */
 function computeScreenShareBitrate(width: number, height: number, fps: number): number {
@@ -135,7 +135,7 @@ function computeScreenShareBitrate(width: number, height: number, fps: number): 
 
 /**
  * Walk an RTCStatsReport and log the active ICE candidate pair. Tells us
- * whether the media transport is host/srflx/relay and udp/tcp — the single
+ * whether the media transport is host/srflx/relay and udp/tcp - the single
  * most useful piece of info for diagnosing remote-screenshare collapse:
  *   - relay/tcp     → media is going through TURN-TCP, head-of-line blocked
  *   - relay/udp     → TURN/UDP, fine but adds a hop
@@ -190,12 +190,12 @@ async function logIceCandidatePair(
  * Linux: capture screenshare audio. Two paths:
  *
  * 1. If `preferLabelContains` matches a virtual venmic device (e.g.
- *    "vencord-screen-share") — capture that. Excludes R3DVoice's own playback.
+ *    "vencord-screen-share") - capture that. Excludes R3DVoice's own playback.
  * 2. Otherwise fall back to a PulseAudio/PipeWire "Monitor of …" source
  *    (full system mix; will echo unless user wears headphones).
  */
 function linuxAudioDbg(msg: string): void {
-  // Persist to the app log file — AppImages launched from the desktop have a
+  // Persist to the app log file - AppImages launched from the desktop have a
   // closed stdout, so console.log alone vanishes. logError appends to a file
   // in userData the user can read.
   try { void window.r3dvoice?.logError?.(`[linux-audio-capture] ${msg}`); } catch { /* */ }
@@ -216,7 +216,7 @@ async function captureLinuxMonitorSource(
         (d) => d.kind === "audioinput" && d.label.toLowerCase().includes(needle),
       );
     }
-    // No venmic routing (it failed to link) — last-ditch system-mix monitor.
+    // No venmic routing (it failed to link) - last-ditch system-mix monitor.
     const monitors = devices.filter(
       (d) => d.kind === "audioinput" && /monitor/i.test(d.label),
     );
@@ -225,18 +225,18 @@ async function captureLinuxMonitorSource(
 
   try {
     // enumerateDevices() hides labels until this origin has held an audio
-    // capture grant at least once — probe to unlock them.
+    // capture grant at least once - probe to unlock them.
     let devices = await navigator.mediaDevices.enumerateDevices();
     if (devices.some((d) => d.kind === "audioinput" && d.label === "")) {
       try {
         const probe = await navigator.mediaDevices.getUserMedia({ audio: true });
         probe.getTracks().forEach((t) => t.stop());
-      } catch { /* keep going — some inputs may still be labeled */ }
+      } catch { /* keep going - some inputs may still be labeled */ }
       devices = await navigator.mediaDevices.enumerateDevices();
     }
 
     // venmic's "vencord-screen-share" node (and any freshly-created virtual
-    // device) shows up in enumerateDevices ASYNCHRONOUSLY after link() — a
+    // device) shows up in enumerateDevices ASYNCHRONOUSLY after link() - a
     // single snapshot taken right after routing is enabled almost always
     // misses it, which is why screenshare audio silently failed (and fell back
     // to a second portal). Poll for up to ~2.4s, re-enumerating each round,
@@ -279,7 +279,7 @@ async function captureLinuxMonitorSource(
 }
 
 // Microphone publish options, shared by both publish paths (processed-track
-// and setMicrophoneEnabled). red = redundant Opus encoding — every packet also
+// and setMicrophoneEnabled). red = redundant Opus encoding - every packet also
 // carries the prior frame, so a single lost packet no longer drops audio (the
 // biggest win on lossy home links). dtx skips silent frames (bandwidth-only,
 // fine for voice). 64 kbps mono Opus sits clearly above the LiveKit "speech"
@@ -303,7 +303,7 @@ export class LiveKitRoom {
   /** Latest RTT (ms) per participant identity. Updated via DataChannel pings. */
   private rttByParticipant: Record<string, number> = {};
   private rttBroadcastTimer: ReturnType<typeof setInterval> | null = null;
-  // Cached snapshot — useSyncExternalStore compares by reference, so this must
+  // Cached snapshot - useSyncExternalStore compares by reference, so this must
   // stay stable between LiveKit events or React will loop forever.
   private cachedSnapshot: RoomStateSnapshot;
   // Auxiliary MediaStream backing a non-LiveKit-managed screen audio track
@@ -320,7 +320,7 @@ export class LiveKitRoom {
 
   constructor(options: { enableE2EE?: boolean } = {}) {
     // E2EE is opt-in. When OFF, we don't construct the keyProvider/worker
-    // at all — that's measured to add observable audio quality overhead in
+    // at all - that's measured to add observable audio quality overhead in
     // some livekit-client builds even when no key is set. When ON, the
     // worker runs SFrame on every frame and key distribution kicks in via
     // RoomE2EE.
@@ -328,7 +328,7 @@ export class LiveKitRoom {
     // Toggling at runtime requires a rejoin (LiveKit's e2ee config is
     // construction-time only).
     this.keyProvider = options.enableE2EE ? new ExternalE2EEKeyProvider() : null;
-    // dynacast disabled — it changes simulcast layer counts at runtime and
+    // dynacast disabled - it changes simulcast layer counts at runtime and
     // has been the source of "BUNDLE codec collision PT=111" failures with
     // some server versions. adaptiveStream is fine (purely receive-side).
     const roomOpts = {
@@ -366,7 +366,7 @@ export class LiveKitRoom {
       this.reconnecting = false;
       this.err = null;
       // Start broadcasting our RTT to peers every 3 s so the sidebar can
-      // show each participant's own ping, not just ours. Tiny payload —
+      // show each participant's own ping, not just ours. Tiny payload -
       // negligible bandwidth.
       if (this.rttBroadcastTimer) clearInterval(this.rttBroadcastTimer);
       this.rttBroadcastTimer = setInterval(() => {
@@ -417,7 +417,7 @@ export class LiveKitRoom {
             y?: number;
           };
           if (msg.kind === "rv:ptr" && typeof msg.share === "string" && typeof msg.x === "number" && typeof msg.y === "number") {
-            // Collaborative pointer — kept OUT of the room snapshot so it can't
+            // Collaborative pointer - kept OUT of the room snapshot so it can't
             // trigger the in-call re-render storm; the overlay reads the store
             // on its own rAF.
             setRemotePointer({
@@ -463,7 +463,7 @@ export class LiveKitRoom {
     });
     this.room.on(RoomEvent.TrackSubscribed, (track, pub, participant) => {
       // Receiver-side stats sampling for remote video tracks. Mirrors the
-      // sender-side block in LocalTrackPublished — together they reveal
+      // sender-side block in LocalTrackPublished - together they reveal
       // whether the bottleneck is at the publisher (low fps encoded), in
       // transit (TCP relay / packet loss / BWE), or at the decoder (slow
       // software decode → freezes). Critical for diagnosing the
@@ -509,7 +509,7 @@ export class LiveKitRoom {
           }
         };
         const handle = setInterval(() => void sample(), 3000);
-        // First read after 1.5s and full ICE-pair log — gives a baseline
+        // First read after 1.5s and full ICE-pair log - gives a baseline
         // before BWE has stabilised.
         setTimeout(() => void sample(), 1500);
         void logIceCandidatePair(
@@ -538,10 +538,10 @@ export class LiveKitRoom {
     this.room.on(RoomEvent.TrackUnmuted, () => this.emit());
     this.room.on(RoomEvent.ActiveSpeakersChanged, () => this.emit());
     // Ghost state travels as a participant attribute (deck: Ghost replaces
-    // Deafen — mic+cam off together, visible to everyone as 👻).
+    // Deafen - mic+cam off together, visible to everyone as 👻).
     this.room.on(RoomEvent.ParticipantAttributesChanged, () => this.emit());
     this.room.on(RoomEvent.LocalTrackPublished, (pub) => {
-      // pub.mimeType is empty at publish time — SDP negotiation hasn't
+      // pub.mimeType is empty at publish time - SDP negotiation hasn't
       // settled. Poll the RTCRtpSender's getParameters() after a beat
       // for the actually-negotiated codec. Critical diagnostic for the
       // 1 fps screenshare report (vp8 fallback vs h264 chosen).
@@ -561,11 +561,11 @@ export class LiveKitRoom {
         } catch { /* logging only */ }
       };
       // First read after 1.5s (negotiation usually done), again at 5s in
-      // case of slow SDP — covers screenshare which negotiates separately.
+      // case of slow SDP - covers screenshare which negotiates separately.
       setTimeout(reportCodec, 1500);
       setTimeout(reportCodec, 5000);
 
-      // Periodic stats sampling for video tracks — tells us why receivers
+      // Periodic stats sampling for video tracks - tells us why receivers
       // see 1 fps despite H.264 being negotiated:
       //   qualityLimitationReason="cpu"        → encoder CPU bound
       //   qualityLimitationReason="bandwidth"  → BWE throttling (uplink)
@@ -633,7 +633,7 @@ export class LiveKitRoom {
   private remotesKey = "\u0000";
 
   private computeSnapshot(): RoomStateSnapshot {
-    // Only rebuild the remotes array when the participant SET changes — a new
+    // Only rebuild the remotes array when the participant SET changes - a new
     // array reference on every emit needlessly re-runs the volume effects
     // (which loop all remotes) on every speaker/RTT/quality tick.
     const rs = Array.from(this.room.remoteParticipants.values());
@@ -784,7 +784,7 @@ export class LiveKitRoom {
         // "detail" (not "motion") tells the encoder this is screen content:
         // it favors spatial sharpness (readable text/UI) and, with
         // maintain-resolution below, sheds framerate before it blurs the
-        // picture — the right tradeoff for sharing a screen. "motion" was
+        // picture - the right tradeoff for sharing a screen. "motion" was
         // making text mushy and wasting bitrate on frame-rate it couldn't
         // sustain.
         contentHint: q.frameRate >= 50 ? "motion" : "detail",
@@ -817,7 +817,7 @@ export class LiveKitRoom {
    * Why: LiveKit's TrackPublishOptions don't reliably propagate these into
    * the RTCRtpSender, and Chromium's MFT H.264 path doesn't honour
    * mid-stream resolution change anyway. Pre-scaling at the sender means
-   * the encoder never has to dynamically downscale — it gets 720p frames
+   * the encoder never has to dynamically downscale - it gets 720p frames
    * directly, which fits in ~1.5 Mbps BWE budget at 60 fps cleanly.
    *
    * Idempotent: safe to call from join() AND from in-room toggle, both
@@ -829,13 +829,13 @@ export class LiveKitRoom {
     sourceHeight?: number;
   }): void {
     // Remember the dims so a soft reconnect (sender kept, overrides dropped)
-    // can re-apply them — see the RoomEvent.Reconnected handler.
+    // can re-apply them - see the RoomEvent.Reconnected handler.
     this.lastScreenShareDims = opts;
     try {
       const screenPub = this.room.localParticipant.getTrackPublication(
         Track.Source.ScreenShare,
       );
-      // Force contentHint="motion" on the underlying MediaStreamTrack — this
+      // Force contentHint="motion" on the underlying MediaStreamTrack - this
       // tells WebRTC's H.264 encoder to maintain framerate even when scene
       // motion is low. Default contentHint for screen capture is "detail",
       // which encodes only when content changes → ~1 fps on a mostly-static
@@ -859,15 +859,15 @@ export class LiveKitRoom {
       // "unimplemented" in this Chromium build. v0.5.9 hit this on
       // legacy `priority`. v0.5.10 switched to `networkPriority` but
       // diagnostics show the "full" tier still gets rejected on Electron
-      // 35 / Chromium for screenshare — likely degradationPreference
+      // 35 / Chromium for screenshare - likely degradationPreference
       // can't co-occur with networkPriority in setParameters() in this
       // build. The previous tiered fallback meant if "full" failed, we
-      // dropped networkPriority entirely — leaving Chromium's screenshare
+      // dropped networkPriority entirely - leaving Chromium's screenshare
       // default of `low`, which is *worse* than "medium" default for
       // real-time tracks.
       //
       // Now: each parameter is applied in its own setParameters call.
-      // Whatever Chromium accepts, we keep — partial success across the
+      // Whatever Chromium accepts, we keep - partial success across the
       // whole set instead of all-or-nothing.
       const applyOne = async (
         mutate: (p: RTCRtpSendParameters) => void,
@@ -902,7 +902,7 @@ export class LiveKitRoom {
 
         // Third: pre-scale 1080p+ source down to ~720p so the encoder has
         // an easier job under sustained load. Skip when source is already
-        // small enough — scaling 720p down to 480p hurts more than helps.
+        // small enough - scaling 720p down to 480p hurts more than helps.
         if (shouldScaleDown) {
           await applyOne((p) => {
             for (const enc of p.encodings ?? []) {
@@ -912,14 +912,14 @@ export class LiveKitRoom {
         }
       })();
 
-      // Verify what actually stuck — cur values reveal whether the override
+      // Verify what actually stuck - cur values reveal whether the override
       // landed or got reverted by LiveKit / the encoder.
       const verifyHandle = setInterval(() => {
         try {
           const cur = sender.getParameters();
           // eslint-disable-next-line no-console
           console.log(
-            `[screenshare] params check — deg=${cur.degradationPreference} ` +
+            `[screenshare] params check - deg=${cur.degradationPreference} ` +
               `enc[0].scaleDownBy=${cur.encodings?.[0]?.scaleResolutionDownBy ?? 1} ` +
               `enc[0].netPriority=${cur.encodings?.[0]?.networkPriority ?? "?"} ` +
               `enc[0].active=${cur.encodings?.[0]?.active ?? true}`,
@@ -943,7 +943,7 @@ export class LiveKitRoom {
    * Publish a screen_share_audio track. Capture order:
    *   1. Native WASAPI filter (Windows 11+, excludes R3DVoice's own playback)
    *   2. Linux PipeWire venmic device (per-app or system-mix-minus-self)
-   *   3. getDisplayMedia({audio:true, video:false}) — Windows fallback
+   *   3. getDisplayMedia({audio:true, video:false}) - Windows fallback
    *
    * `includeProcessId` restricts capture to a single app: a process.id
    * string for Linux/venmic, or a numeric PID (as string) on Windows for
@@ -954,7 +954,7 @@ export class LiveKitRoom {
       return true;
     }
     // In-flight guard: capture setup (portals, venmic sink, WASAPI helper) is
-    // async and not idempotent — a second concurrent call would double-start
+    // async and not idempotent - a second concurrent call would double-start
     // it. Bail until the first attempt settles (the finally clears the flag).
     if (this.screenAudioInFlight) return false;
     this.screenAudioInFlight = true;
@@ -1008,17 +1008,17 @@ export class LiveKitRoom {
         if (track) {
           linuxAudioDbg(
             routingEnabled
-              ? "capturing venmic vencord-screen-share — R3DVoice playback excluded"
+              ? "capturing venmic vencord-screen-share - R3DVoice playback excluded"
               : "capturing default monitor (system mix; use headphones to avoid echo)",
           );
         } else if (routingEnabled) {
-          // Capture failed even though routing was set up — tear it down so
+          // Capture failed even though routing was set up - tear it down so
           // we don't leave the user's audio rerouted.
           try { await window.r3dvoice.disableLinuxAudioRouting(); } catch { /* */ }
         }
       }
 
-      // 3. getDisplayMedia audio fallback — for Windows (native WASAPI helper
+      // 3. getDisplayMedia audio fallback - for Windows (native WASAPI helper
       //    unavailable) and web (the browser's own picker carries an audio
       //    checkbox). Explicitly NOT Linux: there, audio-only getDisplayMedia
       //    still pops the screen portal a SECOND time (Wayland/PipeWire has no
@@ -1037,7 +1037,7 @@ export class LiveKitRoom {
           if (track) {
             auxStream = stream;
             // eslint-disable-next-line no-console
-            console.log("[screenshare] system audio NOT filtered — others may hear themselves; use headphones");
+            console.log("[screenshare] system audio NOT filtered - others may hear themselves; use headphones");
           }
         } catch {
           return false;
@@ -1049,7 +1049,7 @@ export class LiveKitRoom {
       this.screenAudioAuxStream = auxStream;
       // High-quality stereo Opus for screenshare audio. The LiveKit default
       // is a speech preset (~24 kbps mono) which butchers music/game audio.
-      // dtx (discontinuous transmission) drops silent frames — fine for voice,
+      // dtx (discontinuous transmission) drops silent frames - fine for voice,
       // but it kills tail/decay on music. red (redundant encoding) adds
       // latency, also undesirable here. forceStereo keeps both channels.
       await this.room.localParticipant.publishTrack(track, {
@@ -1062,7 +1062,7 @@ export class LiveKitRoom {
       this.emit();
       return true;
     } catch (err) {
-      // Publish (or a capture step) threw — every resource this path may have
+      // Publish (or a capture step) threw - every resource this path may have
       // stood up is now consumer-less. Tear down the aux capture, the native
       // WASAPI capture, and the Linux venmic sink (whichever the platform path
       // used) so nothing is left running, then rethrow.
@@ -1156,7 +1156,7 @@ export class LiveKitRoom {
 
   async setScreenShare(enabled: boolean, quality?: ScreenShareQuality): Promise<void> {
     if (enabled && quality) {
-      // In-room quality dialog path — publish at the chosen resolution/fps and
+      // In-room quality dialog path - publish at the chosen resolution/fps and
       // (optionally) system audio, using the exact same encoder/transport
       // overrides as the join-time path.
       await this.publishScreenShareWithQuality(quality);
@@ -1164,7 +1164,7 @@ export class LiveKitRoom {
       await this.room.localParticipant.setScreenShareEnabled(enabled);
       if (enabled) {
         // Apply the same encoder/transport overrides the join-time path uses
-        // — without this, in-room toggle gets LiveKit defaults (no
+        // - without this, in-room toggle gets LiveKit defaults (no
         // degradationPreference, no scale-down, no priority) and screenshare
         // collapses to ~1 fps under any BWE pressure.
         this.applyScreenShareSenderOverrides({});
@@ -1177,7 +1177,7 @@ export class LiveKitRoom {
    * Two-sided resolution (#8). Request a specific quality for ONE incoming
    * remote video, receiver-side only. adaptiveStream already downscales by
    * tile size; this lets a viewer force a lower spatial layer (VP9 SVC) to
-   * save their own bandwidth/CPU — or "auto" hands control back to
+   * save their own bandwidth/CPU - or "auto" hands control back to
    * adaptiveStream (ceiling = HIGH). It never touches the sender's publish, so
    * it can't disturb dynacast/simulcast for anyone else; a no-op when the
    * encode has no selectable layers.
@@ -1191,7 +1191,7 @@ export class LiveKitRoom {
       else if (quality === "medium") pub.setVideoQuality(VideoQuality.MEDIUM);
       else pub.setVideoQuality(VideoQuality.HIGH); // "high" or "auto" (adaptiveStream ceiling)
     } catch {
-      /* encode has no selectable layers — harmless no-op */
+      /* encode has no selectable layers - harmless no-op */
     }
   }
 
@@ -1210,7 +1210,7 @@ export class LiveKitRoom {
       await this.room.localParticipant.setCameraEnabled(enabled, opts);
     } catch (err) {
       // Stale/absent exact device id (e.g. the web client's device ids differ
-      // from the desktop app's) rejects without prompting — retry with the
+      // from the desktop app's) rejects without prompting - retry with the
       // default camera so it actually opens + prompts.
       if (enabled && opts && err instanceof DOMException && (err.name === "OverconstrainedError" || err.name === "NotFoundError")) {
         await this.room.localParticipant.setCameraEnabled(true);
@@ -1237,7 +1237,7 @@ export class LiveKitRoom {
   }
 
   /** Swap the published microphone's source track in place (no unpublish /
-   *  renegotiation) — used to live-apply mic-processing changes (noise
+   *  renegotiation) - used to live-apply mic-processing changes (noise
    *  suppression / AGC / echo / mono) that require re-opening getUserMedia.
    *  No-op if the mic isn't published yet. */
   async replaceMicTrack(newTrack: MediaStreamTrack): Promise<void> {
@@ -1247,7 +1247,7 @@ export class LiveKitRoom {
     await track.replaceTrack(newTrack);
   }
 
-  /** Live-apply a new camera resolution without unpublishing — restarts the
+  /** Live-apply a new camera resolution without unpublishing - restarts the
    *  underlying getUserMedia track. No-op if the camera isn't on. */
   async restartCameraResolution(resolution: { width: number; height: number }): Promise<void> {
     const pub = this.room.localParticipant.getTrackPublication(Track.Source.Camera);
@@ -1339,7 +1339,7 @@ export class LiveKitRoom {
  * element through Web Audio: MediaElementSource → GainNode → destination, and
  * the GainNode multiplies (it happily takes values >1).
  *
- * We only ever capture an element when a boost (>1) is actually requested —
+ * We only ever capture an element when a boost (>1) is actually requested -
  * default users (all volumes ≤1) keep the native element path untouched, so
  * mono-output.ts (which also captures elements, only when its toggle is on)
  * keeps working for everyone who never boosts. If both features want the same
@@ -1379,7 +1379,7 @@ function captureForGain(key: string, el: HTMLAudioElement): GainNode | null {
     gainNodes.set(key, node);
     return node;
   } catch {
-    // Element already owned by another AudioContext (e.g. mono output) — can't
+    // Element already owned by another AudioContext (e.g. mono output) - can't
     // add gain. Leave it native; boost simply won't apply for this element.
     return null;
   }
@@ -1423,7 +1423,7 @@ export async function setParticipantGainSink(deviceId: string | null): Promise<v
     try {
       await c.setSinkId(deviceId ?? "");
     } catch {
-      /* unsupported sink — default output */
+      /* unsupported sink - default output */
     }
   }
 }

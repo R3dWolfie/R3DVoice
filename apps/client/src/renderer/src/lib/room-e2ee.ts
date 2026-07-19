@@ -1,6 +1,6 @@
 // Room SFrame key distribution. The "key" is a 32-byte random shared secret
 // that LiveKit's E2EE worker uses to encrypt/decrypt media frames. The
-// secret never leaves a participant's machine in cleartext — when a member
+// secret never leaves a participant's machine in cleartext - when a member
 // joins, the owner (or any current key-holder) NaCl-box-encrypts the secret
 // to the joiner's public key and ships it over LiveKit's data channel. The
 // SFU forwards the box ciphertext like any other data packet, never seeing
@@ -11,7 +11,7 @@
 // - Anyone with valid room access (owner-allowed or public-room joiner) can
 //   request the key. Authorization gate is the server-side allow-list, not
 //   this protocol.
-// - A malicious participant in the room sees plaintext — they're a peer.
+// - A malicious participant in the room sees plaintext - they're a peer.
 //   That's outside our threat model.
 //
 // What's NOT yet implemented (deferred to B.5):
@@ -32,7 +32,7 @@ import type { LiveKitRoom } from "./livekit-room.js";
 // tag each payload with `kind` and ignore anything that doesn't match.
 type KeyRequest = {
   kind: "e2ee:key-request";
-  /** Sender's NaCl box public key (base64) — receiver encrypts the key with this. */
+  /** Sender's NaCl box public key (base64) - receiver encrypts the key with this. */
   pubkey: string;
 };
 
@@ -44,7 +44,7 @@ type KeyOffer = {
 
 type E2EEMessage = KeyRequest | KeyOffer;
 
-// Metadata helpers — we publish our pubkey via Participant.metadata so peers
+// Metadata helpers - we publish our pubkey via Participant.metadata so peers
 // can preload it before any data is exchanged. Falls back to per-message
 // pubkey transport (KeyRequest carries it) if metadata isn't propagated yet.
 const META_PUBKEY_FIELD = "e2eePubkey";
@@ -95,7 +95,7 @@ export class RoomE2EE {
     this.opts = opts;
   }
 
-  /** Begin the protocol. Idempotent — second start() is a no-op. */
+  /** Begin the protocol. Idempotent - second start() is a no-op. */
   async start(): Promise<void> {
     if (this.cleanups.length > 0) return;
     const room = this.opts.roomWrapper.room;
@@ -196,7 +196,7 @@ export class RoomE2EE {
       await this.sendTo(participant.identity, offer);
     } else {
       // key-offer
-      if (this.roomKey) return; // already have one — first one wins, ignore late arrivals
+      if (this.roomKey) return; // already have one - first one wins, ignore late arrivals
       const decrypted = decryptBytes(msg.encrypted, this.opts.keyPair);
       if (!decrypted) {
         this.opts.onError?.(new Error("failed to decrypt room key offer"));

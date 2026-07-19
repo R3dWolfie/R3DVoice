@@ -48,7 +48,7 @@ import { routeElement, setMonoOutput, setMonoOutputSink } from "../lib/mono-outp
 import { pushToast } from "../lib/toast-store.js";
 import { setCallStats } from "../lib/telemetry.js";
 
-// True when the event started inside an element marked data-rv-pop — a menu,
+// True when the event started inside an element marked data-rv-pop - a menu,
 // picker, or panel (or its trigger) that must survive the capture-phase
 // outside-click closers below. stopPropagation can't do this job: the closers
 // listen in the capture phase precisely so stray panels can't block them.
@@ -76,7 +76,7 @@ interface ConnectionState {
   message?: string;
 }
 
-// 2.5j connecting overlay — real join phases, deck copy.
+// 2.5j connecting overlay - real join phases, deck copy.
 interface ConnStep {
   label: string;
   state: "pending" | "active" | "done";
@@ -115,7 +115,7 @@ interface TileCallbacks {
   onClick(id: string): void;
   onDoubleClick(id: string, videoEl: HTMLVideoElement | null): void;
   onContextMenu(id: string, x: number, y: number): void;
-  /** Pointer moved over a share tile — normalized [0..1] within the content. */
+  /** Pointer moved over a share tile - normalized [0..1] within the content. */
   onPointerMove?(shareId: string, x: number, y: number): void;
   onPointerLeave?(shareId: string): void;
 }
@@ -128,7 +128,7 @@ function PointerLayer({ shareId, videoRef }: { shareId: string; videoRef: RefObj
   const [rect, setRect] = useState<{ x: number; y: number; w: number; h: number }>({ x: 0, y: 0, w: 0, h: 0 });
   useEffect(() => {
     const t = setInterval(() => {
-      // Bail out of both setStates when nothing actually moved — otherwise the
+      // Bail out of both setStates when nothing actually moved - otherwise the
       // sharing tile re-renders ~22×/sec even with no pointers on screen.
       setPointers((prev) => {
         const next = getPointersForShare(shareId);
@@ -204,7 +204,7 @@ interface VolumeMenu {
 
 type LayoutMode = "auto" | "grid" | "speaker";
 
-// Designer's kbd inline style — duplicated locally; will lift in a refactor.
+// Designer's kbd inline style - duplicated locally; will lift in a refactor.
 const kbdStyle: CSSProperties = {
   display: "inline-block",
   padding: "1px 6px",
@@ -263,7 +263,7 @@ function toneOf(id: string): 1 | 2 | 3 | 4 | 5 {
   return ((id.charCodeAt(0) % 5) + 1) as 1 | 2 | 3 | 4 | 5;
 }
 
-// Mirror of server-side dmThreadId — canonical-pair so both participants
+// Mirror of server-side dmThreadId - canonical-pair so both participants
 // resolve the same thread. Server validates participation; this is just for
 // constructing the URL/threadId on the client side.
 function canonicalDmThreadId(a: string, b: string): string {
@@ -273,7 +273,7 @@ function canonicalDmThreadId(a: string, b: string): string {
 
 function findScreenTrack(p: LocalParticipant | RemoteParticipant): Track | null {
   for (const pub of p.trackPublications.values()) {
-    // Muted publications still hold a track but produce no frames — the
+    // Muted publications still hold a track but produce no frames - the
     // <video> attached to it stays black. Treat them as absent so the tile
     // falls back to the avatar instead of showing a dead black rectangle.
     if (pub.source === Track.Source.ScreenShare && pub.track && !pub.isMuted) {
@@ -312,7 +312,7 @@ function isRemoteMuted(p: RemoteParticipant): boolean {
 }
 
 function MiniVu({ active }: { active: boolean }): ReactElement {
-  // Off state: 4 flat bars (no animation, no varying height) — communicates
+  // Off state: 4 flat bars (no animation, no varying height) - communicates
   // "mic on, not speaking" without distracting motion.
   // On state: varying heights with the live-pulse animation.
   return (
@@ -529,7 +529,7 @@ function TileImpl({
       className={sharing ? "rv-scanlines" : ""}
       style={{
         position: "relative",
-        // In fill mode, the parent grid drives sizing — tile stretches to
+        // In fill mode, the parent grid drives sizing - tile stretches to
         // fill the cell and the video uses objectFit: contain so nothing
         // gets cropped (screenshares stay readable, cameras may letterbox).
         ...(fill
@@ -569,7 +569,7 @@ function TileImpl({
             objectFit: sharing ? "contain" : "cover",
             background: "black",
             // Mirror only the local self-view of the camera (not screenshare)
-            // so it reads like a mirror — raising your right hand shows on
+            // so it reads like a mirror - raising your right hand shows on
             // the screen's right. Other participants still receive the
             // unmirrored feed.
             ...(tile.isLocal && !sharing
@@ -648,7 +648,7 @@ function TileImpl({
         </div>
       )}
 
-      {/* Hover maximize — fullscreen was previously double-click-only. Sits
+      {/* Hover maximize - fullscreen was previously double-click-only. Sits
           left of the PiP button when sharing so the two never overlap. */}
       <button
         type="button"
@@ -700,7 +700,7 @@ function TileImpl({
               }
             } catch {
               // PiP can fail if the video has no frame yet, or the OS denied.
-              // Silent — the user can try again.
+              // Silent - the user can try again.
             }
           }}
           style={{
@@ -735,7 +735,7 @@ function GridLayout({
   callbacks: TileCallbacks;
 }): ReactElement {
   // Pick column count from container shape + tile count so tiles end up
-  // roughly square in their grid cell — that's the rule that produces
+  // roughly square in their grid cell - that's the rule that produces
   // "stack vertically in portrait, side-by-side in landscape" without
   // hardcoding orientation.
   const containerRef = useRef<HTMLDivElement | null>(null);
@@ -777,7 +777,7 @@ function GridLayout({
  * Pick the column count that gives the most cell-area for `n` tiles in
  * a `w×h` container. Each layout is scored by the area each cell can
  * occupy without distorting beyond a 16:9-ish ratio. Pure function so it
- * runs on every render — cheap.
+ * runs on every render - cheap.
  */
 function pickGridColumns(n: number, w: number, h: number): number {
   if (n <= 1 || w <= 0 || h <= 0) return 1;
@@ -787,7 +787,7 @@ function pickGridColumns(n: number, w: number, h: number): number {
     const rows = Math.ceil(n / cols);
     const cellW = w / cols;
     const cellH = h / rows;
-    // Tiles look best when the cell isn't extremely lopsided — penalise
+    // Tiles look best when the cell isn't extremely lopsided - penalise
     // wild aspect ratios so we don't prefer "1 tall column" just because
     // it gives more pixels.
     const aspect = cellW / cellH;
@@ -868,7 +868,7 @@ function CameraControl({
   starting?: boolean;
   disabled?: boolean;
   roomWrapper: LiveKitRoom;
-  /** Toggle camera on/off — owned by the parent so it can flip optimistically. */
+  /** Toggle camera on/off - owned by the parent so it can flip optimistically. */
   onToggle: () => void;
 }): ReactElement {
   const [pickerOpen, setPickerOpen] = useState(false);
@@ -887,7 +887,7 @@ function CameraControl({
           const probe = await navigator.mediaDevices.getUserMedia({ video: true });
           probe.getTracks().forEach((t) => t.stop());
           list = await listVideoInputs();
-        } catch { /* permission denied — show whatever we have */ }
+        } catch { /* permission denied - show whatever we have */ }
       }
       if (!cancelled) setCameras(list);
     };
@@ -1053,7 +1053,7 @@ function ShareAudioControl({
         emphasis={enabled}
         title={
           enabled
-            ? `Source: ${selectedLabel} — click to stop`
+            ? `Source: ${selectedLabel} - click to stop`
             : "Add system audio to your screen share"
         }
         onClick={() => {
@@ -1300,7 +1300,7 @@ function ControlButton({
           ? "var(--text)"
           : "var(--border)";
   const co = leave ? "#fff" : amber ? "var(--rv-amber)" : danger ? "var(--danger)" : active || emphasis ? "var(--bg)" : "var(--text)";
-  // Instant hover + press feedback. Without this the buttons looked dead —
+  // Instant hover + press feedback. Without this the buttons looked dead -
   // their state only changed after the LiveKit event round-tripped, so a click
   // felt like nothing happened. The press transform registers on pointerdown.
   const [hover, setHover] = useState(false);
@@ -1365,7 +1365,7 @@ function ControlButton({
   );
 }
 
-// Memoized tile boundaries — the fix for the in-call re-render storm. The
+// Memoized tile boundaries - the fix for the in-call re-render storm. The
 // parent re-renders many times/sec (speaker/RTT/quality events); without these
 // every tile's large style tree reconciled on each render, starving click
 // handlers. The comparator checks only the fields the tiles read; screenTrack/
@@ -1510,7 +1510,7 @@ function ScreenShareDialog({
           Share your screen
         </div>
         <div style={{ color: "var(--text-mid)", fontSize: "var(--t-sm)", marginBottom: "var(--s-5)" }}>
-          Pick a quality — higher settings need more upload bandwidth.
+          Pick a quality - higher settings need more upload bandwidth.
         </div>
 
         <div style={{ display: "flex", flexDirection: "column", gap: "var(--s-4)" }}>
@@ -1567,7 +1567,7 @@ function ScreenShareDialog({
   );
 }
 
-// Small live video thumbnail for the mini call bar — attaches a screenshare or
+// Small live video thumbnail for the mini call bar - attaches a screenshare or
 // camera track to a compact <video>.
 function MiniVideoPreview({ track }: { track: Track }): ReactElement {
   const ref = useRef<HTMLVideoElement | null>(null);
@@ -1589,16 +1589,17 @@ function MiniVideoPreview({ track }: { track: Track }): ReactElement {
       autoPlay
       muted
       playsInline
-      style={{ width: 64, height: 38, borderRadius: 8, objectFit: "cover", background: "#000", flexShrink: 0 }}
+      style={{ width: "100%", aspectRatio: "16 / 9", display: "block", objectFit: "cover", background: "#000" }}
     />
   );
 }
 
 // Session-remembered mini-bar position so drag survives minimize/restore.
 let lastMiniPos: { x: number; y: number } | null = null;
+const MINI_W = 300;
 
-// Draggable floating call dock shown while the call runs in the background
-// (#35). Drag it by the grip; the name area returns to the call.
+// Discord-style floating call PiP shown while the call runs in the background
+// (#35): header (drag handle) → big video → controls. Click the video to return.
 function MiniCallBar(props: {
   connected: boolean;
   statusText: string;
@@ -1613,24 +1614,23 @@ function MiniCallBar(props: {
   onLeave: () => void;
 }): ReactElement {
   const [pos, setPos] = useState<{ x: number; y: number }>(
-    () => lastMiniPos ?? { x: 60, y: (typeof window !== "undefined" ? window.innerHeight : 800) - 90 },
+    () => lastMiniPos ?? { x: 24, y: (typeof window !== "undefined" ? window.innerHeight : 800) - 300 },
   );
   const dragRef = useRef<{ sx: number; sy: number; ox: number; oy: number } | null>(null);
   useEffect(() => {
     lastMiniPos = pos;
   }, [pos]);
 
-  const startDrag = (e: MouseEvent<HTMLSpanElement>): void => {
+  const startDrag = (e: MouseEvent<HTMLDivElement>): void => {
+    if ((e.target as HTMLElement).closest("button")) return; // let buttons click
     e.preventDefault();
     dragRef.current = { sx: e.clientX, sy: e.clientY, ox: pos.x, oy: pos.y };
     const onMove = (ev: globalThis.MouseEvent): void => {
       const d = dragRef.current;
       if (!d) return;
-      const nx = d.ox + (ev.clientX - d.sx);
-      const ny = d.oy + (ev.clientY - d.sy);
       setPos({
-        x: Math.max(8, Math.min(nx, window.innerWidth - 220)),
-        y: Math.max(8, Math.min(ny, window.innerHeight - 60)),
+        x: Math.max(8, Math.min(d.ox + (ev.clientX - d.sx), window.innerWidth - MINI_W - 8)),
+        y: Math.max(8, Math.min(d.oy + (ev.clientY - d.sy), window.innerHeight - 80)),
       });
     };
     const onUp = (): void => {
@@ -1644,10 +1644,10 @@ function MiniCallBar(props: {
 
   const { connected } = props;
   const miniBtn: CSSProperties = {
-    width: 34,
-    height: 34,
+    width: 40,
+    height: 40,
     flexShrink: 0,
-    borderRadius: 10,
+    borderRadius: 12,
     display: "grid",
     placeItems: "center",
     border: "1px solid var(--border)",
@@ -1664,51 +1664,32 @@ function MiniCallBar(props: {
         left: pos.x,
         top: pos.y,
         zIndex: 400,
+        width: MINI_W,
+        maxWidth: "94vw",
         display: "flex",
-        alignItems: "center",
-        gap: "var(--s-2)",
-        padding: "8px 10px 8px 6px",
-        background: "var(--bg-elev-1, var(--bg))",
+        flexDirection: "column",
+        background: "var(--bg-elev)",
         border: "1px solid var(--border)",
-        borderRadius: 14,
-        boxShadow: "0 10px 34px rgba(0,0,0,.5)",
-        maxWidth: "min(94vw, 460px)",
+        borderRadius: 16,
+        boxShadow: "0 14px 40px rgba(0,0,0,.55)",
+        overflow: "hidden",
       }}
     >
-      <span
+      {/* Header = drag handle */}
+      <div
         onMouseDown={startDrag}
         title="Drag to move"
-        aria-hidden
-        style={{
-          cursor: "grab",
-          padding: "0 3px",
-          color: "var(--text-faint)",
-          fontSize: 15,
-          lineHeight: 1,
-          userSelect: "none",
-          flexShrink: 0,
-        }}
-      >
-        ⠿
-      </span>
-      {props.previewTrack && <MiniVideoPreview track={props.previewTrack} />}
-      <button
-        type="button"
-        onClick={props.onRestore}
-        title="Return to call"
         style={{
           display: "flex",
           alignItems: "center",
-          gap: 9,
-          background: "none",
-          border: "none",
-          color: "var(--text)",
-          cursor: "pointer",
-          font: "inherit",
-          padding: 0,
-          minWidth: 0,
+          gap: 8,
+          padding: "8px 10px",
+          cursor: "grab",
+          userSelect: "none",
+          borderBottom: "1px solid var(--border-soft)",
         }}
       >
+        <span aria-hidden style={{ color: "var(--text-faint)", fontSize: 14, lineHeight: 1 }}>⠿</span>
         <span
           style={{
             width: 9,
@@ -1719,57 +1700,82 @@ function MiniCallBar(props: {
             boxShadow: connected ? `0 0 8px ${props.dotColor}` : "none",
           }}
         />
-        <span style={{ display: "flex", flexDirection: "column", alignItems: "flex-start", minWidth: 0 }}>
+        <span
+          style={{
+            fontSize: 13,
+            fontWeight: 600,
+            whiteSpace: "nowrap",
+            overflow: "hidden",
+            textOverflow: "ellipsis",
+            flex: 1,
+            minWidth: 0,
+          }}
+        >
+          {props.statusText}
+        </span>
+        {props.sharing && (
+          <span style={{ fontSize: 10, color: "var(--rv-amber)", fontWeight: 700, letterSpacing: ".06em", flexShrink: 0 }}>
+            SHARING
+          </span>
+        )}
+      </div>
+
+      {/* Big video (or placeholder) - click to return */}
+      <button
+        type="button"
+        onClick={props.onRestore}
+        title="Return to call"
+        aria-label="Return to call"
+        style={{ display: "block", width: "100%", padding: 0, border: "none", background: "#000", cursor: "pointer" }}
+      >
+        {props.previewTrack ? (
+          <MiniVideoPreview track={props.previewTrack} />
+        ) : (
           <span
             style={{
-              fontSize: 13,
-              fontWeight: 600,
-              whiteSpace: "nowrap",
-              overflow: "hidden",
-              textOverflow: "ellipsis",
-              maxWidth: 160,
+              display: "grid",
+              placeItems: "center",
+              width: "100%",
+              aspectRatio: "16 / 9",
+              color: "var(--text-faint)",
+              fontSize: 12,
+              background: "var(--bg-elev-2)",
             }}
           >
-            {props.statusText}
+            {connected ? "↗ Return to call" : props.statusText}
           </span>
-          <span style={{ fontSize: 10, color: "var(--text-faint)", letterSpacing: ".03em" }}>
-            Tap to return{props.sharing ? " · sharing" : ""}
-          </span>
-        </span>
+        )}
       </button>
-      <span style={{ width: 1, height: 26, flexShrink: 0, background: "var(--border)" }} />
-      <button
-        type="button"
-        onClick={props.onToggleMute}
-        disabled={!connected}
-        title={props.muted ? "Unmute" : "Mute"}
-        style={{ ...miniBtn, color: props.muted ? "var(--rv-red, #ed4245)" : "var(--text)", opacity: connected ? 1 : 0.5 }}
-      >
-        {props.muted ? <I.MicOff size={17} /> : <I.Mic size={17} />}
-      </button>
-      <button
-        type="button"
-        onClick={props.onToggleGhost}
-        disabled={!connected}
-        title="Ghost — mic and camera off"
-        style={{
-          ...miniBtn,
-          fontSize: 17,
-          lineHeight: 1,
-          color: props.localGhost ? "var(--rv-amber, #faa61a)" : "var(--text)",
-          opacity: connected ? 1 : 0.5,
-        }}
-      >
-        👻
-      </button>
-      <button
-        type="button"
-        onClick={props.onLeave}
-        title="Leave call"
-        style={{ ...miniBtn, background: "var(--rv-red, #ed4245)", border: "none", color: "#fff" }}
-      >
-        <I.Leave size={17} />
-      </button>
+
+      {/* Controls */}
+      <div style={{ display: "flex", justifyContent: "center", gap: 12, padding: 10 }}>
+        <button
+          type="button"
+          onClick={props.onToggleMute}
+          disabled={!connected}
+          title={props.muted ? "Unmute" : "Mute"}
+          style={{ ...miniBtn, color: props.muted ? "var(--danger)" : "var(--text)", opacity: connected ? 1 : 0.5 }}
+        >
+          {props.muted ? <I.MicOff size={19} /> : <I.Mic size={19} />}
+        </button>
+        <button
+          type="button"
+          onClick={props.onToggleGhost}
+          disabled={!connected}
+          title="Ghost - mic and camera off"
+          style={{ ...miniBtn, fontSize: 19, lineHeight: 1, color: props.localGhost ? "var(--rv-amber)" : "var(--text)", opacity: connected ? 1 : 0.5 }}
+        >
+          👻
+        </button>
+        <button
+          type="button"
+          onClick={props.onLeave}
+          title="Leave call"
+          style={{ ...miniBtn, background: "var(--danger)", border: "none", color: "#fff" }}
+        >
+          <I.Leave size={19} />
+        </button>
+      </div>
     </div>
   );
 }
@@ -1810,7 +1816,7 @@ export function InRoomScreen(props: InRoomScreenProps): ReactElement {
     return out;
   });
   const [screenVolumes, setScreenVolumes] = useState<Record<string, number>>(persistedScreenVolumes);
-  // 2.5g "Mute for me" — local-only silence per participant (not persisted).
+  // 2.5g "Mute for me" - local-only silence per participant (not persisted).
   const [mutedForMe, setMutedForMe] = useState<Record<string, boolean>>({});
   const [menu, setMenu] = useState<VolumeMenu | null>(null);
   const [settingsOpen, setSettingsOpen] = useState(false);
@@ -1827,7 +1833,7 @@ export function InRoomScreen(props: InRoomScreenProps): ReactElement {
   } | null>(null);
   const [layout, setLayout] = useState<LayoutMode>("auto");
   const [focusedId, setFocusedId] = useState<string | null>(null);
-  // #8 two-sided resolution — per-participant receiver-side quality override.
+  // #8 two-sided resolution - per-participant receiver-side quality override.
   const [receiverQuality, setReceiverQuality] = useState<Record<string, ReceiverQuality>>({});
   const applyReceiverQuality = (participantId: string, q: ReceiverQuality): void => {
     setReceiverQuality((m) => ({ ...m, [participantId]: q }));
@@ -1850,7 +1856,7 @@ export function InRoomScreen(props: InRoomScreenProps): ReactElement {
   // One-time "you're muted" nudge (first ~minute, until the first unmute).
   const [muteHintDismissed, setMuteHintDismissed] = useState(false);
   const [everUnmuted, setEverUnmuted] = useState(false);
-  // Optimistic mic/camera state — flips on click, reconciles when the real
+  // Optimistic mic/camera state - flips on click, reconciles when the real
   // LiveKit snapshot catches up (null = trust the snapshot).
   const [pendingMute, setPendingMute] = useState<boolean | null>(null);
   const [pendingCam, setPendingCam] = useState<boolean | null>(null);
@@ -1868,7 +1874,7 @@ export function InRoomScreen(props: InRoomScreenProps): ReactElement {
   // Remote-audio sink. This MUST outlive any single render branch: when the
   // call is minimized (#35) or a tile is maximized, the full room UI unmounts,
   // and if the sink lived in that JSX the attached <audio> elements would be
-  // ripped out of the DOM — you'd stop hearing the call. So it's a detached
+  // ripped out of the DOM - you'd stop hearing the call. So it's a detached
   // node parented to document.body, owned imperatively for this screen's life.
   const audioMountRef = useRef<HTMLDivElement | null>(null);
   if (audioMountRef.current === null && typeof document !== "undefined") {
@@ -1952,7 +1958,7 @@ export function InRoomScreen(props: InRoomScreenProps): ReactElement {
         const api = new ApiClient(serverUrl);
         api.setToken(token);
         const { token: lkToken, url } = await api.mintLiveKitToken(props.roomId);
-        stepDone(0); // Authenticating — server minted our LiveKit token
+        stepDone(0); // Authenticating - server minted our LiveKit token
         if (cancelled) return;
         let micStream: MediaStream | undefined;
         if (props.selection.micDeviceId) {
@@ -1967,7 +1973,7 @@ export function InRoomScreen(props: InRoomScreenProps): ReactElement {
           micPipelineRef.current = pipeline;
           micStream = pipeline.stream;
         }
-        stepDone(1); // Resolving SFU node — url in hand, local media prepped
+        stepDone(1); // Resolving SFU node - url in hand, local media prepped
 
         await roomWrapper.join({
           wsUrl: url,
@@ -1977,7 +1983,7 @@ export function InRoomScreen(props: InRoomScreenProps): ReactElement {
           publishScreen: props.selection.publishScreen,
           screenQuality: props.selection.screenQuality,
         });
-        stepDone(2); // Negotiating media — SFU connection is up
+        stepDone(2); // Negotiating media - SFU connection is up
 
         // Deck rule (4.5 removed): every join starts muted. Mute right after
         // publish so no audio frames leave before the user opts in.
@@ -2000,7 +2006,7 @@ export function InRoomScreen(props: InRoomScreenProps): ReactElement {
               keyPair,
               onKeyApplied: () => {
                 // eslint-disable-next-line no-console
-                console.log("[e2ee] room key applied — frames now SFrame-encrypted");
+                console.log("[e2ee] room key applied - frames now SFrame-encrypted");
               },
               onError: (err) => {
                 // eslint-disable-next-line no-console
@@ -2106,7 +2112,7 @@ export function InRoomScreen(props: InRoomScreenProps): ReactElement {
   const cameraDeviceId = usePrefs((s) => s.cameraDeviceId);
   const cameraResolution = usePrefs((s) => s.cameraResolution);
   const cameraDims = RESOLUTIONS[cameraResolution] ?? RESOLUTIONS["720p"]!;
-  // Select primitives individually — a selector that returns a fresh object
+  // Select primitives individually - a selector that returns a fresh object
   // literal triggers React #185 because useSyncExternalStore's Object.is
   // snapshot check sees a new reference every render and loops forever.
   const noiseSuppression = usePrefs((s) => s.noiseSuppression);
@@ -2151,7 +2157,7 @@ export function InRoomScreen(props: InRoomScreenProps): ReactElement {
   }, [roomWrapper]);
 
   // ESC closes maximize / menu.
-  // Left-click (button 0) outside the menu closes it — ignore right-clicks
+  // Left-click (button 0) outside the menu closes it - ignore right-clicks
   // and middle-clicks so the menu doesn't close the moment it opens.
   useEffect(() => {
     function onKey(e: KeyboardEvent): void {
@@ -2238,11 +2244,11 @@ export function InRoomScreen(props: InRoomScreenProps): ReactElement {
     micPipelineRef.current?.setVad(micProcessing.vadEnabled, micProcessing.inputSensitivity);
   }, [micProcessing.vadEnabled, micProcessing.inputSensitivity]);
 
-  // Live-apply the mic-processing toggles that CAN'T be tweaked in place —
+  // Live-apply the mic-processing toggles that CAN'T be tweaked in place -
   // noise suppression, echo cancellation, AGC and mono all live in the
   // getUserMedia constraints / RNNoise graph, so they need a fresh pipeline.
   // Re-open with the current settings and swap the published track in place
-  // (replaceTrack — no renegotiation). Gain + VAD have their own live paths
+  // (replaceTrack - no renegotiation). Gain + VAD have their own live paths
   // above, so they're NOT in the deps. Skips the initial mount (the join
   // effect already opened the pipeline with these values).
   const micReopenReady = useRef(false);
@@ -2289,7 +2295,7 @@ export function InRoomScreen(props: InRoomScreenProps): ReactElement {
   ]);
 
   // Server-initiated disconnect (owner removed us, owner deleted the room,
-  // server shutdown) — show a banner for a beat then bounce back to lobby.
+  // server shutdown) - show a banner for a beat then bounce back to lobby.
   useEffect(() => {
     if (!snapshot.disconnectKind) return;
     const t = setTimeout(() => {
@@ -2327,14 +2333,14 @@ export function InRoomScreen(props: InRoomScreenProps): ReactElement {
   // Wire prefs-driven keybinds for the in-room actions. PTT remains separate
   // (uses globalShortcut so it works when unfocused).
   useKeybind(muteKeybind, () => handleToggleMute());
-  // Deck: Ghost replaces Deafen — the old deafen keybind now toggles ghost.
+  // Deck: Ghost replaces Deafen - the old deafen keybind now toggles ghost.
   useKeybind(deafenKeybind, () => void roomWrapper.setGhost(!(snapshot.local?.attributes?.["ghost"] === "1")));
   useKeybind(shareScreenKeybind, () => void handleToggleScreen());
   useKeybind(openSettingsKeybind, () => setSettingsOpen(true));
   useKeybind(leaveRoomKeybind, () => void handleLeave());
 
   // LiveKit's setVolume eventually writes HTMLMediaElement.volume which is
-  // clamped to [0, 1] *and throws IndexSizeError* if outside that range —
+  // clamped to [0, 1] *and throws IndexSizeError* if outside that range -
   // so anything we forward must be clamped first. (Earlier versions of the
   // slider went to 200%; saved values like 1.1 then crashed remotes' React
   // tree on track-subscribe.)
@@ -2359,12 +2365,12 @@ export function InRoomScreen(props: InRoomScreenProps): ReactElement {
     const participant = snapshot.remotes.find((r) => r.identity === id);
     if (participant) participant.setVolume(elVol, Track.Source.Microphone);
     setParticipantGain(id, gain);
-    // A boost may have just created the gain graph's AudioContext — point it at
+    // A boost may have just created the gain graph's AudioContext - point it at
     // the selected speaker (its sink defaults to the system output otherwise).
     if (gain > 1) void setParticipantGainSink(prefSpeaker);
   }
 
-  // Apply saved per-participant volumes whenever a remote subscribes — keeps
+  // Apply saved per-participant volumes whenever a remote subscribes - keeps
   // user-set volumes sticky across rejoins / new sessions. Participants the
   // user muted-for-me stay at 0 until they unmute them.
   useEffect(() => {
@@ -2424,7 +2430,7 @@ export function InRoomScreen(props: InRoomScreenProps): ReactElement {
     }
   }, [snapshot.remotes, persistedScreenVolumes, mutedForMe, deafened]);
 
-  // 2.5g "Mute for me": local-only — zero this participant's audio on our
+  // 2.5g "Mute for me": local-only - zero this participant's audio on our
   // end via RemoteParticipant.setVolume; nothing changes for anyone else.
   // Restores the previously saved per-source volumes on unmute.
   function setMuteForMe(id: string, mute: boolean): void {
@@ -2442,7 +2448,7 @@ export function InRoomScreen(props: InRoomScreenProps): ReactElement {
     }
   }
 
-  // Stable callbacks — required for the Tile memo comparator to skip renders.
+  // Stable callbacks - required for the Tile memo comparator to skip renders.
   // The only render-varying read (our own identity) goes through a ref so the
   // object itself can be built once ([] deps; setState updaters are stable).
   const localIdentityRef = useRef<string | undefined>(undefined);
@@ -2451,7 +2457,7 @@ export function InRoomScreen(props: InRoomScreenProps): ReactElement {
     () => ({
       onClick: (id) => {
         // Discord mechanic: left-click ANY tile (including your own) toggles
-        // the spotlight — focus one person big, click the same tile again to
+        // the spotlight - focus one person big, click the same tile again to
         // drop back to the grid showing everyone; click a different tile to
         // switch focus. Uniform for all tiles. Per-person actions (volume,
         // mute-for-me, hide-my-video, …) live in the right-click menu, so
@@ -2534,13 +2540,13 @@ export function InRoomScreen(props: InRoomScreenProps): ReactElement {
 
   // Live-apply camera resolution changes while the camera is on (mirrors the
   // mic-gain live-apply): restart the video track at the new resolution. Only
-  // on an actual resolution change — not when the camera turns on (it already
+  // on an actual resolution change - not when the camera turns on (it already
   // starts at the chosen resolution via handleToggleCamera).
   const lastCamRes = useRef(cameraResolution);
   useEffect(() => {
     if (cameraOn && lastCamRes.current !== cameraResolution) {
       void roomWrapper.restartCameraResolution(cameraDims).catch(() => {
-        /* best-effort — keep the current stream if the restart fails */
+        /* best-effort - keep the current stream if the restart fails */
       });
     }
     lastCamRes.current = cameraResolution;
@@ -2592,11 +2598,11 @@ export function InRoomScreen(props: InRoomScreenProps): ReactElement {
   // everyone else renders as a compact audio circle (names live in the sidebar).
   const allVideoTiles = tiles.filter((t) => t.screenTrack !== null || t.cameraTrack !== null);
   const localVideoTile = allVideoTiles.find((t) => t.isLocal) ?? null;
-  // "Hide my video" only bites when you actually have video — so turning your
+  // "Hide my video" only bites when you actually have video - so turning your
   // camera off (or a voice-only room) can't strand you off-grid with no way
   // back. The preference persists and re-applies when video returns.
   const selfHidden = selfMinimized && localVideoTile !== null;
-  // Discord model: ONE grid of EVERYONE — a Tile renders video when present,
+  // Discord model: ONE grid of EVERYONE - a Tile renders video when present,
   // otherwise an avatar (no separate audio-only strip).
   const gridTiles = selfHidden ? tiles.filter((t) => !t.isLocal) : tiles;
   const anyoneHasVideo = gridTiles.some((t) => t.screenTrack !== null || t.cameraTrack !== null);
@@ -2625,13 +2631,13 @@ export function InRoomScreen(props: InRoomScreenProps): ReactElement {
   const watchableSharers = sharingParticipants.filter(
     (s) => !s.isLocal && s.id !== shownFocusId,
   );
-  // 4e: one-time "you're muted" nudge — connected, still muted, never unmuted,
+  // 4e: one-time "you're muted" nudge - connected, still muted, never unmuted,
   // not dismissed, within the first minute.
   const showMuteHint =
     conn.phase === "connected" && muted && !everUnmuted && !muteHintDismissed && elapsed < 60;
 
   // Persistent-call mini bar (#35). The connection lives at the app shell now,
-  // so navigating away doesn't unmount this screen — it just flips to minimized.
+  // so navigating away doesn't unmount this screen - it just flips to minimized.
   // Render a compact floating dock (mic / ghost / leave + "return to call")
   // while the user browses another page. All hooks above still ran, so the
   // LiveKit session, media, and E2EE are untouched.
@@ -2670,7 +2676,7 @@ export function InRoomScreen(props: InRoomScreenProps): ReactElement {
     );
   }
 
-  // Full-viewport maximized layout — no sidebar/topbar/control bar, single tile
+  // Full-viewport maximized layout - no sidebar/topbar/control bar, single tile
   // fills the whole app window. OS fullscreen (requestFullscreen) is preferred
   // when the tile has a video; this layout is the fallback for avatar tiles or
   // when OS fullscreen is unavailable.
@@ -2702,7 +2708,7 @@ export function InRoomScreen(props: InRoomScreenProps): ReactElement {
 
   const localDisplayName = user?.displayName ?? snapshot.local?.name ?? snapshot.local?.identity ?? "You";
 
-  // Server-initiated disconnect overlay — shows for ~4 s before auto-bouncing.
+  // Server-initiated disconnect overlay - shows for ~4 s before auto-bouncing.
   if (snapshot.disconnectKind) {
     const message =
       snapshot.disconnectKind === "removed-by-owner"
@@ -2750,7 +2756,7 @@ export function InRoomScreen(props: InRoomScreenProps): ReactElement {
       style={{
         display: "grid",
         // 2.5f: opening chat adds a full-width bottom band (below the control
-        // bar), reflowing the tiles up — not a right-side overlay.
+        // bar), reflowing the tiles up - not a right-side overlay.
         gridTemplateRows: chatOpen ? "auto 1fr auto minmax(200px, 34vh)" : "auto 1fr auto",
         height: "100%",
         position: "relative",
@@ -2886,7 +2892,7 @@ export function InRoomScreen(props: InRoomScreenProps): ReactElement {
       </header>
 
       {/* Media reconnection banner (task 1). `connected` stays true through a
-          blip, so RoomEvent.Reconnecting is the only signal audio has cut —
+          blip, so RoomEvent.Reconnecting is the only signal audio has cut -
           surface it prominently. Auto-clears on Reconnected. */}
       {snapshot.reconnecting && (
         <div
@@ -2912,7 +2918,7 @@ export function InRoomScreen(props: InRoomScreenProps): ReactElement {
           <Spinner />
           <span style={{ fontWeight: 600 }}>Reconnecting…</span>
           <span style={{ color: "var(--text-mid)", fontSize: "var(--t-sm)" }}>
-            Your connection dropped — audio and video will resume automatically.
+            Your connection dropped - audio and video will resume automatically.
           </span>
         </div>
       )}
@@ -3002,7 +3008,7 @@ export function InRoomScreen(props: InRoomScreenProps): ReactElement {
                       }}
                     >
                       {/* Fixed square box so the grid cell can't stretch it
-                          vertically — otherwise the speaking ring (inset:-2 on
+                          vertically - otherwise the speaking ring (inset:-2 on
                           a stretched parent) renders as an oval. */}
                       <div style={{ position: "relative", width: 28, height: 28, flexShrink: 0, alignSelf: "center" }}>
                         <Avatar
@@ -3104,7 +3110,7 @@ export function InRoomScreen(props: InRoomScreenProps): ReactElement {
                 boxShadow: "var(--shadow-2)",
               }}
             >
-              ➤ Pointer on — hover a shared screen · click to stop
+              ➤ Pointer on - hover a shared screen · click to stop
             </button>
           )}
           {selfHidden && localVideoTile && (
@@ -3146,7 +3152,7 @@ export function InRoomScreen(props: InRoomScreenProps): ReactElement {
               callbacks={tileCallbacks}
             />
           ) : anyoneHasVideo ? (
-            /* Everyone in one grid — camera-off participants render as avatar
+            /* Everyone in one grid - camera-off participants render as avatar
                tiles (Discord model), no separate audio strip. */
             <GridLayout people={gridTiles} callbacks={tileCallbacks} />
           ) : (
@@ -3173,11 +3179,11 @@ export function InRoomScreen(props: InRoomScreenProps): ReactElement {
           )}
         </main>
 
-        {/* Layout switcher removed per Red — layout stays "auto". */}
+        {/* Layout switcher removed per Red - layout stays "auto". */}
 
         {/* Open-DM (2.5g): right-side overlay anchored to this body div, which
             is position:relative so the panel's absolute box resolves here (not
-            the viewport). Gate on dmTarget only — snapshot.local is created with
+            the viewport). Gate on dmTarget only - snapshot.local is created with
             the Room and is effectively always present in-room, so also gating on
             it just risked a blank click; fall back to a stable identity like the
             room-chat dock does. */}
@@ -3210,7 +3216,7 @@ export function InRoomScreen(props: InRoomScreenProps): ReactElement {
         />
       )}
 
-      {/* Control bar (2.5): three clusters — [mic·cam·ghost] | [share·audio] | [chat·leave] */}
+      {/* Control bar (2.5): three clusters - [mic·cam·ghost] | [share·audio] | [chat·leave] */}
       <footer
         style={{
           height: "5.5rem",
@@ -3275,7 +3281,7 @@ export function InRoomScreen(props: InRoomScreenProps): ReactElement {
               label="Ghost"
               amber={localGhost}
               disabled={conn.phase !== "connected"}
-              title={withBind("Ghost — mic and camera off together", deafenKeybind)}
+              title={withBind("Ghost - mic and camera off together", deafenKeybind)}
               onClick={() => void roomWrapper.setGhost(!localGhost)}
             />
           </div>
@@ -3327,7 +3333,7 @@ export function InRoomScreen(props: InRoomScreenProps): ReactElement {
           {netStats?.rttMs !== null && netStats?.rttMs !== undefined && (
             <span
               className="rv-mono"
-              title={`RTT ${Math.round(netStats.rttMs)}ms · jitter ${netStats.jitterMs?.toFixed(1) ?? "—"}ms · lost ${netStats.packetsLost ?? "—"}`}
+              title={`RTT ${Math.round(netStats.rttMs)}ms · jitter ${netStats.jitterMs?.toFixed(1) ?? "-"}ms · lost ${netStats.packetsLost ?? "-"}`}
               style={{
                 fontSize: 10,
                 letterSpacing: ".1em",
@@ -3469,13 +3475,13 @@ export function InRoomScreen(props: InRoomScreenProps): ReactElement {
                     })}
                   </div>
                   <div style={{ fontSize: 10, color: "var(--text-faint)", marginTop: 4, lineHeight: 1.4 }}>
-                    Lower saves bandwidth on your end — only affects your view.
+                    Lower saves bandwidth on your end - only affects your view.
                   </div>
                 </div>
               )}
               {menuParticipant.screenTrack !== null && (
                 <CtxItem
-                  title="Show your cursor on their shared screen for everyone (a shared laser pointer — no actual control)"
+                  title="Show your cursor on their shared screen for everyone (a shared laser pointer - no actual control)"
                   onClick={() => {
                     setShowMyPointer((v) => !v);
                     setMenu(null);
@@ -3498,7 +3504,7 @@ export function InRoomScreen(props: InRoomScreenProps): ReactElement {
                 </span>
               </CtxItem>
               <CtxItem
-                title="Silence this person just for you — nobody else is affected"
+                title="Silence this person just for you - nobody else is affected"
                 onClick={() => {
                   setMuteForMe(menuParticipant.id, !mutedForMe[menuParticipant.id]);
                   setMenu(null);
@@ -3520,7 +3526,7 @@ export function InRoomScreen(props: InRoomScreenProps): ReactElement {
                 </span>
               </CtxItem>
 
-              {/* Owner-only moderation — inline two-step confirm so a stray
+              {/* Owner-only moderation - inline two-step confirm so a stray
                   click can't eject or hand off the room. */}
               {isRoomOwner && (
                 <>
@@ -3597,7 +3603,7 @@ export function InRoomScreen(props: InRoomScreenProps): ReactElement {
       )}
 
       {/* Remote-audio sink lives on document.body (see audioMountRef init) so
-          it survives minimize/maximize — not rendered here. */}
+          it survives minimize/maximize - not rendered here. */}
 
       {/* 2.5j connecting overlay: step list over the room while we negotiate */}
       {conn.phase === "connecting" && (
@@ -3635,7 +3641,7 @@ export function InRoomScreen(props: InRoomScreenProps): ReactElement {
         </div>
       )}
 
-      {/* Join-failure overlay — a real recovery surface instead of a tiny header
+      {/* Join-failure overlay - a real recovery surface instead of a tiny header
           note with a dead control bar behind it. */}
       {conn.phase === "error" && (
         <div className="rv-conn-mask">
@@ -3708,7 +3714,7 @@ export function InRoomScreen(props: InRoomScreenProps): ReactElement {
           role="status"
           style={{
             // Anchored just above the control bar so it points at the mic
-            // button it's telling you to click — not floating mid-screen.
+            // button it's telling you to click - not floating mid-screen.
             position: "fixed",
             left: "50%",
             bottom: "5.75rem",
@@ -3727,7 +3733,7 @@ export function InRoomScreen(props: InRoomScreenProps): ReactElement {
         >
           <I.MicOff size={16} style={{ color: "var(--danger)", flexShrink: 0 }} />
           <span style={{ fontSize: "var(--t-sm)" }}>
-            You&apos;re muted —{" "}
+            You&apos;re muted -{" "}
             {muteKeybind ? (
               <>
                 press{" "}
@@ -3758,7 +3764,7 @@ export function InRoomScreen(props: InRoomScreenProps): ReactElement {
         </div>
       )}
 
-      {/* "is sharing — Watch" chip near the control bar (task 4g) */}
+      {/* "is sharing - Watch" chip near the control bar (task 4g) */}
       {conn.phase === "connected" && watchableSharers.length > 0 && (
         <div
           style={{
@@ -3799,7 +3805,7 @@ export function InRoomScreen(props: InRoomScreenProps): ReactElement {
               <span>
                 <b>{s.name}</b> is sharing
               </span>
-              <span style={{ color: "var(--accent)", fontWeight: 600 }}>— Watch</span>
+              <span style={{ color: "var(--accent)", fontWeight: 600 }}>- Watch</span>
             </button>
           ))}
         </div>

@@ -48,7 +48,7 @@ const kbdStyle: CSSProperties = {
   color: "var(--text)",
 };
 
-// Deck 3.x pane titles — the per-pane header (.pane-title) shows the active
+// Deck 3.x pane titles - the per-pane header (.pane-title) shows the active
 // tab's name, sized at the deck's 18px page-title tier (var(--t-lg)).
 const SETTINGS_TAB_TITLES: Record<Tab, string> = {
   devices: "Devices",
@@ -68,7 +68,7 @@ export function SettingsModal({ onClose }: { onClose: () => void }): ReactElemen
       {/* Clamp to the viewport so the modal never clips off-screen and only
           the tab pane scrolls (single scrollbar). */}
       <div style={{ display: "grid", gridTemplateColumns: "200px 1fr", height: "min(560px, 80vh)" }}>
-        {/* Left nav rail — mono head, items, identity foot pinned to the bottom */}
+        {/* Left nav rail - mono head, items, identity foot pinned to the bottom */}
         <nav
           style={{
             borderRight: "1px solid var(--border-soft)",
@@ -94,7 +94,7 @@ export function SettingsModal({ onClose }: { onClose: () => void }): ReactElemen
           <SettingsIdentityFoot />
         </nav>
 
-        {/* Right pane — per-tab header (.pane-head) over the scrollable body */}
+        {/* Right pane - per-tab header (.pane-head) over the scrollable body */}
         <div style={{ display: "grid", gridTemplateRows: "auto 1fr", minHeight: 0 }}>
           <PaneHead title={SETTINGS_TAB_TITLES[tab]} onClose={onClose} />
           <div className="rv-scroll" style={{ padding: "var(--s-6) var(--s-7)", overflowY: "auto", minHeight: 0 }}>
@@ -136,7 +136,7 @@ function PaneHead({ title, onClose }: { title: string; onClose: () => void }): R
   );
 }
 
-// Nav-rail identity foot (deck .nav-foot) — signed-in user pinned to the bottom
+// Nav-rail identity foot (deck .nav-foot) - signed-in user pinned to the bottom
 // of the rail: avatar + presence dot, display name, @handle.
 function SettingsIdentityFoot(): ReactElement {
   const user = useAuthStore((s) => s.user);
@@ -346,7 +346,7 @@ function DevicesTab(): ReactElement {
   );
 }
 
-// 3.1b — inline permission-denied block for mic/camera. The system blocked
+// 3.1b - inline permission-denied block for mic/camera. The system blocked
 // access; explain + offer retry (and the macOS request-permission path).
 function PermissionDeniedBlock({
   kind,
@@ -403,8 +403,8 @@ function PermissionDeniedBlock({
   );
 }
 
-// 3.1 — live mic input level next to the mic select. Opens the selected
-// device raw (no processing pipeline — we want the honest input level),
+// 3.1 - live mic input level next to the mic select. Opens the selected
+// device raw (no processing pipeline - we want the honest input level),
 // meters via WebAudio, and releases everything on unmount/device change.
 function MicLevelRow({ deviceId }: { deviceId: string | null }): ReactElement {
   const [blocked, setBlocked] = useState(false);
@@ -468,7 +468,7 @@ function MicLevelRow({ deviceId }: { deviceId: string | null }): ReactElement {
   );
 }
 
-// 3.1 — speaker test: a short generated two-note chime through the selected
+// 3.1 - speaker test: a short generated two-note chime through the selected
 // output (WebAudio oscillator → element sink so setSinkId can route it).
 function SpeakerTestButton({ deviceId }: { deviceId: string | null }): ReactElement {
   const [testing, setTesting] = useState(false);
@@ -526,7 +526,7 @@ const CAMERA_RES: Array<{ key: CameraResolution; label: string; w: number; h: nu
   { key: "1440p", label: "2560 × 1440 · 30 fps", w: 2560, h: 1440 },
 ];
 
-// 3.1 / 3.1a — Video: camera select, live preview (released on stop/unmount),
+// 3.1 / 3.1a - Video: camera select, live preview (released on stop/unmount),
 // resolution select, mirror toggle. Permission denial renders the 3.1b block.
 function VideoSection(): ReactElement {
   const camId = usePrefs((s) => s.cameraDeviceId);
@@ -713,7 +713,7 @@ function VideoSection(): ReactElement {
   );
 }
 
-// Mono in/out (task #12) — single-channel interfaces publish centered
+// Mono in/out (task #12) - single-channel interfaces publish centered
 // instead of left-ear-only; mono output plays the same mix in both ears.
 function MonoControls(): ReactElement {
   const monoInput = usePrefs((s) => s.monoInput);
@@ -728,7 +728,7 @@ function MonoControls(): ReactElement {
       />
       <SimpleToggle
         label="Mono output"
-        hint="Play everything the same in both ears — for single-ear headsets or asymmetric hearing. Applies live."
+        hint="Play everything the same in both ears - for single-ear headsets or asymmetric hearing. Applies live."
         value={monoOutput}
         onChange={(v) => prefsActions().setMonoOutput(v)}
       />
@@ -847,7 +847,7 @@ function InputProfileSection(): ReactElement {
         ))}
       </div>
 
-      {/* Input sensitivity — shown for every profile, like Discord */}
+      {/* Input sensitivity - shown for every profile, like Discord */}
       <div>
         <div className="rv-label" style={{ marginBottom: "var(--s-2)" }}>Input sensitivity</div>
         <SensitivityMeter deviceId={micDeviceId} threshold={sensitivity} enabled={vadEnabled} />
@@ -990,7 +990,7 @@ function SimpleToggle({
           height: 22,
           flexShrink: 0,
           borderRadius: 999,
-          // Off-track must contrast the panel behind it in ANY theme — a % of
+          // Off-track must contrast the panel behind it in ANY theme - a % of
           // the text colour always reads against its own background (the old
           // --bg-elev-3 was ~invisible on the white surface, so only the dark
           // knob showed → the "floating dot" bug).
@@ -1037,7 +1037,7 @@ interface BindSummary {
   combo: string | null;
 }
 
-// Deck 3.2 rows — labels + defaults ship populated (see prefs-store DEFAULTS);
+// Deck 3.2 rows - labels + defaults ship populated (see prefs-store DEFAULTS);
 // unbound rows show the deck's dim "none" ghost text.
 const KEYBIND_ROWS: KeybindRowSpec[] = [
   { label: "Push to talk", key: "pttKeybind", global: true },
@@ -1069,7 +1069,7 @@ function KeybindsTab(): ReactElement {
   };
   const allBinds: BindSummary[] = KEYBIND_ROWS.map((r) => ({ key: r.key, label: r.label, combo: byKey[r.key] }));
 
-  // UX audit #2d — restore every keybind to the shipped defaults.
+  // UX audit #2d - restore every keybind to the shipped defaults.
   const resetAll = (): void => {
     const a = prefsActions();
     a.setPttKeybind(KEYBIND_DEFAULTS.pttKeybind);
@@ -1133,7 +1133,7 @@ function KeybindsTab(): ReactElement {
   );
 }
 
-// Keyboard shortcuts cheatsheet per WireFrames 4.18 — user-configured binds
+// Keyboard shortcuts cheatsheet per WireFrames 4.18 - user-configured binds
 // plus the built-in interactions that aren't rebindable.
 function CheatsheetModal({ onClose }: { onClose: () => void }): ReactElement {
   const ptt = usePrefs((s) => s.pttKeybind);
@@ -1188,7 +1188,7 @@ function CheatsheetModal({ onClose }: { onClose: () => void }): ReactElement {
 }
 
 const PTT_REG_FAILED =
-  "R3DVoice couldn't register this system-wide shortcut — it may already be taken by another app. Push-to-talk is inactive until you pick a different combo.";
+  "R3DVoice couldn't register this system-wide shortcut - it may already be taken by another app. Push-to-talk is inactive until you pick a different combo.";
 
 function KeybindRow({ spec, allBinds }: { spec: KeybindRowSpec; allBinds: BindSummary[] }): ReactElement {
   const current = usePrefs((s) => s[spec.key]);
@@ -1221,7 +1221,7 @@ function KeybindRow({ spec, allBinds }: { spec: KeybindRowSpec; allBinds: BindSu
       const key = e.key === " " ? "Space" : e.key.length === 1 ? e.key.toUpperCase() : e.key;
       finish([...mods(e), key].join("+"));
     }
-    // UX audit #2b — allow mouse-button binds (Mouse4/Mouse5 = back/forward),
+    // UX audit #2b - allow mouse-button binds (Mouse4/Mouse5 = back/forward),
     // a common push-to-talk choice. Left/middle/right are ignored so the
     // capture overlay stays clickable (and Esc still cancels).
     function onMouse(e: MouseEvent): void {
@@ -1251,10 +1251,10 @@ function KeybindRow({ spec, allBinds }: { spec: KeybindRowSpec; allBinds: BindSu
     setRegError(null);
     if (!spec.global) return;
     // PTT goes through globalShortcut in main; others stay in renderer.
-    // UX audit #2c — surface a failed OS registration instead of leaving PTT
+    // UX audit #2c - surface a failed OS registration instead of leaving PTT
     // silently unbound.
     if (next && /Mouse\d/.test(next)) {
-      // Electron's globalShortcut can't bind mouse buttons — a global mouse PTT
+      // Electron's globalShortcut can't bind mouse buttons - a global mouse PTT
       // won't register. Be honest rather than pretend it worked.
       setRegError(
         "Mouse buttons can't act as a system-wide push-to-talk (the OS shortcut layer only accepts keyboard keys). Pick a key combo instead.",
@@ -1288,7 +1288,7 @@ function KeybindRow({ spec, allBinds }: { spec: KeybindRowSpec; allBinds: BindSu
   const display = captured ?? current ?? "none";
   const isGhost = !captured && !current;
 
-  // UX audit #2a — flag a combo that is also bound to another action.
+  // UX audit #2a - flag a combo that is also bound to another action.
   const activeCombo = captured ?? current;
   const conflictLabels = activeCombo
     ? allBinds
@@ -1352,7 +1352,7 @@ function KeybindRow({ spec, allBinds }: { spec: KeybindRowSpec; allBinds: BindSu
       </div>
       {conflictLabels.length > 0 && (
         <div style={warnStyle}>
-          ⚠ Also bound to {conflictLabels.join(", ")} — one combo firing two actions is usually a mistake.
+          ⚠ Also bound to {conflictLabels.join(", ")} - one combo firing two actions is usually a mistake.
         </div>
       )}
       {regError && <div style={warnStyle}>⚠ {regError}</div>}
@@ -1388,7 +1388,7 @@ function CompatTab(): ReactElement {
         <span className="rv-label">Hardware acceleration</span>
       </div>
 
-      {/* X11 / Wayland — wired */}
+      {/* X11 / Wayland - wired */}
       <label
         style={{
           display: "flex",
@@ -1446,10 +1446,10 @@ function CompatTab(): ReactElement {
 
       {/* UX audit #1: "GPU video decode (VP9/AV1)" + "Use system
           Picture-in-Picture" were inert local-state toggles (nothing behind
-          them) — hidden until wired to real backend behavior so the panel
+          them) - hidden until wired to real backend behavior so the panel
           doesn't read as "looks real, does nothing". */}
 
-      {/* UX audit #6 — diagnostics overlay toggle (pref + overlay already exist). */}
+      {/* UX audit #6 - diagnostics overlay toggle (pref + overlay already exist). */}
       <SimpleToggle
         label="Show diagnostics overlay"
         hint="Live connection + media stats overlay. Toggle any time with Ctrl+Shift+D."
@@ -1457,7 +1457,7 @@ function CompatTab(): ReactElement {
         onChange={(v) => prefsActions().setShowDiagnostics(v)}
       />
 
-      {/* UX audit #7 — Relaunch restarts the app on one click; guard it. */}
+      {/* UX audit #7 - Relaunch restarts the app on one click; guard it. */}
       {!confirmingRelaunch ? (
         <div>
           <button className="rv-btn" onClick={() => setConfirmingRelaunch(true)}>
@@ -1500,7 +1500,7 @@ function CompatTab(): ReactElement {
             <strong>Linux</strong>: system audio in screenshare needs PipeWire portal ≥ 1.14
           </li>
           <li>
-            <strong>Windows</strong>: system audio uses "loopback" — no setup needed
+            <strong>Windows</strong>: system audio uses "loopback" - no setup needed
           </li>
         </ul>
       </div>
@@ -1612,7 +1612,7 @@ function PermissionRows(): ReactElement {
 
   useEffect(() => {
     void refresh();
-    // Re-check on focus — user may have just toggled the OS setting.
+    // Re-check on focus - user may have just toggled the OS setting.
     const onFocus = (): void => void refresh();
     window.addEventListener("focus", onFocus);
     return () => window.removeEventListener("focus", onFocus);
@@ -1723,7 +1723,7 @@ function PermRow({
 }
 
 // Notifications per WireFrames 3.7. The "Sounds" section (disabled sound
-// pickers) was removed per UX audit #1 — no sound assets ship yet, and a
+// pickers) was removed per UX audit #1 - no sound assets ship yet, and a
 // dead pointerEvents:none block reads as broken. It returns with the pack.
 
 function NotificationsTab(): ReactElement {
@@ -1777,7 +1777,7 @@ function NotificationsTab(): ReactElement {
           i
         </span>
         <span>
-          Applied to new rooms you join. Existing rooms keep their override — change one from the
+          Applied to new rooms you join. Existing rooms keep their override - change one from the
           level dropdown at the top of its chat.
         </span>
       </div>
@@ -1801,7 +1801,7 @@ function NotificationsTab(): ReactElement {
       <div className="rv-section-head" style={{ marginTop: "var(--s-2)" }}>
         <span className="rv-label">Voice channels</span>
       </div>
-      {/* UX audit #5 — no cue when people come/go in a call. Until sound assets
+      {/* UX audit #5 - no cue when people come/go in a call. Until sound assets
           ship, a toast covers it (see notify-join-leave.ts; InRoomScreen wires
           the room events). */}
       <SimpleToggle
@@ -1856,7 +1856,7 @@ function NotificationsTab(): ReactElement {
   );
 }
 
-// Theme tab per WireFrames 3.6 — presets (Light/Dark/Grey/Match OS), a
+// Theme tab per WireFrames 3.6 - presets (Light/Dark/Grey/Match OS), a
 // per-token hex editor with app-wide live preview, the preview card, and the
 // 4.14 reset-to-preset modal (override count + export-first escape hatch).
 const PRESET_LABELS: Record<ThemePreset, string> = {
@@ -1880,7 +1880,7 @@ function ThemeTab(): ReactElement {
   const fileRef = useRef<HTMLInputElement | null>(null);
 
   // Seed/re-seed whenever the preset or the saved overrides change. rAF so
-  // App's data-theme effect (parent — runs after ours) has landed first.
+  // App's data-theme effect (parent - runs after ours) has landed first.
   useEffect(() => {
     const raf = requestAnimationFrame(() => {
       const root = document.documentElement;
@@ -1909,7 +1909,7 @@ function ThemeTab(): ReactElement {
   const effectiveValue = (cssVar: string): string =>
     edits[cssVar] ?? savedOverrides[cssVar] ?? presetVals[cssVar] ?? "";
 
-  /** Tokens that differ from the preset — what save persists / reset discards. */
+  /** Tokens that differ from the preset - what save persists / reset discards. */
   const mergedOverrides = (): Record<string, string> => {
     const out: Record<string, string> = {};
     for (const t of THEME_TOKENS) {
@@ -2133,7 +2133,7 @@ function ThemeTab(): ReactElement {
   );
 }
 
-// 3.6 preview card — sample UI wired to the live tokens (var() refs), so it
+// 3.6 preview card - sample UI wired to the live tokens (var() refs), so it
 // repaints as the editor above applies values.
 function ThemePreviewCard(): ReactElement {
   const pvBtn: CSSProperties = {
@@ -2281,7 +2281,7 @@ function ThemePreviewCard(): ReactElement {
   );
 }
 
-// 4.14 — reset theme to defaults: shows what gets discarded (override count),
+// 4.14 - reset theme to defaults: shows what gets discarded (override count),
 // offers the export escape hatch, then clears the override map.
 function ResetThemeModal({
   presetLabel,
@@ -2373,7 +2373,7 @@ function ResetThemeModal({
 }
 
 // Load, cover-crop to a square, and re-encode small so uploaded avatars stay
-// tiny (~10–30 KB webp) — fits the upload limit and loads fast.
+// tiny (~10–30 KB webp) - fits the upload limit and loads fast.
 function resizeImageToDataUrl(file: File, size: number): Promise<string> {
   return new Promise((resolvePromise, reject) => {
     const url = URL.createObjectURL(file);
@@ -2428,7 +2428,7 @@ function AccountTab({ onClose }: { onClose: () => void }): ReactElement {
       setAvatarBusy(false);
     }
   };
-  // UX audit #4 — live presence for the current user (DND from dndUntil + a
+  // UX audit #4 - live presence for the current user (DND from dndUntil + a
   // client-side idle timer). Friends' idle/DND need server work (see presence.tsx).
   const presence = usePresence();
   const [confirming, setConfirming] = useState(false);
@@ -2683,10 +2683,10 @@ function formatSessionTime(iso: string): string {
   return new Date(iso).toLocaleDateString();
 }
 
-// 4.11 — active sessions. UX audit #3: render per-session rows (created time +
+// 4.11 - active sessions. UX audit #3: render per-session rows (created time +
 // "current" badge), not just a count. GET /auth/sessions returns {id,
 // createdAt, current}. There is NO per-session revoke route on the server yet,
-// so individual sign-out isn't offered — only "sign out everywhere".
+// so individual sign-out isn't offered - only "sign out everywhere".
 function SessionsSection({ onSignedOutEverywhere }: { onSignedOutEverywhere: () => void }): ReactElement {
   const serverUrl = useAuthStore((s) => s.serverUrl);
   const token = useAuthStore((s) => s.token);
@@ -2754,7 +2754,7 @@ function SessionsSection({ onSignedOutEverywhere }: { onSignedOutEverywhere: () 
 
       <div style={{ fontSize: "var(--t-xs)", color: "var(--text-mid)" }}>
         {count === null ? "…" : `${count} active session${count === 1 ? "" : "s"}`}
-        {" — signing out everywhere revokes all of them, including this one."}
+        {" - signing out everywhere revokes all of them, including this one."}
       </div>
 
       {!confirming ? (
@@ -2791,7 +2791,7 @@ function SessionsSection({ onSignedOutEverywhere }: { onSignedOutEverywhere: () 
   );
 }
 
-// 3.3a — blocked users list with unblock.
+// 3.3a - blocked users list with unblock.
 function BlockedUsersSection(): ReactElement {
   const serverUrl = useAuthStore((s) => s.serverUrl);
   const token = useAuthStore((s) => s.token);
@@ -2845,7 +2845,7 @@ function BlockedUsersSection(): ReactElement {
   );
 }
 
-// 4.12 — delete account: type-handle confirm (UX) + password re-auth (security).
+// 4.12 - delete account: type-handle confirm (UX) + password re-auth (security).
 function DeleteAccountSection({ onDeleted }: { onDeleted: () => void }): ReactElement {
   const serverUrl = useAuthStore((s) => s.serverUrl);
   const token = useAuthStore((s) => s.token);
@@ -2893,7 +2893,7 @@ function DeleteAccountSection({ onDeleted }: { onDeleted: () => void }): ReactEl
         <input className="rv-input" value={confirmText} spellCheck={false} onChange={(e) => setConfirmText(e.target.value)} />
         {confirmText.length > 0 && !nameOk && (
           <div className="rv-field-help" style={{ color: "var(--danger)" }}>
-            That doesn't match — type "{expected}" (case doesn't matter).
+            That doesn't match - type "{expected}" (case doesn't matter).
           </div>
         )}
       </Field>
@@ -2938,7 +2938,7 @@ function DeleteAccountSection({ onDeleted }: { onDeleted: () => void }): ReactEl
 }
 
 // Display name + handle editing per 3.3 Profile section. The deck's gate
-// copy promises "change it anytime from Settings › Account" — this is that.
+// copy promises "change it anytime from Settings › Account" - this is that.
 function ProfileIdentityFields(): ReactElement {
   const user = useAuthStore((s) => s.user);
   const serverUrl = useAuthStore((s) => s.serverUrl);
@@ -3093,7 +3093,7 @@ function E2eeKeySection({ onSignedOut }: { onSignedOut: () => void }): ReactElem
         </div>
         <div style={{ fontSize: "var(--t-xs)", color: "var(--text-faint)", marginTop: 2, lineHeight: 1.5 }}>
           {kp
-            ? "Save this file somewhere safe. You'll need it to read your DM history on a new device. Losing it = losing the history (no recovery — that's the point of zero-trust)."
+            ? "Save this file somewhere safe. You'll need it to read your DM history on a new device. Losing it = losing the history (no recovery - that's the point of zero-trust)."
             : "No keypair on this device. Sign out and sign in again to generate one, or restore from a previous backup at login."}
         </div>
       </div>
@@ -3132,7 +3132,7 @@ function E2eeKeySection({ onSignedOut }: { onSignedOut: () => void }): ReactElem
         >
           <div style={{ fontSize: "var(--t-xs)", color: "var(--text-mid)", lineHeight: 1.5 }}>
             This deletes the E2EE keypair stored on this device, then signs you out. Without a key
-            backup, your encrypted DM history becomes unreadable here — download the backup above
+            backup, your encrypted DM history becomes unreadable here - download the backup above
             first if you might want it back.
           </div>
           <div style={{ display: "flex", gap: "var(--s-2)" }}>
@@ -3405,7 +3405,7 @@ function TwoFactorSection({ enabled }: { enabled: boolean }): ReactElement {
           }}
         >
           <div style={{ fontSize: "var(--t-sm)", fontWeight: 600 }}>
-            Backup codes — shown once, save them now
+            Backup codes - shown once, save them now
           </div>
           <div style={{ fontSize: "var(--t-xs)", color: "var(--text-mid)", lineHeight: 1.5 }}>
             Each signs you in exactly once if you lose your authenticator.
@@ -3545,7 +3545,7 @@ function AboutTab(): ReactElement {
           rel="noreferrer"
           style={{ gridColumn: "span 2" }}
         >
-          What's new — release notes
+          What's new - release notes
         </a>
       </div>
     </div>

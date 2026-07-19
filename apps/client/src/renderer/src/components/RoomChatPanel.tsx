@@ -26,8 +26,13 @@ const PLUS_ITEM_STYLE: CSSProperties = {
   cursor: "pointer",
 };
 
-// #30 attachment upload cap — matched to the server's accepted size.
-const MAX_ATTACHMENT_BYTES = 8 * 1024 * 1024;
+// #30 attachment upload cap - matched to the server's accepted size.
+// Ceiling is Cloudflare's request-body limit (100 MB free plan) LESS the ~33%
+// base64 overhead of the data-URL upload → ~70 MB of real file. 64 MiB stays
+// safely under that. True 200 MB needs presigned/direct-to-storage uploads that
+// bypass the CF proxy (see server route note).
+const MAX_ATTACHMENT_BYTES = 64 * 1024 * 1024;
+const MAX_ATTACHMENT_MB = Math.round(MAX_ATTACHMENT_BYTES / (1024 * 1024));
 
 /** Read a File into a `data:` URL for the upload endpoint. */
 function readFileAsDataUrl(file: File): Promise<string> {
@@ -56,7 +61,7 @@ function fileGlyph(mime: string): string {
   return "📎";
 }
 
-/** A message the local user is sending — shown optimistically before the
+/** A message the local user is sending - shown optimistically before the
  *  server echoes it back. `text` is the plaintext (used for display + retry;
  *  for DMs the wire body is re-encrypted per attempt). */
 type PendingMessage = {
@@ -66,7 +71,7 @@ type PendingMessage = {
   status: "sending" | "failed";
 };
 
-/** Inline emphasis: **bold**, *italic* / _italic_. Input is plain text —
+/** Inline emphasis: **bold**, *italic* / _italic_. Input is plain text -
  *  everything is emitted as React text/element nodes, which React escapes,
  *  so there's no HTML-injection surface. */
 function emphasize(text: string, keyBase: string): ReactNode[] {
@@ -178,21 +183,21 @@ interface Props {
   mentionCandidates?: { id: string; handle: string; displayName: string }[];
   /**
    * "overlay": self-positioned right-side panel.
-   * "fill": fills the parent container — the DMs thread pane (2.4), which
+   * "fill": fills the parent container - the DMs thread pane (2.4), which
    * brings its own ThreadHeader, so no panel header is rendered.
-   * "dock": in-room chat (2.5f) — a full-width bottom band that fills its grid
+   * "dock": in-room chat (2.5f) - a full-width bottom band that fills its grid
    * row (below the control bar), headerless like "fill" but with a top border.
    */
   variant?: "overlay" | "fill" | "dock";
   /** Channel name for the composer placeholder ("Message #<name>…"). */
   channelName?: string | undefined;
-  /** DM peer's display name — labels the overlay header so an Open-DM panel
+  /** DM peer's display name - labels the overlay header so an Open-DM panel
    *  reads as a conversation with that person rather than the generic chrome. */
   peerName?: string | undefined;
 }
 
 // Persistent chat panel backed by REST + WebSocket (P5 T20).
-// LiveKit DataChannel is no longer the transport — every message round-trips
+// LiveKit DataChannel is no longer the transport - every message round-trips
 // through the server so it shows up in the user's history regardless of
 // whether they were online when sent.
 export function RoomChatPanel({
@@ -213,7 +218,7 @@ export function RoomChatPanel({
   // Distinguish "still loading history" from "loaded, but empty" so we don't
   // flash "No messages yet." over a thread that's mid-fetch.
   const [historyLoading, setHistoryLoading] = useState(true);
-  // Optimistic outbound messages — rendered greyed as "sending…" until the
+  // Optimistic outbound messages - rendered greyed as "sending…" until the
   // server accepts them, then flipped to "failed · retry" on error.
   const [pending, setPending] = useState<PendingMessage[]>([]);
   // Unread affordances: the id of the first message that arrived while the
@@ -234,7 +239,7 @@ export function RoomChatPanel({
   const plusBtnRef = useRef<HTMLButtonElement>(null);
   const plusMenuRef = useRef<HTMLDivElement>(null);
   useDismiss(plusOpen, () => setPlusOpen(false), [plusMenuRef, plusBtnRef]);
-  // #29/#30 — attachments + polls. Room-only: DMs are E2EE and the server
+  // #29/#30 - attachments + polls. Room-only: DMs are E2EE and the server
   // rejects them, so the composer's "+" items are disabled in DM threads.
   const attachmentsAllowed = threadType === "room";
   const attachInputRef = useRef<HTMLInputElement | null>(null);
@@ -262,7 +267,7 @@ export function RoomChatPanel({
     const t = setInterval(() => {
       const n = Date.now();
       setNow(n);
-      // Once the deadline passes there's nothing left to count down — stop the
+      // Once the deadline passes there's nothing left to count down - stop the
       // ticker so an expired indicator doesn't re-render the panel forever.
       if (n >= typingUntil) clearInterval(t);
     }, 1000);
@@ -277,7 +282,7 @@ export function RoomChatPanel({
   const apiRef = useRef<ApiClient | null>(null);
   const transportRef = useRef<ChatTransport | null>(null);
 
-  // E2EE state — only relevant for DMs.
+  // E2EE state - only relevant for DMs.
   // keyEpoch bumps when the restore banner installs a key in-place, so the
   // memo re-reads localStorage and the whole history decrypts without a reload.
   const [keyEpoch, setKeyEpoch] = useState(0);
@@ -303,7 +308,7 @@ export function RoomChatPanel({
     api.setToken(token);
     apiRef.current = api;
 
-    // Use the app-wide singleton transport — established at login. Without
+    // Use the app-wide singleton transport - established at login. Without
     // it WS-targeted events (mentions, friend events, presence) silently
     // drop whenever no chat panel is mounted.
     const transport = ensureTransport(serverUrl, token);
@@ -337,7 +342,7 @@ export function RoomChatPanel({
 
     // For DMs, also fetch the peer's public key so we can encrypt outgoing
     // messages. Decryption only needs the sender's pubkey (embedded in each
-    // ciphertext envelope) + our secret — fetching the peer is purely for
+    // ciphertext envelope) + our secret - fetching the peer is purely for
     // sending.
     if (threadType === "dm" && peerUserId) {
       void api
@@ -380,7 +385,7 @@ export function RoomChatPanel({
         }
       } else if (event.type === "pinned") {
         if (event.message.threadType === threadType && event.message.threadId === threadId) {
-          // Broadcast DTOs carry no reaction aggregate — keep what we have.
+          // Broadcast DTOs carry no reaction aggregate - keep what we have.
           setMessages((prev) =>
             prev.map((m) =>
               m.id === event.message.id ? { ...event.message, ...(event.message.reactions ?? m.reactions ? { reactions: event.message.reactions ?? m.reactions ?? [] } : {}) } : m,
@@ -404,7 +409,7 @@ export function RoomChatPanel({
               if (event.op === "add") {
                 if (idx >= 0) {
                   const cur = list[idx]!;
-                  // Own optimistic add may already be counted — don't double.
+                  // Own optimistic add may already be counted - don't double.
                   if (mineEvent && cur.mine) return m;
                   list[idx] = { ...cur, count: cur.count + 1, mine: cur.mine || mineEvent };
                 } else {
@@ -431,7 +436,7 @@ export function RoomChatPanel({
       cancelled = true;
       off();
       transport.unsubscribe(threadType, threadId);
-      // Don't stop the transport — it lives for the whole logged-in session.
+      // Don't stop the transport - it lives for the whole logged-in session.
       setCurrentlyViewingThread(null);
       apiRef.current = null;
       transportRef.current = null;
@@ -459,7 +464,7 @@ export function RoomChatPanel({
         return;
       }
       if (!peerPublicKey) {
-        setError("This user hasn't enrolled an encryption key yet — DMs require the recipient to be on a recent client.");
+        setError("This user hasn't enrolled an encryption key yet - DMs require the recipient to be on a recent client.");
         return;
       }
       const envelope = encryptDM(text, peerPublicKey, myKeyPair);
@@ -467,7 +472,7 @@ export function RoomChatPanel({
     }
 
     // Edit-in-composer (2.5k): same encrypt path, PATCH instead of POST,
-    // optimistic local update — the server doesn't push edit events yet.
+    // optimistic local update - the server doesn't push edit events yet.
     if (editingId !== null) {
       const id = editingId;
       setEditingId(null);
@@ -516,7 +521,7 @@ export function RoomChatPanel({
     let body = item.text;
     if (threadType === "dm") {
       if (!myKeyPair || !peerPublicKey) {
-        setError("Can't retry — an encryption key is unavailable on this device.");
+        setError("Can't retry - an encryption key is unavailable on this device.");
         return;
       }
       body = JSON.stringify(encryptDM(item.text, peerPublicKey, myKeyPair));
@@ -537,14 +542,14 @@ export function RoomChatPanel({
     setPending((p) => p.filter((x) => x.clientId !== clientId));
   };
 
-  // #30 attachments — read the picked file as a data URL, upload it, then send
+  // #30 attachments - read the picked file as a data URL, upload it, then send
   // a room message carrying the returned descriptor. Room-only, so no E2EE
   // encrypt step: the body is the plain draft (may be empty).
   const onPickAttachment = async (file: File): Promise<void> => {
     const api = apiRef.current;
     if (!api) return;
     if (file.size > MAX_ATTACHMENT_BYTES) {
-      pushToast({ kind: "error", text: `“${file.name}” is too large — 8 MB max.` });
+      pushToast({ kind: "error", text: `“${file.name}” is too large - ${MAX_ATTACHMENT_MB} MB max.` });
       return;
     }
     setUploading(true);
@@ -599,7 +604,7 @@ export function RoomChatPanel({
       }
       saveKeyPair(kp);
       setKeyEpoch((n) => n + 1);
-      setRestoreMsg({ ok: true, text: "Key restored — your messages should decrypt now." });
+      setRestoreMsg({ ok: true, text: "Key restored - your messages should decrypt now." });
     };
     reader.onerror = () => setRestoreMsg({ ok: false, text: "Couldn't read that file." });
     reader.readAsText(file);
@@ -612,7 +617,7 @@ export function RoomChatPanel({
     if (threadType !== "dm") return messages;
     return messages.map((m) => {
       if (m.body === null) return m; // already deleted
-      if (!myKeyPair) return { ...m, body: "(encrypted — restore your key)" };
+      if (!myKeyPair) return { ...m, body: "(encrypted - restore your key)" };
       let payload: EncryptedDMPayload;
       try {
         payload = JSON.parse(m.body) as EncryptedDMPayload;
@@ -655,7 +660,7 @@ export function RoomChatPanel({
         setUnreadDividerId((cur) => cur ?? lastId);
       }
     } else if (nearBottom) {
-      // Non-append change (e.g. a reaction) while pinned — stay pinned.
+      // Non-append change (e.g. a reaction) while pinned - stay pinned.
       el.scrollTop = el.scrollHeight;
     }
     prevLastIdRef.current = lastId;
@@ -666,7 +671,7 @@ export function RoomChatPanel({
     inputRef.current?.focus();
   };
 
-  // 2.5k reactions — optimistic toggle; the WS echo is deduped by the
+  // 2.5k reactions - optimistic toggle; the WS echo is deduped by the
   // mine-guards in the event handler.
   const toggleReaction = useCallback((messageId: string, emoji: string, mine: boolean): void => {
     setMessages((prev) =>
@@ -693,7 +698,7 @@ export function RoomChatPanel({
     });
   }, []);
 
-  // #29 poll vote — optimistically toggle the caller's choice, then reconcile
+  // #29 poll vote - optimistically toggle the caller's choice, then reconcile
   // with the server DTO. Re-clicking the current option retracts the vote.
   const handleVote = useCallback((msg: ChatMessageDTO, optionId: string): void => {
     const api = apiRef.current;
@@ -725,7 +730,7 @@ export function RoomChatPanel({
   }, []);
 
   // Stable per-render handlers so the memoized ChatBubble holds across composer
-  // keystrokes — each takes its own message rather than closing over `m`.
+  // keystrokes - each takes its own message rather than closing over `m`.
   const handleBubbleToggleReaction = useCallback(
     (m: ChatMessageDTO, emoji: string, mine: boolean) => toggleReaction(m.id, emoji, mine),
     [toggleReaction],
@@ -839,7 +844,7 @@ export function RoomChatPanel({
             <div className="rv-skeleton" style={{ height: "2rem" }} />
           ) : pins.length === 0 ? (
             <div style={{ fontSize: "var(--t-xs)", color: "var(--text-dim)", padding: "var(--s-2) 0" }}>
-              Nothing pinned yet — right-click a message.
+              Nothing pinned yet - right-click a message.
             </div>
           ) : (
             pins.map((p) => (
@@ -1195,7 +1200,7 @@ export function RoomChatPanel({
             <EmojiPicker onPick={insertEmoji} />
           </div>
         )}
-        {/* #29 poll composer — question + 2–6 options, room threads only. */}
+        {/* #29 poll composer - question + 2–6 options, room threads only. */}
         {pollOpen && attachmentsAllowed && (
           <div
             style={{
@@ -1470,7 +1475,7 @@ export function RoomChatPanel({
             icon="⧉"
             label="Copy text"
             onClick={() => {
-              // Toast only after the write resolves — a denied/unfocused
+              // Toast only after the write resolves - a denied/unfocused
               // clipboard must not flash a false "copied".
               void navigator.clipboard
                 .writeText(msgMenu.body)
@@ -1579,7 +1584,7 @@ function DayDivider({ iso }: { iso: string }): ReactElement {
   );
 }
 
-// Accent "new messages" marker — distinct from the neutral DayDivider so an
+// Accent "new messages" marker - distinct from the neutral DayDivider so an
 // unread boundary reads at a glance.
 function NewMessagesDivider({ count }: { count: number }): ReactElement {
   return (
@@ -1603,7 +1608,7 @@ function NewMessagesDivider({ count }: { count: number }): ReactElement {
   );
 }
 
-// Loading placeholder — three shimmering rows so an in-flight history fetch
+// Loading placeholder - three shimmering rows so an in-flight history fetch
 // never masquerades as an empty thread.
 function ChatHistorySkeleton(): ReactElement {
   return (
@@ -1618,7 +1623,7 @@ function ChatHistorySkeleton(): ReactElement {
   );
 }
 
-// Optimistic outbound bubble — greyed while sending, retryable on failure.
+// Optimistic outbound bubble - greyed while sending, retryable on failure.
 function PendingBubble({
   item,
   onRetry,
@@ -1694,7 +1699,7 @@ const pendingActionStyle: CSSProperties = {
 // author drop the name/time + avatar and tighten up.
 const QUICK_REACTIONS = ["👍", "❤️", "😂"];
 
-// 2.5o slash commands — text transforms applied at send time.
+// 2.5o slash commands - text transforms applied at send time.
 const SLASH_COMMANDS: Array<{ cmd: string; hint: string; apply: (rest: string) => string }> = [
   { cmd: "/shrug", hint: "appends ¯\\_(ツ)_/¯", apply: (rest) => `${rest} ¯\\_(ツ)_/¯`.trim() },
   { cmd: "/tableflip", hint: "appends (╯°□°)╯︵ ┻━┻", apply: (rest) => `${rest} (╯°□°)╯︵ ┻━┻`.trim() },
@@ -1913,7 +1918,7 @@ const ChatBubble = memo(function ChatBubble({
             onVote={onVote ? (optionId) => onVote(msg, optionId) : undefined}
           />
         )}
-        {/* Reaction chips — click to toggle; mine = Cherry-tinted */}
+        {/* Reaction chips - click to toggle; mine = Cherry-tinted */}
         {(msg.reactions?.length ?? 0) > 0 && (
           <div style={{ display: "flex", flexWrap: "wrap", gap: 4, marginTop: 1 }}>
             {msg.reactions!.map((r) => (
@@ -1949,7 +1954,7 @@ const ChatBubble = memo(function ChatBubble({
   );
 });
 
-// #30 message attachments — images render inline (click to open full size),
+// #30 message attachments - images render inline (click to open full size),
 // everything else as a compact download card.
 function AttachmentList({ attachments, me }: { attachments: MessageAttachment[]; me: boolean }): ReactElement {
   return (
@@ -1988,7 +1993,7 @@ function AttachmentList({ attachments, me }: { attachments: MessageAttachment[];
             </a>
           );
         }
-        // In-app video player — play mp4/webm inline instead of a download card.
+        // In-app video player - play mp4/webm inline instead of a download card.
         if (a.mime.startsWith("video/")) {
           return (
             <video
@@ -2060,7 +2065,7 @@ function AttachmentList({ attachments, me }: { attachments: MessageAttachment[];
   );
 }
 
-// #29 poll card — click a bar to vote; the bar fill is proportional to the
+// #29 poll card - click a bar to vote; the bar fill is proportional to the
 // leading option, the caller's pick is highlighted, re-clicking retracts.
 function PollCard({ poll, onVote }: { poll: PollDTO; onVote?: ((optionId: string) => void) | undefined }): ReactElement {
   const counts = poll.options.map((o) => poll.tally[o.id] ?? 0);
@@ -2164,7 +2169,7 @@ function PollCard({ poll, onVote }: { poll: PollDTO; onVote?: ((optionId: string
   );
 }
 
-// 2.5m emoji picker — search, category tabs (deck: 🕒😀🐱🍔⚽🚗💡🎵🚩),
+// 2.5m emoji picker - search, category tabs (deck: 🕒😀🐱🍔⚽🚗💡🎵🚩),
 // stacked sections, and a preview foot (emoji + name + :shortcode:).
 // Static curated set; [emoji, name] pairs drive search + the preview.
 type EmojiEntry = readonly [string, string];

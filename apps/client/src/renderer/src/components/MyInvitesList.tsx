@@ -6,7 +6,7 @@ import { getTransport } from "../lib/chat-transport.js";
 import { pushToast } from "../lib/toast-store.js";
 import { I } from "./Icons.js";
 
-// 2.3 — manage invite links: each row shows the full URL (mono) with a
+// 2.3 - manage invite links: each row shows the full URL (mono) with a
 // "RoomName · 2/10 uses · expires May 30" meta line, a per-row copy button
 // (confirmation via the toast host) and Revoke.
 

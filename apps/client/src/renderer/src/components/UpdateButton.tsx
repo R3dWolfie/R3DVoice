@@ -12,7 +12,7 @@ const PKG_CMD = "yay -Syu";
 /**
  * Web "update now": a plain location.reload() can be served the stale bundle
  * back by a service worker, PWA cache, or an edge/CDN cache in front of the
- * origin — the app looks like it "did nothing". Clear any SW + Cache Storage,
+ * origin - the app looks like it "did nothing". Clear any SW + Cache Storage,
  * then reload past caches with a one-shot bust param so the fresh index.html
  * (and its new content-hashed bundle) is actually fetched.
  */
@@ -27,7 +27,7 @@ async function reloadFresh(): Promise<void> {
       await Promise.all(keys.map((k) => caches.delete(k)));
     }
   } catch {
-    /* best-effort — fall through to the reload regardless */
+    /* best-effort - fall through to the reload regardless */
   }
   try {
     const u = new URL(window.location.href);
@@ -67,7 +67,7 @@ export function UpdateButton(): ReactElement | null {
     if (r) setPos({ top: r.bottom + 6, right: Math.max(8, window.innerWidth - r.right) });
   };
 
-  // Capability probe — true only for a packaged, self-updating build.
+  // Capability probe - true only for a packaged, self-updating build.
   useEffect(() => {
     void window.r3dvoice?.updaterInfo?.()
       .then((i) => setCanSelfUpdate(Boolean(i?.canSelfUpdate)))
@@ -91,7 +91,7 @@ export function UpdateButton(): ReactElement | null {
   }, [serverUrl]);
 
   // Close on outside click. The popover is portaled to <body>, so it's outside
-  // the trigger's DOM subtree — check both. Reposition if the window resizes.
+  // the trigger's DOM subtree - check both. Reposition if the window resizes.
   useEffect(() => {
     if (!open) return;
     const onDoc = (e: MouseEvent): void => {
@@ -126,7 +126,7 @@ export function UpdateButton(): ReactElement | null {
         className="rv-btn"
         data-variant="ghost"
         data-active={open}
-        title={`Update available — v${latest}`}
+        title={`Update available - v${latest}`}
         onClick={() => {
           if (!open) place();
           setOpen((v) => !v);
@@ -187,9 +187,9 @@ export function UpdateButton(): ReactElement | null {
                       /* fall through to the copy fallback */
                     }
                     if (launched) {
-                      setPkgMsg("Running yay -Syu — confirm in the terminal, then restart R3DVoice.");
+                      setPkgMsg("Running yay -Syu - confirm in the terminal, then restart R3DVoice.");
                     } else {
-                      setPkgMsg("No terminal found — copied the command instead.");
+                      setPkgMsg("No terminal found - copied the command instead.");
                       copyCmd();
                     }
                   }}

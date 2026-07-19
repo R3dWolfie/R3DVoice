@@ -4,7 +4,7 @@ import { ApiClient } from "../lib/api.js";
 import { Spinner, APP_VERSION } from "./Primitives.js";
 import { I } from "./Icons.js";
 
-// WireFrames 1.5 — email verification gate. Shown when authenticated but the
+// WireFrames 1.5 - email verification gate. Shown when authenticated but the
 // server reports the address is unverified. The session exists (so we can
 // resend and poll), but the app is withheld behind this screen. Escape hatch:
 // Sign out. Poll /me every 4s so clicking the emailed link in another tab
@@ -45,7 +45,7 @@ export function VerifyEmailGate(): ReactElement {
     setNote(null);
     try {
       await apiFor().resendVerificationEmail();
-      setNote("Sent — check your inbox.");
+      setNote("Sent - check your inbox.");
       setCooldown(30);
     } catch {
       setNote("Couldn't resend just now. Try again in a moment.");

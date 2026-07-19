@@ -48,12 +48,12 @@ export async function buildApp(options: BuildAppOptions = {}): Promise<FastifyIn
     status: "ok",
     // The client polls this to enforce the required-update gate.
     minClientVersion: getConfig().MIN_CLIENT_VERSION,
-    // The server's own build version — surfaced by the ambient, non-blocking
+    // The server's own build version - surfaced by the ambient, non-blocking
     // in-app "update available" affordance (distinct from the floor above).
     latestClientVersion: SERVER_VERSION,
   }));
 
-  // Uploaded files (avatars, message attachments) — written by the upload
+  // Uploaded files (avatars, message attachments) - written by the upload
   // routes, served read-only at /uploads. URLs carry a ?v=<hash> so a changed
   // file busts caches despite the stable filename. decorateReply:false because
   // the web-client static below already owns reply.sendFile.
@@ -88,7 +88,7 @@ export async function buildApp(options: BuildAppOptions = {}): Promise<FastifyIn
       wildcard: false,
       setHeaders: (res, filePath) => {
         // Runtime object varies by send-path (FastifyReply vs raw
-        // ServerResponse) — support both shapes.
+        // ServerResponse) - support both shapes.
         const value = /[/\\]assets[/\\]/.test(filePath)
           ? "public, max-age=31536000, immutable"
           : "no-cache";
@@ -102,7 +102,7 @@ export async function buildApp(options: BuildAppOptions = {}): Promise<FastifyIn
     });
     app.setNotFoundHandler((request, reply) => {
       // Assets deployed AFTER boot have no enumerated route (wildcard:false
-      // snapshots the dir at startup) — serve them from disk so web-bundle
+      // snapshots the dir at startup) - serve them from disk so web-bundle
       // pushes don't need a server restart.
       if (request.method === "GET") {
         const path = request.url.split("?")[0] ?? "";

@@ -14,7 +14,7 @@ installWebBridgeIfNeeded();
 declare const __APP_VERSION__: string;
 const VERSION = typeof __APP_VERSION__ === "string" ? __APP_VERSION__ : "dev";
 // eslint-disable-next-line no-console
-console.log(`[r3dvoice] renderer boot — v${VERSION}`);
+console.log(`[r3dvoice] renderer boot - v${VERSION}`);
 
 // Pipe uncaught errors and rejected promises into the main-process crash log
 // so we have a record even when the user can't open DevTools fast enough.
@@ -26,7 +26,7 @@ function bridgeLog(line: string): void {
     void b?.logError?.(`[renderer v${VERSION}] ${line}`);
   } catch { /* */ }
 }
-bridgeLog(`boot ok — userAgent=${navigator.userAgent}`);
+bridgeLog(`boot ok - userAgent=${navigator.userAgent}`);
 window.addEventListener("error", (evt) => {
   bridgeLog(
     `window.error: ${evt.message} @ ${evt.filename}:${evt.lineno}:${evt.colno}` +

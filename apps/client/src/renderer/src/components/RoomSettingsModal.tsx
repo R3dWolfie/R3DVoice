@@ -25,9 +25,9 @@ export function RoomSettingsModal({
 }: {
   room: RoomDTO;
   onClose: () => void;
-  /** Room was renamed/toggled — caller refreshes its lists. */
+  /** Room was renamed/toggled - caller refreshes its lists. */
   onChanged: () => void;
-  /** Room was deleted or left — caller refreshes and drops references. */
+  /** Room was deleted or left - caller refreshes and drops references. */
   onGone: () => void;
 }): ReactElement {
   const serverUrl = useAuthStore((s) => s.serverUrl);
@@ -210,7 +210,7 @@ function PaneHead({ title, onClose }: { title: string; onClose: () => void }): R
   );
 }
 
-// Nav-rail identity foot (deck .nav-foot) — room avatar + name + owner/member
+// Nav-rail identity foot (deck .nav-foot) - room avatar + name + owner/member
 // role, pinned to the bottom of the rail.
 function RoomIdentityFoot({ room, isOwner }: { room: RoomDTO; isOwner: boolean }): ReactElement {
   return (
@@ -498,7 +498,7 @@ function MembersTab({
   );
 }
 
-// 4.16 — invite friends straight into the room (no link needed).
+// 4.16 - invite friends straight into the room (no link needed).
 function InviteFriendsSection({
   roomId,
   memberIds,
@@ -653,7 +653,7 @@ function InvitesTab({
       ) : invites.length === 0 ? (
         <div className="rv-empty" style={{ padding: "var(--s-5) 0" }}>
           <span className="rv-empty-title">No active links</span>
-          <span className="rv-empty-hint">Generate one — links can expire or be single-use.</span>
+          <span className="rv-empty-hint">Generate one - links can expire or be single-use.</span>
         </div>
       ) : (
         invites.map((inv) => (
@@ -858,7 +858,7 @@ function DangerTab({
   const links = inviteCount ?? 0;
 
   if (step === 1) {
-    // 4.9d step 1 — impact summary. Nothing destructive happens here.
+    // 4.9d step 1 - impact summary. Nothing destructive happens here.
     return (
       <div style={{ display: "flex", flexDirection: "column", gap: "var(--s-4)", maxWidth: 420 }}>
         <DangerCallout head="This is irreversible." sub="Read everything below before continuing." />
@@ -896,7 +896,7 @@ function DangerTab({
             ⚠
           </span>
           <span>
-            Please be careful. Once a room is deleted, R3DVoice cannot recover it — not even by
+            Please be careful. Once a room is deleted, R3DVoice cannot recover it - not even by
             support, not even with the room ID. If this room has any value to anyone else, consider
             transferring ownership instead from the Members tab.
           </span>
@@ -913,14 +913,14 @@ function DangerTab({
     );
   }
 
-  // 4.9d2 step 2 — type-name confirm; the delete button gates on an exact match.
+  // 4.9d2 step 2 - type-name confirm; the delete button gates on an exact match.
   return (
     <div style={{ display: "flex", flexDirection: "column", gap: "var(--s-4)", maxWidth: 420 }}>
       <DangerCallout head="Last chance." sub="Type the room name to confirm deletion." />
       <p style={{ margin: 0, fontSize: "var(--t-sm)", color: "var(--text-mid)", lineHeight: 1.55 }}>
         You&apos;re about to permanently delete{" "}
         <b style={{ fontWeight: 600, color: "var(--text)" }}>{room.name}</b> and disconnect{" "}
-        {memberCount ?? "…"} member{members === 1 ? "" : "s"}. This cannot be undone — please be
+        {memberCount ?? "…"} member{members === 1 ? "" : "s"}. This cannot be undone - please be
         careful.
       </p>
       <Field label="Confirm room name" hint={`Type ${room.name} exactly to enable the delete button.`}>

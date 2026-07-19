@@ -114,7 +114,7 @@ export async function inviteRoutes(app: FastifyInstance): Promise<void> {
 
   const codeParamSchema = z.object({ code: z.string().min(8).max(8) });
 
-  // Public preview — minimal metadata, NO room name leak.
+  // Public preview - minimal metadata, NO room name leak.
   app.get<{ Params: { code: string } }>(
     "/invites/:code",
     {
@@ -142,7 +142,7 @@ export async function inviteRoutes(app: FastifyInstance): Promise<void> {
     },
   );
 
-  // Authed full preview — reveals room name + count when kind=room.
+  // Authed full preview - reveals room name + count when kind=room.
   app.get<{ Params: { code: string } }>(
     "/invites/:code/full",
     { preHandler: requireAuth },
@@ -283,7 +283,7 @@ export async function inviteRoutes(app: FastifyInstance): Promise<void> {
     },
   );
 
-  // HTML preview page — public web landing at /invite/:code (singular path)
+  // HTML preview page - public web landing at /invite/:code (singular path)
   app.get<{ Params: { code: string } }>(
     "/invite/:code",
     { config: { rateLimit: { max: 60, timeWindow: "1 minute" } } },
@@ -342,7 +342,7 @@ async function directInviteDTO(inv: {
 
 /** Person-to-person room invites (4.15 bell Invites tab / 4.16). */
 export async function directInviteRoutes(app: FastifyInstance): Promise<void> {
-  // POST /rooms/:id/invite-user — invite one specific user to a room.
+  // POST /rooms/:id/invite-user - invite one specific user to a room.
   app.post<{ Params: { id: string } }>(
     "/rooms/:id/invite-user",
     { preHandler: requireAuth },
@@ -368,7 +368,7 @@ export async function directInviteRoutes(app: FastifyInstance): Promise<void> {
       if (!target) throw new NotFoundError("user not found");
       if (await isBlockedPair(userId, targetId)) throw new ForbiddenError("cannot invite this user");
 
-      // One pending invite per (room, target) — replace, don't stack.
+      // One pending invite per (room, target) - replace, don't stack.
       await prisma.directInvite.deleteMany({
         where: { roomId, toUserId: targetId, status: "pending" },
       });
@@ -390,7 +390,7 @@ export async function directInviteRoutes(app: FastifyInstance): Promise<void> {
     },
   );
 
-  // POST /invites/direct/:id/accept — join path: membership is granted here so
+  // POST /invites/direct/:id/accept - join path: membership is granted here so
   // the LiveKit token mint passes even for private rooms.
   app.post("/invites/direct/:id/accept", { preHandler: requireAuth }, async (request) => {
     const parsed = idParamSchema.safeParse(request.params);

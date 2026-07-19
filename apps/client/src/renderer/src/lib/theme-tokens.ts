@@ -3,7 +3,7 @@
  *
  * The deck names eight editable tokens; each maps onto one of the app's CSS
  * custom properties. Overrides live in prefs (`themeOverrides`) keyed by the
- * REAL CSS var so applying them is a straight setProperty loop on <html> —
+ * REAL CSS var so applying them is a straight setProperty loop on <html> -
  * inline styles win over both :root and [data-theme] preset blocks.
  */
 

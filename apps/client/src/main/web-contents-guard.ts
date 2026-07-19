@@ -2,13 +2,13 @@ import { shell, type WebContents } from "electron";
 
 // Lock a window's webContents to the app's own content. Without this, a link
 // clicked in chat (or any renderer-driven navigation) could load a REMOTE page
-// inside a window that still carries our privileged preload (window.r3dvoice) —
+// inside a window that still carries our privileged preload (window.r3dvoice) -
 // letting a hostile page call getToken() and steal the session JWT (account
 // takeover). Real navigations away from the local renderer are blocked; http(s)
 // targets are handed to the user's actual browser instead.
 //
 // Client-side React routing uses history.pushState (not a document navigation),
-// so this never interferes with in-app screen changes — only genuine loads.
+// so this never interferes with in-app screen changes - only genuine loads.
 const DEV_URL = process.env["ELECTRON_RENDERER_URL"];
 
 function isAppUrl(url: string): boolean {

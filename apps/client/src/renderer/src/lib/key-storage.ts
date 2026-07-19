@@ -9,7 +9,7 @@ const PUBLIC_KEY_LS = "r3dvoice.e2ee.publicKey";
 
 /**
  * Per-USER E2EE keypair store. The keypair is keyed by user id, not shared
- * device-wide — otherwise a second account signing in on the same device would
+ * device-wide - otherwise a second account signing in on the same device would
  * inherit (and could decrypt with) the first user's crypto identity. auth-store
  * calls setActiveKeyUser() on every login/hydrate; load/save/clear operate only
  * on that user's slot and no-op when logged out.
@@ -29,7 +29,7 @@ function nsKey(base: string, userId: string): string {
 }
 
 // Move a staged (unnamespaced) keypair into a user's namespace and burn the
-// staging slot — so a staged key is claimable exactly once, by the first user
+// staging slot - so a staged key is claimable exactly once, by the first user
 // to sign in after it was staged.
 function claimStagedFor(userId: string): boolean {
   const ls = globalThis.localStorage;
@@ -103,7 +103,7 @@ export function ensureKeyPair(): KeyPair {
 
 /**
  * Build a JSON backup blob containing the keypair + identity metadata.
- * The user is encouraged to save this somewhere safe — losing it means
+ * The user is encouraged to save this somewhere safe - losing it means
  * losing access to encrypted DM history.
  */
 export interface KeyBackup {

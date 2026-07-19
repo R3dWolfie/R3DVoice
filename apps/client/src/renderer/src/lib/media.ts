@@ -74,7 +74,7 @@ export interface MicProcessingOptions {
   /**
    * Force mono capture + downmix (task #12). Single-channel interfaces
    * (e.g. a mic wired only to the LEFT input of a stereo USB interface)
-   * otherwise publish stereo with a silent right channel — listeners hear
+   * otherwise publish stereo with a silent right channel - listeners hear
    * you in one ear. Mono averages the channels and centers the voice.
    */
   mono?: boolean;
@@ -104,7 +104,7 @@ function nsPolicy(level: "off" | "low" | "high" | undefined): {
       return { rnnoise: false };
     case "low":
     case "high":
-      // Both levels run the RNNoise WASM worklet — same model. The
+      // Both levels run the RNNoise WASM worklet - same model. The
       // distinction in the UI is mostly historical now that we don't use
       // Chromium's built-in NS at all (browser constraints are forced false
       // to avoid touching Windows audio settings). Future: add a spectral
@@ -116,11 +116,11 @@ function nsPolicy(level: "off" | "low" | "high" | undefined): {
 /**
  * Ask for mic access and return a stream from the given device. Throws on denial.
  * Processing options map onto Chromium's WebRTC audio constraints. "high" pushes
- * NS hard but stops short of bundling RNNoise — that's a future audio worklet job.
+ * NS hard but stops short of bundling RNNoise - that's a future audio worklet job.
  */
 export interface MicPipeline {
   stream: MediaStream;
-  /** Live-tweak the user gain. ALWAYS available — the pipeline keeps a
+  /** Live-tweak the user gain. ALWAYS available - the pipeline keeps a
    *  GainNode in the chain even at unity so the slider can adjust without
    *  re-opening the mic. */
   setGain(gain: number): void;
@@ -139,12 +139,12 @@ export async function openMicPipeline(
   }
   const audioConstraints: MediaTrackConstraints = {
     ...(deviceId ? { deviceId: { exact: deviceId } } : {}),
-    // Browser noise-suppression and AGC stay OFF — RNNoise (below) does NS and
+    // Browser noise-suppression and AGC stay OFF - RNNoise (below) does NS and
     // a Web Audio compressor does AGC, so enabling the browser's would
     // double-process and smear the voice. Echo cancellation is the exception:
     // ONLY the browser's AEC can cancel far-end echo (RNNoise can't), so honor
     // the pref (default on). Previously this was hardcoded false, so echo
-    // cancellation NEVER ran — anyone not wearing headphones echoed. That was
+    // cancellation NEVER ran - anyone not wearing headphones echoed. That was
     // the #1 "sounds terrible" cause.
     noiseSuppression: false,
     echoCancellation: options.echoCancellation ?? true,
@@ -157,7 +157,7 @@ export async function openMicPipeline(
   } catch (err) {
     // A stale/absent exact deviceId (common when the same account opens the
     // WEB client, whose device ids differ from the desktop app's, or after a
-    // device is unplugged) makes some browsers reject WITHOUT ever prompting —
+    // device is unplugged) makes some browsers reject WITHOUT ever prompting -
     // which looks like "it won't ask for mic permission". Retry with the
     // default device so the prompt actually appears.
     if (deviceId && (err instanceof DOMException) && (err.name === "OverconstrainedError" || err.name === "NotFoundError")) {
@@ -168,7 +168,7 @@ export async function openMicPipeline(
     }
   }
 
-  // Raw getUserMedia stream — the only node that actually owns the mic
+  // Raw getUserMedia stream - the only node that actually owns the mic
   // hardware. The RNNoise/AGC/gain graphs below derive NEW streams from it;
   // stopping those doesn't release the device, so close() must stop this one
   // explicitly or the OS mic indicator stays lit after leaving a call.
@@ -176,7 +176,7 @@ export async function openMicPipeline(
 
   const policy = nsPolicy(options.noiseSuppression);
   // RNNoise + AGC each spin up their own AudioContext/worklet on a derived
-  // stream. Track them so close() can tear each down — otherwise every mic
+  // stream. Track them so close() can tear each down - otherwise every mic
   // reopen leaks a context and after ~6 Chromium refuses to open any more.
   let rnnoiseStream: MediaStream | null = null;
   let disposeRnnoiseFn: ((s: MediaStream) => Promise<void>) | null = null;
@@ -193,7 +193,7 @@ export async function openMicPipeline(
   } else {
     // eslint-disable-next-line no-console
     console.log(
-      "[mic] noise suppression OFF — Settings → Mic → Noise suppression is set to 'off'",
+      "[mic] noise suppression OFF - Settings → Mic → Noise suppression is set to 'off'",
     );
   }
 
@@ -206,7 +206,7 @@ export async function openMicPipeline(
     agcCtx = agc.ctx;
   }
 
-  // Always wrap in a GainNode pipeline — even at unity. That way the user's
+  // Always wrap in a GainNode pipeline - even at unity. That way the user's
   // gain slider can update the value live without re-opening the mic.
   const ctx = new AudioContext();
   // Chromium can hand back a suspended AudioContext even when openMicPipeline
@@ -275,7 +275,7 @@ export async function openMicPipeline(
 
   // eslint-disable-next-line no-console
   console.log(
-    `[mic] pipeline open — gain=${gainNode.gain.value.toFixed(2)} ` +
+    `[mic] pipeline open - gain=${gainNode.gain.value.toFixed(2)} ` +
       `vad=${vadEnabled ? `on@${threshold.toFixed(2)}` : "off"} ctx.state=${ctx.state}`,
   );
 
@@ -309,7 +309,7 @@ export async function openMicPipeline(
 
 /**
  * Backwards-compatible wrapper. Existing callers (PreJoin VU meter etc.)
- * just want a MediaStream — they don't need gain control.
+ * just want a MediaStream - they don't need gain control.
  */
 export async function openMicStream(
   deviceId: string | undefined,
@@ -323,7 +323,7 @@ export async function openMicStream(
  * Software AGC via Web Audio's DynamicsCompressor + a fixed make-up gain.
  * Caps loud peaks (so shouting doesn't blow out the other side), with a
  * gentle 6:1 ratio that mostly leaves normal speech alone. No interaction
- * with the OS mic — purely a per-stream Web Audio graph.
+ * with the OS mic - purely a per-stream Web Audio graph.
  */
 function applySoftwareAgc(stream: MediaStream): { stream: MediaStream; ctx: AudioContext } {
   const ctx = new AudioContext();
@@ -338,7 +338,7 @@ function applySoftwareAgc(stream: MediaStream): { stream: MediaStream; ctx: Audi
   makeup.gain.value = 1.5;
   const dest = ctx.createMediaStreamDestination();
   source.connect(compressor).connect(makeup).connect(dest);
-  // Return the ctx too — the caller threads it into the pipeline's close() so
+  // Return the ctx too - the caller threads it into the pipeline's close() so
   // it's actually freed (one AudioContext leaked per reopen otherwise).
   return { stream: dest.stream, ctx };
 }

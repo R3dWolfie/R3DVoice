@@ -9,7 +9,7 @@
 // Phase 1 (this version): exclude R3DVoice's own audio service from the
 // virtual device, so screenshare audio carries every OTHER app's sound but
 // not the call audio we're playing back. Same effect as the previous
-// combine-sink hack but without modifying the user's default sink — much
+// combine-sink hack but without modifying the user's default sink - much
 // less invasive and recoverable on crash.
 //
 // Phase 2 (next): expose the per-app picker so the user can pick exactly
@@ -33,7 +33,7 @@ function importVenmic(): typeof PatchBayType | null {
     // eslint-disable-next-line @typescript-eslint/no-require-imports
     const venmic = require("@vencord/venmic") as typeof import("@vencord/venmic");
     if (!venmic.PatchBay.hasPipeWire()) {
-      safeLog("[linux-audio] PipeWire not available — venmic skipped");
+      safeLog("[linux-audio] PipeWire not available - venmic skipped");
       return null;
     }
     PatchBay = venmic.PatchBay;
@@ -70,7 +70,7 @@ function getRendererAudioServicePid(): string | null {
 }
 
 /**
- * Every PID Electron has spawned for this app — main, all renderers, the
+ * Every PID Electron has spawned for this app - main, all renderers, the
  * GPU process, every utility process (Audio Service, Network Service, etc).
  * Audio output can come from any of them depending on which renderer is
  * playing what; missing one means R3DVoice leaks into the share.
@@ -85,7 +85,7 @@ function getAllR3DVoicePids(): Set<string> {
 }
 
 function getR3DVoiceExcludeRules(): Node[] {
-  // Match any audio stream whose origin is a R3DVoice process — by PID,
+  // Match any audio stream whose origin is a R3DVoice process - by PID,
   // by binary name, by app name. Each rule is OR'd by venmic, so adding
   // more is strictly safer.
   const rules: Node[] = [];
@@ -119,16 +119,16 @@ function safeLog(...args: unknown[]): void {
 }
 
 export interface EnableResult {
-  /** Label of the virtual capture device — match it via enumerateDevices. */
+  /** Label of the virtual capture device - match it via enumerateDevices. */
   monitorDeviceDescription: string;
 }
 
 export interface AudioSourceSummary {
-  /** node.name — stable identifier across the same app session. */
+  /** node.name - stable identifier across the same app session. */
   nodeName: string;
-  /** application.name — human-friendly app label. */
+  /** application.name - human-friendly app label. */
   appName: string;
-  /** application.process.id — for tie-breaking when same-named apps run twice. */
+  /** application.process.id - for tie-breaking when same-named apps run twice. */
   processId: string;
   /** Optional icon name (XDG), if PipeWire reported one. */
   iconName?: string;
@@ -144,7 +144,7 @@ function labelForNode(n: Record<string, string>): string {
 
   // PipeWire wraps ALSA-using apps under several different prefixes
   // ("ALSA plug-in", "PipeWire ALSA", "JACK", "PulseAudio") followed by
-  // the bracketed exe name. Pull the inner string out — that's what the
+  // the bracketed exe name. Pull the inner string out - that's what the
   // user actually recognizes (osu!, wine games, etc.).
   const wrapped = /\[([^\]]+)\]\s*$/.exec(app);
   if (
@@ -197,14 +197,14 @@ export function listLinuxAudioSources(): AudioSourceSummary[] {
     const nodes = pb.list();
 
     // AppImages launched from the desktop have closed stdout, so safeLog
-    // disappears. Mirror the diagnostic to a file in userData — but only when
+    // disappears. Mirror the diagnostic to a file in userData - but only when
     // explicitly opted in (R3DVOICE_AUDIO_DEBUG), since it dumps every app's
     // node/window/media names, which is sensitive to write in production.
     if (process.env["R3DVOICE_AUDIO_DEBUG"]) {
       try {
         const userData = process.env["R3DVOICE_USER_DATA_DIR"] ?? app.getPath("userData");
         const lines: string[] = [];
-        lines.push(`# linux-audio diagnostic — ${new Date().toISOString()}`);
+        lines.push(`# linux-audio diagnostic - ${new Date().toISOString()}`);
         lines.push(`venmic returned ${nodes.length} nodes`);
         lines.push("");
         nodes.forEach((n, i) => {
@@ -250,7 +250,7 @@ export function listLinuxAudioSources(): AudioSourceSummary[] {
 export interface EnableOptions {
   /**
    * If given, capture only this specific app (by application.process.id).
-   * If omitted, capture every output stream except R3DVoice itself —
+   * If omitted, capture every output stream except R3DVoice itself -
    * the existing v0.4.14 behavior.
    */
   includeProcessId?: string;
@@ -266,7 +266,7 @@ const GENERIC_APP_NAME_RE = /^(chromium|electron|mozilla|firefox|webkit|wine|win
  *   - node.name          (specific per-node, stable within a session)
  *   - application.process.binary  (unless a generic wrapper like "wine")
  * plus the raw PID as a fallback facet. If the node can't be found (stale
- * pick), fall back to the raw PID match — i.e. the previous behavior. Every
+ * pick), fall back to the raw PID match - i.e. the previous behavior. Every
  * rule is scoped to the chosen app, so this can only broaden capture to that
  * app, never leak another app's audio in.
  */
@@ -295,7 +295,7 @@ function resolveIncludeRules(pb: PatchBayType, processId: string): Node[] {
 export function enableLinuxAudioRouting(options: EnableOptions = {}): EnableResult | null {
   const pb = obtainPatchBay();
   if (!pb) return null;
-  // Re-link if we're already linked but the caller wants a different scope —
+  // Re-link if we're already linked but the caller wants a different scope -
   // PatchBay.link() replaces the existing graph wiring atomically.
 
   const excludeRules = getR3DVoiceExcludeRules();
@@ -325,7 +325,7 @@ export function enableLinuxAudioRouting(options: EnableOptions = {}): EnableResu
     }
     linked = true;
     safeLog(
-      "[linux-audio] venmic linked —",
+      "[linux-audio] venmic linked -",
       options.includeProcessId
         ? `including PID ${options.includeProcessId}`
         : `excluding ${excludeRules.length} R3DVoice rules`,

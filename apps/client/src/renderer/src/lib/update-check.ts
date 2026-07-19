@@ -34,7 +34,7 @@ export async function fetchMinClientVersion(serverUrl: string): Promise<string |
 
 /**
  * Fetch the server's own (latest) build version, or null on any failure. Drives
- * the ambient, non-blocking "update available" affordance — unlike
+ * the ambient, non-blocking "update available" affordance - unlike
  * fetchMinClientVersion, this never gates the app.
  */
 export async function fetchLatestClientVersion(serverUrl: string): Promise<string | null> {

@@ -11,9 +11,9 @@ import { useUnreadStore } from "../lib/unread-store.js";
 import { Avatar } from "./Avatar.js";
 
 // Bell panel per WireFrames 4.15: header with unread count + "Mark all read",
-// count-badged tabs (All / Invites / Mentions / Friends), day-grouped rows —
+// count-badged tabs (All / Invites / Mentions / Friends), day-grouped rows -
 // friend requests (Accept/Decline), room invites (Join/Later, expiry line),
-// mentions (room context + excerpt), unread-DM rollups — and a footer link
+// mentions (room context + excerpt), unread-DM rollups - and a footer link
 // into notification settings.
 type Tab = "all" | "invites" | "mentions" | "friends";
 

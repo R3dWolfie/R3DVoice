@@ -22,7 +22,7 @@ import { issueEmailToken, consumeEmailToken } from "../email/tokens.js";
 const emailSchema = z.string().trim().email().toLowerCase();
 
 // Fixed dummy argon2 hash (argon2id, default params) used to equalize login
-// timing when the email doesn't exist — see /auth/login. Never matches any real
+// timing when the email doesn't exist - see /auth/login. Never matches any real
 // password; it exists only so the not-found branch pays the same verify cost.
 const DUMMY_PASSWORD_HASH =
   "$argon2id$v=19$m=19456,t=2,p=1$ldkt1kbTtHfvLqbV+9CLzQ$zxtZSW5X3WVt0pxS6XbSP4h7ByUczBh1w57VzdIeToI";
@@ -113,7 +113,7 @@ export async function authRoutes(app: FastifyInstance): Promise<void> {
         throw err;
       }
       // Awaited so the flow is deterministic, but a mail hiccup must never
-      // fail registration — the user can resend from the verify gate. Normal
+      // fail registration - the user can resend from the verify gate. Normal
       // UX cost is a ~1-2s button spinner, not a full-screen wait.
       try {
         await sendVerification(user);
@@ -197,7 +197,7 @@ export async function authRoutes(app: FastifyInstance): Promise<void> {
         // at most once. Reject codes at or below the last consumed step so a
         // sniffed code can't be replayed inside its ~90s validity window.
         if (user.lastTotpStep !== null && step <= user.lastTotpStep) {
-          throw new AuthError("this code was already used — wait for the next one");
+          throw new AuthError("this code was already used - wait for the next one");
         }
         await prisma.user.update({ where: { id: user.id }, data: { lastTotpStep: step } });
       } else {
@@ -265,7 +265,7 @@ export async function authRoutes(app: FastifyInstance): Promise<void> {
   );
 
   // Hybrid key escrow: store the password-wrapped secret key. The server can't
-  // read it (wrapped client-side with a password-derived key) — it only holds
+  // read it (wrapped client-side with a password-derived key) - it only holds
   // the opaque blob so the key can reach the user's other devices.
   const wrappedKeySchema = z.object({
     wrapped: z.string().min(1).max(1000),
@@ -307,7 +307,7 @@ export async function authRoutes(app: FastifyInstance): Promise<void> {
     reply.status(204).send();
   });
 
-  // 4.11 — active session list. IDs are opaque; createdAt + current flag is
+  // 4.11 - active session list. IDs are opaque; createdAt + current flag is
   // all the UI needs to reason about "other devices".
   app.get("/auth/sessions", { preHandler: requireAuth }, async (request) => {
     const sessions = await prisma.session.findMany({
@@ -324,7 +324,7 @@ export async function authRoutes(app: FastifyInstance): Promise<void> {
     };
   });
 
-  // 4.11 — sign out everywhere: revokes every live session including this
+  // 4.11 - sign out everywhere: revokes every live session including this
   // one; the caller drops its token and lands on login.
   app.post("/auth/logout-all", { preHandler: requireAuth }, async (request, reply) => {
     await prisma.session.updateMany({
@@ -334,7 +334,7 @@ export async function authRoutes(app: FastifyInstance): Promise<void> {
     reply.status(204).send();
   });
 
-  // 2FA: start enrollment — generates a secret + QR. The secret is staged on the
+  // 2FA: start enrollment - generates a secret + QR. The secret is staged on the
   // user but `totpEnabledAt` stays null until enrollVerify confirms a working code.
   app.post(
     "/auth/2fa/enroll-start",
@@ -343,7 +343,7 @@ export async function authRoutes(app: FastifyInstance): Promise<void> {
       const user = await prisma.user.findUnique({ where: { id: request.auth!.userId } });
       if (!user) throw new AuthError("user not found");
       if (user.totpEnabledAt) {
-        throw new ConflictError("2FA already enabled — disable first to re-enroll");
+        throw new ConflictError("2FA already enabled - disable first to re-enroll");
       }
       const secret = generateTotpSecret();
       await prisma.user.update({
@@ -371,7 +371,7 @@ export async function authRoutes(app: FastifyInstance): Promise<void> {
         where: { id: user.id },
         data: { totpEnabledAt: new Date() },
       });
-      // 3.3b — one-time backup codes, returned exactly once here.
+      // 3.3b - one-time backup codes, returned exactly once here.
       const backupCodes = await issueBackupCodes(user.id);
       return { enabled: true, backupCodes };
     },
@@ -411,7 +411,7 @@ export async function authRoutes(app: FastifyInstance): Promise<void> {
   // Email verification (WireFrames 1.5)
   // ---------------------------------------------------------------------
 
-  // Clicked from the emailed link — returns an HTML page, not JSON. Always
+  // Clicked from the emailed link - returns an HTML page, not JSON. Always
   // 200 so the browser renders our result page (success or expired) rather
   // than a bare error.
   app.get<{ Querystring: { token?: string } }>("/auth/verify-email", async (request, reply) => {
@@ -431,7 +431,7 @@ export async function authRoutes(app: FastifyInstance): Promise<void> {
       const user = await prisma.user.findUnique({ where: { id: request.auth!.userId } });
       if (!user) throw new AuthError("user not found");
       if (!emailEnabled() || user.emailVerifiedAt) {
-        // Nothing to do — idempotent success.
+        // Nothing to do - idempotent success.
         reply.status(204).send();
         return;
       }
@@ -448,7 +448,7 @@ export async function authRoutes(app: FastifyInstance): Promise<void> {
   // Password reset (WireFrames 1.6 request → 1.7 form)
   // ---------------------------------------------------------------------
 
-  // Request a reset link. ALWAYS 204 regardless of whether the email exists —
+  // Request a reset link. ALWAYS 204 regardless of whether the email exists -
   // no account enumeration. Only fires mail when email is configured.
   app.post(
     "/auth/password-reset/request",
@@ -494,7 +494,7 @@ export async function authRoutes(app: FastifyInstance): Promise<void> {
             // Resetting the password also confirms control of the inbox.
             emailVerifiedAt: new Date(),
             // The escrowed E2EE key is wrapped under the OLD password, so it can
-            // never be unwrapped again — null it so the client re-escrows fresh
+            // never be unwrapped again - null it so the client re-escrows fresh
             // on next login instead of holding a permanently-dead blob.
             e2eeWrappedKey: null,
             e2eeKeySalt: null,

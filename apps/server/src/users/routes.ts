@@ -51,7 +51,7 @@ export async function userRoutes(app: FastifyInstance): Promise<void> {
     displayName: z.string().trim().min(1).max(50).optional(),
   });
 
-  // 4.12 — delete account. Password re-auth server-side (the type-handle
+  // 4.12 - delete account. Password re-auth server-side (the type-handle
   // confirm is client UX, not security). User row cascades: sessions,
   // owned rooms (disconnecting their members), memberships, friendships.
   const deleteMeSchema = z.object({ password: z.string().min(1) });

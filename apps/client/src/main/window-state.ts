@@ -44,7 +44,7 @@ function writeState(state: WindowState): void {
 }
 
 /**
- * Returns initial BrowserWindow bounds — saved state if it falls within a
+ * Returns initial BrowserWindow bounds - saved state if it falls within a
  * currently-connected display, otherwise centered defaults. Guarding against
  * off-screen position is important: a saved bound on a now-disconnected
  * monitor would put the window where the user can't reach it.
@@ -90,7 +90,7 @@ export function shouldStartMaximized(): boolean {
 
 /**
  * Hook resize / move / maximize events on the window so any change is
- * persisted (debounced). Skip persisting while maximized for the bounds —
+ * persisted (debounced). Skip persisting while maximized for the bounds -
  * we want to remember the "restore" size, not the maximized rectangle.
  */
 export function trackWindowState(win: BrowserWindow): void {

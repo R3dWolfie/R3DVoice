@@ -50,7 +50,7 @@ export function MutePopover({
 }: {
   threadType: "room" | "dm";
   threadId: string;
-  /** "@alice" / room name — rendered in the "Mute …" header. */
+  /** "@alice" / room name - rendered in the "Mute …" header. */
   targetLabel: string;
   onClose: () => void;
   /** Fires after a successful apply / cancel-mute with the new state. */

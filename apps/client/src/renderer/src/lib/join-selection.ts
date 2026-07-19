@@ -18,7 +18,7 @@ export interface JoinSelection {
   speakerDeviceId: string | null;
   publishScreen: boolean;
   screenQuality: ScreenQuality;
-  /** Deck rule: joins start muted — no pre-join screen (4.5 removed). */
+  /** Deck rule: joins start muted - no pre-join screen (4.5 removed). */
   startMuted: boolean;
 }
 

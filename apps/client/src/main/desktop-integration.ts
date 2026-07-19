@@ -7,7 +7,7 @@ import { homedir } from "node:os";
  * - Packaged (AppImage): the user-dir icon copied by `writeDesktopEntry`
  *   from inside the AppImage squashfs.
  * - Dev: the source `build/icon.png` relative to the compiled main dir.
- * Returns undefined if nothing resolves — caller should treat as "no icon."
+ * Returns undefined if nothing resolves - caller should treat as "no icon."
  */
 export function resolveIconPath(): string | undefined {
   const userIcon = join(homedir(), ".local/share/icons/hicolor/512x512/apps/r3dvoice.png");
@@ -72,7 +72,7 @@ export function writeDesktopEntry(): void {
       }
     }
   } catch {
-    // Icon is cosmetic — proceed without it.
+    // Icon is cosmetic - proceed without it.
   }
 
   // Write .desktop. X-AppImage-Integrate=false tells AppImageLauncher to leave
@@ -103,10 +103,10 @@ export function writeDesktopEntry(): void {
       try {
         unlinkSync(stale);
       } catch {
-        /* absent — fine */
+        /* absent - fine */
       }
     }
   } catch {
-    // Desktop entry is a convenience — if writing fails, app still runs.
+    // Desktop entry is a convenience - if writing fails, app still runs.
   }
 }

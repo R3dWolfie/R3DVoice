@@ -99,7 +99,7 @@ export class ApiClient {
     return payload as TRes;
   }
 
-  // Auth — register payload allows an optional E2EE public key.
+  // Auth - register payload allows an optional E2EE public key.
   register(body: _SharedRegisterRequest & { e2eePublicKey?: string }): Promise<AuthResponse> {
     return this.request("POST", "/auth/register", body);
   }
@@ -145,7 +145,7 @@ export class ApiClient {
   uploadAvatar(dataUrl: string): Promise<{ avatarUrl: string }> {
     return this.request("POST", "/me/avatar", { dataUrl });
   }
-  /** Upload a chat message attachment (a file as a data: URL) — returns its stored descriptor (#30). */
+  /** Upload a chat message attachment (a file as a data: URL) - returns its stored descriptor (#30). */
   uploadAttachment(dataUrl: string, name: string): Promise<MessageAttachment> {
     return this.request("POST", "/uploads/attachment", { dataUrl, name });
   }
@@ -278,7 +278,7 @@ export class ApiClient {
   ): Promise<ChatSendResponse> {
     return this.request("POST", "/chat/messages", body);
   }
-  /** Cast a poll vote — re-selecting the current option retracts it (server toggles) (#29). */
+  /** Cast a poll vote - re-selecting the current option retracts it (server toggles) (#29). */
   votePoll(messageId: string, optionId: string): Promise<ChatMessageDTO> {
     return this.request("POST", `/chat/messages/${encodeURIComponent(messageId)}/vote`, { optionId });
   }

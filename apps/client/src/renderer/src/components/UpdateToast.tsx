@@ -13,7 +13,7 @@ export function UpdateToast(): ReactElement | null {
       if (cancelled) return;
       const lastSeen = localStorage.getItem(KEY);
       if (lastSeen === null) {
-        // First install — don't show, just record the baseline.
+        // First install - don't show, just record the baseline.
         localStorage.setItem(KEY, current);
         return;
       }

@@ -40,7 +40,7 @@ export class ErrorBoundary extends Component<
             Something went wrong
           </div>
           <p style={{ margin: 0, marginBottom: "var(--s-4)", color: "var(--text-mid)", fontSize: "var(--t-sm)", lineHeight: 1.5 }}>
-            The window hit an error it couldn't recover from. Reloading usually fixes it —
+            The window hit an error it couldn't recover from. Reloading usually fixes it -
             if it keeps happening, tell Red what you clicked.
           </p>
           <div

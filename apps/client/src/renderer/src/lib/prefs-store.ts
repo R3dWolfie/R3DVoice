@@ -27,17 +27,17 @@ export interface PrefsState {
   themeOverrides: Record<string, string>;
   dmBanners: boolean;
   dmPreviews: boolean;
-  /** 3.7 — default notification behavior for rooms without an explicit override. */
+  /** 3.7 - default notification behavior for rooms without an explicit override. */
   roomNotifDefault: RoomNotifDefault;
-  /** 3.7 — quiet hours suppress all banners + sounds (bell panel still fills). */
+  /** 3.7 - quiet hours suppress all banners + sounds (bell panel still fills). */
   quietHoursEnabled: boolean;
   /** "HH:MM" local time, 24h. */
   quietHoursStart: string;
   /** "HH:MM" local time, 24h. */
   quietHoursEnd: string;
-  /** 3.1 Video — camera preview/capture resolution. */
+  /** 3.1 Video - camera preview/capture resolution. */
   cameraResolution: CameraResolution;
-  /** 3.1 Video — mirror the local preview horizontally (never what others see). */
+  /** 3.1 Video - mirror the local preview horizontally (never what others see). */
   cameraMirror: boolean;
   /** Mono input: force-mono capture + downmix (left-only interfaces). */
   monoInput: boolean;
@@ -68,10 +68,10 @@ export interface PrefsState {
   inputProfile: InputProfile;
   /** Advanced Voice Activity: gate mic transmission on input level. */
   vadEnabled: boolean;
-  /** VAD threshold, 0..1 — mic only transmits when level exceeds this. */
+  /** VAD threshold, 0..1 - mic only transmits when level exceeds this. */
   inputSensitivity: number;
   serverUrl: string;
-  /** Room IDs the user has starred — surfaced by future Lobby UX. */
+  /** Room IDs the user has starred - surfaced by future Lobby UX. */
   favoriteRoomIds: string[];
   /** Per-participant voice volume map (1.0 = unity). Persists across sessions. */
   participantVolumes: Record<string, number>;
@@ -130,7 +130,7 @@ export interface PrefsState {
 }
 
 /**
- * Deck 3.2 default keybinds — the single source of truth shared by the store
+ * Deck 3.2 default keybinds - the single source of truth shared by the store
  * DEFAULTS below and Settings › Keybinds "Reset to defaults".
  */
 export const KEYBIND_DEFAULTS: {
@@ -192,7 +192,7 @@ const DEFAULTS = {
   // Server URL default, in priority order:
   //   1. VITE_SERVER_URL at build time (dev/self-host override, fresh profiles)
   //   2. web build (no Electron preload bridge at module-eval time): the page's
-  //      own origin — the server serving the SPA IS the API server
+  //      own origin - the server serving the SPA IS the API server
   //   3. Electron: the canonical hosted instance
   // Persisted prefs always take precedence after first run.
   serverUrl:
@@ -207,7 +207,7 @@ const DEFAULTS = {
   favoriteRoomIds: [] as string[],
   participantVolumes: {} as Record<string, number>,
   participantScreenVolumes: {} as Record<string, number>,
-  // feat(inroom): per-participant voice gain (>1 boost) — see PrefsState.
+  // feat(inroom): per-participant voice gain (>1 boost) - see PrefsState.
   participantGains: {} as Record<string, number>,
 };
 

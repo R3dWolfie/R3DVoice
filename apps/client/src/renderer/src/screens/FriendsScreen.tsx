@@ -49,7 +49,7 @@ export function FriendsScreen({ onJoinRoom, onOpenDms }: Props = {}): ReactEleme
   const overflowRef = useRef<HTMLDivElement>(null);
   const outgoingRef = useRef<HTMLDivElement>(null);
   const openSettingsKeybind = usePrefs((s) => s.openSettingsKeybind);
-  // 2.2a — live match preview while the popover is open and a handle is typed.
+  // 2.2a - live match preview while the popover is open and a handle is typed.
   const addMatch = useHandleMatch(addOpen ? addInput : "");
 
   const apiFor = useCallback(() => {
@@ -227,7 +227,7 @@ export function FriendsScreen({ onJoinRoom, onOpenDms }: Props = {}): ReactEleme
                 disabled={busy}
                 style={{ height: "2rem", fontSize: "var(--t-xs)" }}
               />
-              {/* 2.2a — live match preview while typing a known handle */}
+              {/* 2.2a - live match preview while typing a known handle */}
               {addMatch && (
                 <div style={{ marginTop: "var(--s-2)" }}>
                   <HandleMatchCard match={addMatch} />
@@ -483,7 +483,7 @@ export function FriendsScreen({ onJoinRoom, onOpenDms }: Props = {}): ReactEleme
           {outgoing.length > 0 && (
             <div ref={outgoingRef} style={{ marginTop: "var(--s-5)" }}>
               <div className="rv-label" style={{ marginBottom: "var(--s-2)", fontSize: "var(--t-2xs)" }}>
-                Pending — sent
+                Pending - sent
               </div>
               {outgoing.map((f) => (
                 <div
@@ -596,7 +596,7 @@ export function FriendsScreen({ onJoinRoom, onOpenDms }: Props = {}): ReactEleme
         onClose={() => setInvitesOpen(false)}
         icon={<I.Link size={16} />}
         title="Invite links"
-        subtitle="Share a link — friends land in your room or your friend list."
+        subtitle="Share a link - friends land in your room or your friend list."
         width="min(92vw, 560px)"
         footer={
           <>

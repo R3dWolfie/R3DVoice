@@ -7,7 +7,7 @@ const INVITE_CODE_RE = /^[A-Za-z2-9]{8}$/;
 let pending: DeepLinkEvent | null = null;
 
 /** Parse a r3dvoice:// URL into a typed event, or null if it doesn't match a known shape.
- * Legacy redvoice:// links (pre-rename) are accepted forever — they exist in old chats. */
+ * Legacy redvoice:// links (pre-rename) are accepted forever - they exist in old chats. */
 export function parseDeepLink(raw: string): DeepLinkEvent | null {
   let url: URL;
   try {
@@ -17,13 +17,13 @@ export function parseDeepLink(raw: string): DeepLinkEvent | null {
   }
   if (url.protocol !== "r3dvoice:" && url.protocol !== "redvoice:") return null;
 
-  // r3dvoice://join/<uuid> — `host` is "join", pathname is "/<uuid>"
+  // r3dvoice://join/<uuid> - `host` is "join", pathname is "/<uuid>"
   if (url.host === "join") {
     const id = url.pathname.replace(/^\/+/, "").replace(/\/+$/, "");
     if (UUID_RE.test(id)) return { type: "join-room", roomId: id };
   }
 
-  // r3dvoice://invite/<code> — `host` is "invite", pathname is "/<code>"
+  // r3dvoice://invite/<code> - `host` is "invite", pathname is "/<code>"
   if (url.host === "invite") {
     const code = url.pathname.replace(/^\/+/, "").replace(/\/+$/, "");
     if (INVITE_CODE_RE.test(code)) return { type: "invite-code", code };

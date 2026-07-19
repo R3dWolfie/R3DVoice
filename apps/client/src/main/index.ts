@@ -39,12 +39,12 @@ Menu.setApplicationMenu(null);
 // Force WebRTC H.264 encoding to go through hardware (Media Foundation on
 // Windows, VAAPI on Linux, VideoToolbox on macOS) instead of falling back
 // to the OpenH264 software encoder. v0.5.5 stats showed impl=OpenH264 with
-// enc=0–2 fps at 1080p60 — software encode simply cannot keep up.
+// enc=0–2 fps at 1080p60 - software encode simply cannot keep up.
 //
 // `ignore-gpu-blocklist` lets GPUs flagged by Chromium (often for stale
 // driver bugs) still use HW. The feature list collects the flags that gate
 // the hardware H.264 / video-encode path on each platform Chromium 134
-// recognises — not all are active on every platform but extras are no-ops.
+// recognises - not all are active on every platform but extras are no-ops.
 app.commandLine.appendSwitch("ignore-gpu-blocklist");
 app.commandLine.appendSwitch(
   "enable-features",
@@ -65,11 +65,11 @@ app.commandLine.appendSwitch(
     "UseMultiPlaneFormatForSoftwareVideo",
   ].join(","),
 );
-// Don't fight Chromium's IPC video decoder selection — leaving the default
+// Don't fight Chromium's IPC video decoder selection - leaving the default
 // (in-GPU-process decode) lets the platform encoder accelerator initialise.
 // WebRtcAllowInputVolumeAdjustment: Chromium otherwise rides your mic INPUT
 // gain up/down automatically (OS-level AGC), which fights the user's own gain
-// and makes the mic drift quieter — disabling it is what Discord does. On by
+// and makes the mic drift quieter - disabling it is what Discord does. On by
 // default here; must be set before app-ready, so it's a launch switch.
 app.commandLine.appendSwitch(
   "disable-features",
@@ -79,7 +79,7 @@ app.commandLine.appendSwitch(
 // Dev/test escape hatch: run a second instance with an isolated session.
 // R3DVOICE_USER_DATA_DIR=/tmp/r3dvoice-b pnpm --filter @r3dvoice/client dev
 // Must happen BEFORE requestSingleInstanceLock so the lock is keyed on the
-// overridden userData path — otherwise both instances contend for the same
+// overridden userData path - otherwise both instances contend for the same
 // default-path lock and the second silently quits.
 // Pre-rename REDVOICE_* env vars still work (scripts/muscle memory).
 for (const [oldKey, newKey] of [
@@ -101,8 +101,8 @@ if (!gotSingleInstanceLock) {
 }
 
 // When launched from a desktop-file or taskbar (no attached terminal),
-// process.stdout/stderr are closed pipes. Any console.* write — ours or
-// from a dep like electron-updater — throws EPIPE. Without these guards
+// process.stdout/stderr are closed pipes. Any console.* write - ours or
+// from a dep like electron-updater - throws EPIPE. Without these guards
 // the main process crashes before the window opens.
 function swallowEpipe(err: NodeJS.ErrnoException): void {
   if (err.code === "EPIPE") return;
@@ -174,7 +174,7 @@ async function createWindow(splash: BrowserWindow | null): Promise<BrowserWindow
   const win = new BrowserWindow({
     width: bounds.width,
     height: bounds.height,
-    // Floor the window size — below this the titlebar/controls compress into an
+    // Floor the window size - below this the titlebar/controls compress into an
     // unusable sliver (custom-scale drag had no lower bound).
     minWidth: 900,
     minHeight: 600,
@@ -203,7 +203,7 @@ async function createWindow(splash: BrowserWindow | null): Promise<BrowserWindow
 
   win.once("ready-to-show", () => {
     sendSplashStatus(splash, { phase: "ready" });
-    // Brief delay so the user sees "Ready" — feels intentional, not abrupt.
+    // Brief delay so the user sees "Ready" - feels intentional, not abrupt.
     setTimeout(() => {
       if (!win.isDestroyed()) win.show();
       closeSplash(splash);
@@ -221,7 +221,7 @@ async function createWindow(splash: BrowserWindow | null): Promise<BrowserWindow
     if (!app.isReady() || win.isDestroyed()) return;
     void dialog.showMessageBox(win, {
       type: "error",
-      title: "R3DVoice — renderer crashed",
+      title: "R3DVoice - renderer crashed",
       message: `The window stopped rendering (${details.reason}).`,
       detail:
         `Exit code: ${details.exitCode}\n\n` +
@@ -243,7 +243,7 @@ async function createWindow(splash: BrowserWindow | null): Promise<BrowserWindow
     if (win.isDestroyed()) return;
     void dialog.showMessageBox(win, {
       type: "warning",
-      title: "R3DVoice — window frozen",
+      title: "R3DVoice - window frozen",
       message: "The window stopped responding.",
       detail:
         `A log was written to:\n${join(app.getPath("userData"), "renderer-crash.log")}\n\n` +
@@ -268,7 +268,7 @@ async function createWindow(splash: BrowserWindow | null): Promise<BrowserWindow
   });
 
   // Setting applicationMenu to null drops Electron's default accelerators
-  // (Ctrl+R, Ctrl+Shift+I, F12) along with the menu bar — rebind them here.
+  // (Ctrl+R, Ctrl+Shift+I, F12) along with the menu bar - rebind them here.
   win.webContents.on("before-input-event", (_evt, input) => {
     if (input.type !== "keyDown") return;
     const key = input.key.toLowerCase();
@@ -360,7 +360,7 @@ function registerIpcHandlers(): void {
   });
   ipcMain.handle("shell:open-external", async (_evt, url: unknown) => {
     if (typeof url !== "string") return;
-    // Only http(s) — prevents file:// or javascript: escapes.
+    // Only http(s) - prevents file:// or javascript: escapes.
     if (!/^https?:\/\//i.test(url)) return;
     await shell.openExternal(url);
   });
@@ -382,7 +382,7 @@ function registerIpcHandlers(): void {
   // if no terminal is found, so the UI can fall back to showing the command.
   ipcMain.handle("updater:run-package-update", async () => {
     const script =
-      "yay -Syu; echo; echo '--- update finished — restart R3DVoice to apply. ---'; read -n1 -s -r -p 'Press any key to close…'";
+      "yay -Syu; echo; echo '--- update finished - restart R3DVoice to apply. ---'; read -n1 -s -r -p 'Press any key to close…'";
     const term = process.env["TERMINAL"];
     const candidates: Array<{ bin: string; args: string[] }> = [
       ...(term ? [{ bin: term, args: ["-e", "bash", "-lc", script] }] : []),
@@ -482,7 +482,7 @@ app.whenReady().then(async () => {
   const updateResult = await initAutoUpdate(splash);
   if (updateResult.kind === "installing") return;
 
-  // On Wayland, xdg-desktop-portal is the picker — the OS won't let any app
+  // On Wayland, xdg-desktop-portal is the picker - the OS won't let any app
   // enumerate screens without the user clicking in the portal dialog first.
   // So our custom picker would stack on top of the OS picker and hang on
   // "Loading sources…". Skip our UI on Wayland, defer entirely to the portal.
@@ -493,7 +493,7 @@ app.whenReady().then(async () => {
 
   session.defaultSession.setDisplayMediaRequestHandler(async (request, callback) => {
     // Audio-only request (the in-room "Share audio" toggle on Windows when
-    // the native filter isn't available). Skip the screen picker — the user
+    // the native filter isn't available). Skip the screen picker - the user
     // doesn't want to pick a window, they want loopback audio. macOS/Linux
     // can't deliver system audio without a video source, so we return empty.
     if (request.audioRequested && !request.videoRequested) {
@@ -506,7 +506,7 @@ app.whenReady().then(async () => {
     }
 
     // Any throw below (getSources rejecting on the X11 path, picker window
-    // dying) must still settle the request — otherwise the renderer hangs on
+    // dying) must still settle the request - otherwise the renderer hangs on
     // "Loading sources…" forever. Deny (callback({})) on error.
     try {
       if (isWayland) {
@@ -543,7 +543,7 @@ app.whenReady().then(async () => {
     }
   }, {
     // On Wayland (and macOS 15+) let Electron route getDisplayMedia straight to
-    // the OS portal — one native dialog. Without this, requesting both "screen"
+    // the OS portal - one native dialog. Without this, requesting both "screen"
     // and "window" source types via desktopCapturer.getSources opens the KDE
     // portal twice (once per type). The handler above still runs as the fallback
     // on X11/Windows/older macOS where no system picker exists.
@@ -552,7 +552,7 @@ app.whenReady().then(async () => {
 
   mainWindow = await createWindow(splash);
 
-  // Cold launch via `r3dvoice://…` — URL is in process.argv; stash as pending
+  // Cold launch via `r3dvoice://…` - URL is in process.argv; stash as pending
   // so the renderer picks it up after it finishes loading.
   const coldLink = extractDeepLinkFromArgv(process.argv);
   if (coldLink) dispatchDeepLink(coldLink, mainWindow);

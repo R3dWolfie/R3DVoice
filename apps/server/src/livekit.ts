@@ -38,26 +38,26 @@ function getRoomService(): RoomServiceClient {
 
 /**
  * Disconnect a participant from a LiveKit room. Used when an owner removes a
- * member — kicks them in real time so they don't keep streaming. Best-effort:
+ * member - kicks them in real time so they don't keep streaming. Best-effort:
  * if the participant isn't currently connected, the call no-ops.
  */
 export async function kickParticipant(roomId: string, userId: string): Promise<void> {
   try {
     await getRoomService().removeParticipant(roomId, userId);
   } catch {
-    /* not connected, or LiveKit unreachable — caller doesn't care */
+    /* not connected, or LiveKit unreachable - caller doesn't care */
   }
 }
 
 /**
  * Tear down the LiveKit room itself, disconnecting all participants. Called
- * when the owner deletes the room in our application — we want everyone
+ * when the owner deletes the room in our application - we want everyone
  * connected to be kicked promptly, not just have new joins blocked.
  */
 export async function deleteLiveKitRoom(roomId: string): Promise<void> {
   try {
     await getRoomService().deleteRoom(roomId);
   } catch {
-    /* room may not exist on LiveKit (no one ever connected) — ignore */
+    /* room may not exist on LiveKit (no one ever connected) - ignore */
   }
 }

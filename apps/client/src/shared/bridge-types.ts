@@ -42,7 +42,7 @@ export interface R3DVoiceBridge {
   relaunch(): Promise<void>;
   /**
    * Updater capability. canSelfUpdate is true only for a packaged build whose
-   * in-app updater is active (standalone AppImage/exe/dmg) — false for AUR/deb
+   * in-app updater is active (standalone AppImage/exe/dmg) - false for AUR/deb
    * (pacman/apt own updates) and for web. Drives the required-update gate's UX.
    */
   updaterInfo(): Promise<{ canSelfUpdate: boolean }>;
@@ -90,7 +90,7 @@ export interface R3DVoiceBridge {
   listWindowsAudioSessions(): Promise<WindowsAudioSessionInfo[]>;
   /** Stop a running system-audio capture session. No-op if none. */
   stopSystemAudioCapture(): Promise<void>;
-  /** PCM format the helper emits — needed to reconstruct a MediaStream. */
+  /** PCM format the helper emits - needed to reconstruct a MediaStream. */
   systemAudioFormat(): Promise<SystemAudioFormat>;
   /** Subscribe to PCM chunks from the helper. Returns an unsubscribe. */
   onSystemAudioChunk(cb: (chunk: Uint8Array) => void): () => void;

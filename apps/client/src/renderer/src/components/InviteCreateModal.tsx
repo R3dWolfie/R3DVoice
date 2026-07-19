@@ -60,7 +60,7 @@ function activityLine(f: FriendDTO, roomId: string | undefined): { text: string;
   };
 }
 
-// 4.16: friends "recently in voice" — currently in a room, or online (the best
+// 4.16: friends "recently in voice" - currently in a room, or online (the best
 // available proxy for recent voice activity client-side).
 function recentlyInVoice(f: FriendDTO): boolean {
   return f.user.currentRoom != null || friendPresence(f) === "online";

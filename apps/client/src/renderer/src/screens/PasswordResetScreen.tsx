@@ -4,7 +4,7 @@ import { ApiClient, ApiError } from "../lib/api.js";
 import { Field, Spinner, APP_VERSION } from "../components/Primitives.js";
 import { I } from "../components/Icons.js";
 
-// WireFrames 1.7 — "Set a new password". Reached pre-auth via the emailed
+// WireFrames 1.7 - "Set a new password". Reached pre-auth via the emailed
 // reset link (voice.r3dwolfie.com/reset?token=…). On success it clears the
 // token from the URL and hands back to the sign-in screen.
 export function PasswordResetScreen({ token, onDone }: { token: string; onDone: () => void }): ReactElement {
@@ -32,7 +32,7 @@ export function PasswordResetScreen({ token, onDone }: { token: string; onDone: 
       setError(
         err instanceof ApiError
           ? err.message
-          : "Couldn't reset your password — the link may have expired.",
+          : "Couldn't reset your password - the link may have expired.",
       );
     } finally {
       setBusy(false);

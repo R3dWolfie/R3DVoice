@@ -5,9 +5,9 @@ import type { SplashStatus, SplashPhase } from "../../../shared/bridge-types.js"
 const PHASE_LABEL: Record<SplashPhase, string> = {
   initializing: "Initializing…",
   checking: "Checking for updates…",
-  available: "Update available — downloading",
+  available: "Update available - downloading",
   downloading: "Downloading update",
-  downloaded: "Update downloaded — restarting",
+  downloaded: "Update downloaded - restarting",
   loading: "Loading…",
   ready: "Ready",
   error: "Couldn’t check for updates",
@@ -16,7 +16,7 @@ const PHASE_LABEL: Record<SplashPhase, string> = {
 function statusMessage(status: SplashStatus): string {
   if (status.message) return status.message;
   if (status.phase === "downloading" && typeof status.percent === "number") {
-    return `Downloading update — ${Math.round(status.percent)}%`;
+    return `Downloading update - ${Math.round(status.percent)}%`;
   }
   return PHASE_LABEL[status.phase];
 }

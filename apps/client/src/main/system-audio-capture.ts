@@ -12,7 +12,7 @@ import { spawn, type ChildProcess, type ChildProcessWithoutNullStreams } from "n
 import { existsSync } from "node:fs";
 import { join } from "node:path";
 
-// PCM format the helper produces — kept in sync with LoopbackCapture.cpp's
+// PCM format the helper produces - kept in sync with LoopbackCapture.cpp's
 // m_CaptureFormat. The renderer needs these to reconstruct a MediaStream.
 export const SYSTEM_AUDIO_FORMAT = {
   sampleRate: 48000,
@@ -37,7 +37,7 @@ let session: Session | null = null;
 function helperPath(): string | null {
   if (process.platform !== "win32") return null;
   if (!app.isPackaged) {
-    // Dev builds don't ship the binary — Linux/Mac devs can't compile it
+    // Dev builds don't ship the binary - Linux/Mac devs can't compile it
     // anyway. Skipping is fine; the feature degrades gracefully.
     return null;
   }
@@ -160,7 +160,7 @@ export function startSystemAudioCapture(
     };
 
     const timeout = setTimeout(() => {
-      // Helper didn't produce audio in time — kill it and report unsupported.
+      // Helper didn't produce audio in time - kill it and report unsupported.
       try { child.kill(); } catch { /* already gone */ }
       settled("unsupported");
     }, FIRST_CHUNK_TIMEOUT_MS);
@@ -170,7 +170,7 @@ export function startSystemAudioCapture(
         clearTimeout(timeout);
         settled("started");
       }
-      // Forward as Uint8Array — Electron serializes Buffer through structured
+      // Forward as Uint8Array - Electron serializes Buffer through structured
       // clone but staying explicit is cheaper and avoids surprises if a future
       // Electron tightens that path.
       safeSend(webContents, "system-audio:chunk", new Uint8Array(chunk));
@@ -178,7 +178,7 @@ export function startSystemAudioCapture(
 
     child.stderr.on("data", (_chunk: Buffer) => {
       // Helper logs to stderr on activation failure. We don't surface the
-      // text — the timeout/exit path is enough to fall back. Could route to
+      // text - the timeout/exit path is enough to fall back. Could route to
       // a debug log in the future.
     });
 
@@ -207,7 +207,7 @@ export async function stopSystemAudioCapture(): Promise<void> {
   const dying = session;
   session = null;
   dying.stopped = true;
-  // Detach data forwarding *synchronously* — otherwise the old child keeps
+  // Detach data forwarding *synchronously* - otherwise the old child keeps
   // streaming PCM chunks into the renderer for the few hundred ms it takes
   // to shut down via stdin EOF, mixing with whatever the next session
   // produces. (User-visible bug: picking "osu!" in the per-app picker still
@@ -222,7 +222,7 @@ export async function stopSystemAudioCapture(): Promise<void> {
     let resolved = false;
     const finish = (): void => { if (!resolved) { resolved = true; resolve(); } };
     dying.child.once("exit", finish);
-    // Hard kill after 250ms — racing two helpers is much worse than a hard
+    // Hard kill after 250ms - racing two helpers is much worse than a hard
     // kill of one we already told to stop.
     setTimeout(() => {
       if (!dying.child.killed) {

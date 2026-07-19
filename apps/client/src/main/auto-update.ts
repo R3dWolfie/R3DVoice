@@ -13,7 +13,7 @@ export type UpdateOutcome =
 
 function safeLog(...args: unknown[]): void {
   // Swallow EPIPE. When launched from a desktop-file with no terminal,
-  // process.stdout/stderr are closed — any write throws uncaught EPIPE
+  // process.stdout/stderr are closed - any write throws uncaught EPIPE
   // and crashes the main process. Wrap every log site.
   try {
     // eslint-disable-next-line no-console
@@ -54,7 +54,7 @@ export async function initAutoUpdate(
     return { kind: "no-update" };
   }
 
-  // Disable electron-updater's default logger — it calls console.* with
+  // Disable electron-updater's default logger - it calls console.* with
   // verbose output, which EPIPEs when launched headlessly (no terminal).
   autoUpdater.logger = null;
 
@@ -95,7 +95,7 @@ export async function initAutoUpdate(
       safeLog("[auto-update] update downloaded:", info.version);
       send({ phase: "downloaded", message: `Installing ${info.version}…` });
       // Silent install + auto-relaunch. Resolve as "installing" so the
-      // caller knows not to bother opening the main window — the process
+      // caller knows not to bother opening the main window - the process
       // is exiting. setImmediate so the splash status flush gets out first.
       settle({ kind: "installing" });
       setImmediate(() => {
@@ -114,7 +114,7 @@ export async function initAutoUpdate(
     });
 
     void autoUpdater.checkForUpdates().catch(() => {
-      // Offline, rate-limited, etc. — proceed with current version.
+      // Offline, rate-limited, etc. - proceed with current version.
       settle({ kind: "error" });
     });
   });

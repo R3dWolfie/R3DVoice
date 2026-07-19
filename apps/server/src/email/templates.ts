@@ -1,7 +1,7 @@
 import { getConfig } from "../config.js";
 
 // Plain, deliverability-friendly transactional emails. Inline styles only,
-// no remote assets — matches the R3DVoice ink-on-paper look without tripping
+// no remote assets - matches the R3DVoice ink-on-paper look without tripping
 // spam heuristics.
 const WRAP = (inner: string): string => `
 <div style="font-family:-apple-system,Segoe UI,Helvetica,Arial,sans-serif;background:#f4f4f5;padding:32px 16px">
@@ -31,7 +31,7 @@ export function verifyEmail(displayName: string, link: string): { subject: strin
 export function passwordResetEmail(displayName: string, link: string): { subject: string; text: string; html: string } {
   return {
     subject: "Reset your R3DVoice password",
-    text: `Hi ${displayName},\n\nReset your R3DVoice password:\n${link}\n\nThis link expires in 1 hour and can be used once. If you didn't request this, ignore this email — your password is unchanged.`,
+    text: `Hi ${displayName},\n\nReset your R3DVoice password:\n${link}\n\nThis link expires in 1 hour and can be used once. If you didn't request this, ignore this email - your password is unchanged.`,
     html: WRAP(
       `<p style="margin:0 0 8px;font-size:16px;font-weight:600;color:#1a1a1a">Reset your password</p>
        <p style="margin:0 0 20px;font-size:14px;color:#52525b;line-height:1.5">Hi ${displayName}, click below to choose a new password.</p>

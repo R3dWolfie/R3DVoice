@@ -3,7 +3,7 @@ import { create } from "zustand";
 /**
  * App-wide WS connection health (system/connection-banners.html). The
  * ChatTransport singleton (chat-transport.ts) owns the socket and is the only
- * writer; the ConnectionBanner subscribes. No banner renders when healthy —
+ * writer; the ConnectionBanner subscribes. No banner renders when healthy -
  * connection health only surfaces when degraded.
  */
 
@@ -15,7 +15,7 @@ interface ConnectionState {
   attempts: number;
   /** Epoch ms of the next scheduled reconnect, when status = reconnecting. */
   nextRetryAt: number | null;
-  /** Epoch ms the socket last opened — "Last sync Ns ago". */
+  /** Epoch ms the socket last opened - "Last sync Ns ago". */
   lastOpenAt: number | null;
 }
 

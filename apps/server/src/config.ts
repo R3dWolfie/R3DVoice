@@ -14,12 +14,12 @@ const configSchema = z.object({
     .enum(["development", "test", "production"])
     .default("development"),
 
-  // Base URL the client is served from — used to build verify/reset links in
+  // Base URL the client is served from - used to build verify/reset links in
   // outbound email. Defaults to the deployed origin.
   APP_URL: z.string().url().default("https://voice.r3dwolfie.com"),
 
   // SMTP is optional: email flows (verify, password reset) are ENABLED only
-  // when SMTP_HOST is set. Self-hosters without a mail server keep working —
+  // when SMTP_HOST is set. Self-hosters without a mail server keep working -
   // registration auto-verifies and the reset link is simply unavailable.
   SMTP_HOST: z.string().optional(),
   SMTP_PORT: z.coerce.number().int().positive().default(465),

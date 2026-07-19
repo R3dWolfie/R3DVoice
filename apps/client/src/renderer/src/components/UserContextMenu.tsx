@@ -8,7 +8,7 @@ import { ContextMenu, MenuItem, MenuDivider, MenuSection } from "./ContextMenu.j
 import { MutePopover } from "./MutePopover.js";
 import { pushToast } from "../lib/toast-store.js";
 
-// Full user menu per WireFrames 2.4d — right-click / ⋮ on a person:
+// Full user menu per WireFrames 2.4d - right-click / ⋮ on a person:
 // View profile · Send DM · [Notifications] Mute (2.4b popover) ·
 // Copy handle · Block · Remove friend. Friendship state (for presence +
 // Remove friend) is resolved from the caller's friends list on open.
@@ -128,7 +128,7 @@ export function UserContextMenu({
         icon="⧉"
         label="Copy handle"
         onClick={() => {
-          // Toast only after the write resolves — a denied/unfocused clipboard
+          // Toast only after the write resolves - a denied/unfocused clipboard
           // must not flash a false "copied".
           void navigator.clipboard
             .writeText(handleText)
@@ -147,7 +147,7 @@ export function UserContextMenu({
             setBlockArmed(true);
             return;
           }
-          // Only dismiss on success — a swallowed failure would falsely imply
+          // Only dismiss on success - a swallowed failure would falsely imply
           // the user was blocked and leave the list unrefreshed.
           void apiFor()
             .blockUser(user.id)

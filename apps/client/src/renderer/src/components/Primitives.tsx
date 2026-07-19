@@ -121,7 +121,7 @@ function DownloadMenu(): ReactElement {
         open={open}
         onClose={() => setOpen(false)}
         title="Download R3DVoice"
-        subtitle="The native desktop app — lower latency, global hotkeys, per-app screen audio"
+        subtitle="The native desktop app - lower latency, global hotkeys, per-app screen audio"
         icon="↓"
         width="min(94vw, 540px)"
         footer={
@@ -195,7 +195,7 @@ function DownloadMenu(): ReactElement {
               }}
             >
               <span style={{ fontSize: "var(--t-2xs)", color: "var(--text-mid)" }}>
-                On Arch? Install from the AUR — updates come through your package manager:
+                On Arch? Install from the AUR - updates come through your package manager:
               </span>
               <code style={{ ...PLATFORM_TAG, fontSize: "var(--t-xs)" }}>yay -S r3dvoice-bin</code>
             </div>

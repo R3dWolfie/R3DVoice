@@ -3,7 +3,7 @@ import type { FastifyInstance } from "fastify";
 /**
  * Stop-gap landing page at GET /. Until P7 (full web client) ships, this
  * gives the URL something to render instead of the API's 404. Self-contained
- * inline HTML — no static assets, no template engine, no build step.
+ * inline HTML - no static assets, no template engine, no build step.
  */
 export async function landingRoutes(app: FastifyInstance): Promise<void> {
   app.get("/", async (_request, reply) => {
@@ -15,7 +15,7 @@ const LANDING_HTML = `<!doctype html>
 <html lang="en">
 <head>
   <meta charset="utf-8"/>
-  <title>R3DVoice — voice + screenshare for friends</title>
+  <title>R3DVoice - voice + screenshare for friends</title>
   <meta name="viewport" content="width=device-width, initial-scale=1"/>
   <meta name="description" content="Open-source, self-hostable voice + screenshare. End-to-end encrypted DMs. Cross-platform desktop client."/>
   <meta property="og:title" content="R3DVoice"/>
@@ -218,7 +218,7 @@ const LANDING_HTML = `<!doctype html>
       </div>
       <div class="card">
         <h3>End-to-end encrypted DMs</h3>
-        <p>NaCl box (X25519). Server stores ciphertext only — operator can't read.</p>
+        <p>NaCl box (X25519). Server stores ciphertext only - operator can't read.</p>
       </div>
       <div class="card">
         <h3>Friends + presence</h3>

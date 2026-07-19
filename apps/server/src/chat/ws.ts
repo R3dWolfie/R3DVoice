@@ -51,7 +51,7 @@ export async function chatWsRoutes(app: FastifyInstance): Promise<void> {
     const sock = (connection as unknown as { socket?: import("ws").WebSocket })
       .socket ?? (connection as unknown as import("ws").WebSocket);
 
-    // Token via subprotocol — Sec-WebSocket-Protocol: "r3dvoice.bearer.<jwt>".
+    // Token via subprotocol - Sec-WebSocket-Protocol: "r3dvoice.bearer.<jwt>".
     const proto = request.headers["sec-websocket-protocol"];
     const protoStr = Array.isArray(proto) ? proto[0] : proto;
     const token = extractTokenFromSubprotocol(protoStr);
@@ -99,7 +99,7 @@ export async function chatWsRoutes(app: FastifyInstance): Promise<void> {
       if (msg.type === "subscribe") subscribe(msg.threadType, msg.threadId, conn);
       else if (msg.type === "unsubscribe") unsubscribe(msg.threadType, msg.threadId, conn);
       else if (msg.type === "typing") {
-        // 2.5l typing indicator — pure relay to the thread's other
+        // 2.5l typing indicator - pure relay to the thread's other
         // subscribers; nothing persists. Client throttles sends.
         broadcastToThread(
           msg.threadType,
@@ -117,14 +117,14 @@ export async function chatWsRoutes(app: FastifyInstance): Promise<void> {
       // so isUserOnline now reflects the post-close state. Fully offline →
       // stamp lastSeenAt for the friends-list "last seen 2h ago" label.
       const nowOffline = !isUserOnline(userId);
-      // Clear the user's currentRoomId on disconnect — otherwise crashed/
+      // Clear the user's currentRoomId on disconnect - otherwise crashed/
       // network-dropped clients leave their friends seeing them "in
       // <Room>" forever. We also broadcast presence.update so friends'
       // friend cards refresh immediately.
       void (async () => {
         try {
           if (nowOffline) {
-            // Best-effort — user row may have been deleted mid-session.
+            // Best-effort - user row may have been deleted mid-session.
             await prisma.user
               .update({ where: { id: userId }, data: { lastSeenAt: new Date() } })
               .catch(() => undefined);

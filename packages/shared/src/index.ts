@@ -134,7 +134,7 @@ export interface PollOption {
   text: string;
 }
 
-/** A poll as served to the client — raw voter map is collapsed to counts. */
+/** A poll as served to the client - raw voter map is collapsed to counts. */
 export interface PollDTO {
   question: string;
   options: PollOption[];

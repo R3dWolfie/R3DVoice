@@ -3,7 +3,7 @@ import { getConfig } from "../config.js";
 
 /**
  * Thin mail layer. Email is optional: when SMTP_HOST is unset the whole
- * feature is off — emailEnabled() is false and sendMail() is a no-op that
+ * feature is off - emailEnabled() is false and sendMail() is a no-op that
  * logs. That keeps self-hosters without a mail server fully functional
  * (registration auto-verifies; the reset link just isn't offered).
  */

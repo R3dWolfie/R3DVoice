@@ -7,7 +7,7 @@ import { Avatar } from "./Avatar.js";
 // Peer profile popover per WireFrames 2.4a: avatar + identity, live
 // presence when they're a friend, a Join-their-room shortcut, and the
 // Block / Remove-friend pair. The deck's shared-rooms/shared-friends
-// counts are omitted — they need peer-side data no client API exposes.
+// counts are omitted - they need peer-side data no client API exposes.
 export function PeerProfilePopover({
   peer,
   onClose,

@@ -3,7 +3,7 @@ import naclUtil from "tweetnacl-util";
 
 /**
  * E2EE primitives for DM messages, built on NaCl box (Curve25519 + XSalsa20-
- * Poly1305) via tweetnacl. Server stores ciphertext only — it never sees
+ * Poly1305) via tweetnacl. Server stores ciphertext only - it never sees
  * private keys.
  *
  * Sender → recipient: nacl.box(plaintext, nonce, recipientPublicKey, senderSecretKey)
@@ -14,7 +14,7 @@ import naclUtil from "tweetnacl-util";
  *     v: 1,
  *     n: <base64 24-byte nonce>,
  *     c: <base64 ciphertext>,
- *     s: <base64 sender public key — so recipient can decrypt>,
+ *     s: <base64 sender public key - so recipient can decrypt>,
  *   }
  *
  * The sender public key is included so the recipient doesn't need to look it
@@ -74,7 +74,7 @@ export function decryptDM(
   /**
    * The OTHER participant's public key. Required to decrypt messages you
    * authored: box's shared secret is ECDH(myPriv, otherPub), and for your
-   * own envelopes payload.s is your own key — using it would compute
+   * own envelopes payload.s is your own key - using it would compute
    * ECDH(me, me) and always fail. NaCl box is symmetric, so opening with
    * (counterpartyPub, mySec) works for both directions.
    */
@@ -157,11 +157,11 @@ export function isPlausibleKey(s: string): boolean {
 // To make DMs readable across devices without giving up E2EE, the user's
 // secret key is wrapped (encrypted) with a key derived from their PASSWORD and
 // stored server-side. The server never sees the password (only its hash) nor
-// the derived key nor the plaintext secret key — only the wrapped blob. On
+// the derived key nor the plaintext secret key - only the wrapped blob. On
 // login (on any device) the client fetches the blob and unwraps it with the
 // password it already has in hand. Threat model: resistant to a passive /
 // honest-but-curious server (it cannot read DMs), NOT to a server that
-// actively captures the password at login — an accepted tradeoff for usability.
+// actively captures the password at login - an accepted tradeoff for usability.
 
 export interface WrappedSecretKey {
   wrapped: string; // base64 secretbox ciphertext of the 32-byte secret key

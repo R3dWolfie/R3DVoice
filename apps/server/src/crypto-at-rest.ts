@@ -2,11 +2,11 @@ import { randomBytes, createCipheriv, createDecipheriv, createHash } from "node:
 
 /**
  * Application-layer at-rest encryption for sensitive columns (TOTP secrets,
- * room chat bodies). DMs are NOT touched here — they're already client-side
+ * room chat bodies). DMs are NOT touched here - they're already client-side
  * E2EE ciphertext envelopes the server can't read either way.
  *
  * Wire format: `enc:v1:<iv-b64>:<ciphertext+tag-b64>`. The "enc:v1:" prefix
- * lets old plaintext rows continue to round-trip readably during migration —
+ * lets old plaintext rows continue to round-trip readably during migration -
  * unwrapAtRest returns plaintext input as-is.
  *
  * Key source: process.env.MASTER_KEY (>=32 chars). Hashed with SHA-256 to
@@ -53,7 +53,7 @@ export function unwrapAtRest(stored: string): string {
   if (!stored.startsWith(PREFIX)) return stored; // legacy plaintext or non-encrypted
   const key = getKey();
   if (!key) {
-    throw new Error("ciphertext stored but MASTER_KEY missing — cannot decrypt");
+    throw new Error("ciphertext stored but MASTER_KEY missing - cannot decrypt");
   }
   const rest = stored.slice(PREFIX.length);
   const colon = rest.indexOf(":");
@@ -74,7 +74,7 @@ export function isWrapped(s: string): boolean {
   return typeof s === "string" && s.startsWith(PREFIX);
 }
 
-/** Test-only reset — flushes the cached key so MASTER_KEY changes mid-test. */
+/** Test-only reset - flushes the cached key so MASTER_KEY changes mid-test. */
 export function __resetCryptoForTests(): void {
   cachedKey = null;
   warned = false;

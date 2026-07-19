@@ -13,7 +13,7 @@
 // time, so we can splice it into a worklet source.
 import rnnoiseSyncSrc from "@jitsi/rnnoise-wasm/dist/rnnoise-sync.js?raw";
 
-// Worklet processor source — concatenated with the rnnoise sync module so
+// Worklet processor source - concatenated with the rnnoise sync module so
 // `createRNNWasmModuleSync` is in scope when the worklet starts.
 const WORKLET_SUFFIX = `
 class RnnoiseProcessor extends AudioWorkletProcessor {
@@ -66,7 +66,7 @@ class RnnoiseProcessor extends AudioWorkletProcessor {
 
     // Append incoming chunk to input buffer.
     if (this._inputFill + blockSize > this._capacity) {
-      // Should never happen — capacity is LCM. Drop oldest as a safety net.
+      // Should never happen - capacity is LCM. Drop oldest as a safety net.
       const drop = this._inputFill + blockSize - this._capacity;
       this._inputBuf.copyWithin(0, drop, this._inputFill);
       this._inputFill -= drop;
@@ -139,7 +139,7 @@ export async function applyRnnoise(input: MediaStream): Promise<MediaStream> {
   source.connect(worklet).connect(destination);
 
   // eslint-disable-next-line no-console
-  console.log("[mic] RNNoise WASM worklet active — denoiser is in the publish chain");
+  console.log("[mic] RNNoise WASM worklet active - denoiser is in the publish chain");
 
   const out = destination.stream;
   activeStreams.set(out, { ctx, source, worklet, destination });
@@ -148,7 +148,7 @@ export async function applyRnnoise(input: MediaStream): Promise<MediaStream> {
 
 /**
  * Tear down the RNNoise pipeline associated with a stream returned by
- * applyRnnoise. Safe to call on any stream — no-op if not RNNoise-managed.
+ * applyRnnoise. Safe to call on any stream - no-op if not RNNoise-managed.
  */
 export async function disposeRnnoise(stream: MediaStream): Promise<void> {
   const a = activeStreams.get(stream);

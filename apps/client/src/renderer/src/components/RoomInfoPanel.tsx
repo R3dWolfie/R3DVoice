@@ -193,7 +193,7 @@ export function RoomInfoPanel({ roomId, onDeparture, onClose }: Props): ReactEle
                   data-variant="ghost"
                   style={{ height: "1.6rem", fontSize: "var(--t-xs)" }}
                 >
-                  {room.isPublic ? "🌐 Public" : "🔗 Unlisted"} — click to flip
+                  {room.isPublic ? "🌐 Public" : "🔗 Unlisted"} - click to flip
                 </button>
               ) : (
                 <span>{room.isPublic ? "🌐 Public" : "🔗 Unlisted"}</span>

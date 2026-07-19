@@ -10,7 +10,7 @@ let pending: PendingRequest | null = null;
 let pickerWindow: BrowserWindow | null = null;
 
 export async function openScreenPicker(): Promise<string | null> {
-  // Settle any in-flight request before we replace it — otherwise the previous
+  // Settle any in-flight request before we replace it - otherwise the previous
   // getDisplayMedia promise never resolves and its caller spins forever.
   if (pending) {
     pending.resolve(null);

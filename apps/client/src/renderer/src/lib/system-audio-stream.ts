@@ -1,7 +1,7 @@
 // Builds a MediaStream from raw PCM frames produced by the native
 // system-audio-capture helper (Windows). Used as the *audio* source for
 // screenshare publishing so the captured mix excludes R3DVoice's own
-// playback (incoming voices) — preventing the "I hear myself through your
+// playback (incoming voices) - preventing the "I hear myself through your
 // screenshare" loop.
 //
 // On non-Windows or when the helper isn't bundled / OS doesn't support
@@ -34,7 +34,7 @@ class SystemAudioPcmProcessor extends AudioWorkletProcessor {
       if (!(data instanceof ArrayBuffer)) return;
       const i16 = new Int16Array(data);
       const n = i16.length;
-      // Drop oldest if we'd overflow — keeps latency bounded if the host
+      // Drop oldest if we'd overflow - keeps latency bounded if the host
       // ever bursts ahead of us.
       if (this._fill + n > this._capacity) {
         const drop = this._fill + n - this._capacity;
@@ -56,7 +56,7 @@ class SystemAudioPcmProcessor extends AudioWorkletProcessor {
     const frames = left.length;
     const need = frames * 2;
     if (this._fill < need) {
-      // Underrun: emit silence. Don't disconnect — the WebRTC sender wants
+      // Underrun: emit silence. Don't disconnect - the WebRTC sender wants
       // a continuous stream, and silence frames keep the timestamp moving.
       left.fill(0);
       if (right !== left) right.fill(0);
@@ -115,7 +115,7 @@ export async function startSystemAudioStream(
   let ctx: AudioContext | null = null;
   try {
     const fmt = await window.r3dvoice.systemAudioFormat();
-    // Match the helper's sample rate — otherwise the AudioContext would
+    // Match the helper's sample rate - otherwise the AudioContext would
     // resample, which adds latency and CPU.
     ctx = new AudioContext({ sampleRate: fmt.sampleRate, latencyHint: "interactive" });
 

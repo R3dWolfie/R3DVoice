@@ -110,7 +110,7 @@ export async function notificationRoutes(app: FastifyInstance): Promise<void> {
     reply.status(204).send();
   });
 
-  // GET /notifications/feed — one round trip for the 4.15 bell panel:
+  // GET /notifications/feed - one round trip for the 4.15 bell panel:
   // recent mentions of the caller (with room context) + pending directed
   // room invites. Friend requests ride the existing /friends endpoint.
   app.get("/notifications/feed", { preHandler: requireAuth }, async (request): Promise<NotificationsFeedDTO> => {
@@ -187,7 +187,7 @@ export async function notificationRoutes(app: FastifyInstance): Promise<void> {
     };
   });
 
-  // POST /notifications/read-all — 4.15 "Mark all read" watermark.
+  // POST /notifications/read-all - 4.15 "Mark all read" watermark.
   app.post("/notifications/read-all", { preHandler: requireAuth }, async (request, reply) => {
     await prisma.user.update({
       where: { id: request.auth!.userId },

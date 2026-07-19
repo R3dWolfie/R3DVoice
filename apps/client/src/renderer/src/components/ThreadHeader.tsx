@@ -13,7 +13,7 @@ type Props = {
   actions?: ReactNode;
   /** Makes the title clickable (2.4a peer profile popover). */
   onTitleClick?: () => void;
-  /** Leading node — the peer avatar in DM headers (2.4). */
+  /** Leading node - the peer avatar in DM headers (2.4). */
   leading?: ReactNode;
   /** Inline badge next to the title (deck: the 🔒 E2EE pill). */
   badge?: ReactNode;
@@ -26,7 +26,7 @@ export function ThreadHeader({ threadType, threadId, title, subtitle, actions, o
   const [muteMenuOpen, setMuteMenuOpen] = useState(false);
 
   // Pull the persisted mute level so the bell reflects reality on open.
-  // Without this it always defaults to "all" — confusing if the user
+  // Without this it always defaults to "all" - confusing if the user
   // already muted the thread previously.
   useEffect(() => {
     let cancelled = false;
@@ -70,7 +70,7 @@ export function ThreadHeader({ threadType, threadId, title, subtitle, actions, o
         )}
         {subtitle && <div style={{ color: "var(--text-faint)", fontSize: "var(--t-sm)" }}>{subtitle}</div>}
       </div>
-      {/* 2.4b — compact mute icon; levels + duration live in the timed-mute
+      {/* 2.4b - compact mute icon; levels + duration live in the timed-mute
           popover (1h/3h/8h/24h/∞), not a full-width native select. */}
       <div style={{ position: "relative" }}>
         <button

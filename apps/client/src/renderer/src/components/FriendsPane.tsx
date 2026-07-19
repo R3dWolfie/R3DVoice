@@ -21,7 +21,7 @@ export function FriendsPane({ onJoinRoom }: Props = {}): ReactElement {
   const [busy, setBusy] = useState(false);
   const [error, setError] = useState<string | null>(null);
   const [inviteOpen, setInviteOpen] = useState(false);
-  // 2.2a — live match preview while a handle is typed.
+  // 2.2a - live match preview while a handle is typed.
   const addMatch = useHandleMatch(addInput);
 
   const apiFor = useCallback(() => {
@@ -130,7 +130,7 @@ export function FriendsPane({ onJoinRoom }: Props = {}): ReactElement {
 
       {incoming.length > 0 && (
         <section>
-          <div className="rv-label" style={{ marginBottom: "var(--s-2)" }}>Pending — incoming</div>
+          <div className="rv-label" style={{ marginBottom: "var(--s-2)" }}>Pending - incoming</div>
           {incoming.map((f) => (
             <div key={f.friendshipId} style={{ display: "flex", alignItems: "center", gap: "var(--s-2)", padding: "var(--s-2) 0", fontSize: "var(--t-sm)" }}>
               <span style={{ flex: 1 }}>{f.user.displayName}</span>
@@ -179,7 +179,7 @@ export function FriendsPane({ onJoinRoom }: Props = {}): ReactElement {
 
       {outgoing.length > 0 && (
         <section>
-          <div className="rv-label" style={{ marginBottom: "var(--s-2)" }}>Pending — sent</div>
+          <div className="rv-label" style={{ marginBottom: "var(--s-2)" }}>Pending - sent</div>
           {outgoing.map((f) => (
             <div key={f.friendshipId} style={{ display: "flex", alignItems: "center", gap: "var(--s-2)", padding: "var(--s-2) 0", fontSize: "var(--t-sm)" }}>
               <span style={{ flex: 1, color: "var(--text-faint)" }}>{f.user.displayName}</span>

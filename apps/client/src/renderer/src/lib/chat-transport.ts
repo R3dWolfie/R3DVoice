@@ -26,7 +26,7 @@ export function setCurrentUserForNotifications(user: UserSnapshot | null): void 
 /**
  * Tracks which thread the user is currently looking at. When a `message` /
  * `chat.mention` arrives for THIS thread, we don't bump unread or fire a
- * notification — the user is already reading the conversation. Discord does
+ * notification - the user is already reading the conversation. Discord does
  * the same.
  */
 let _viewingThread: { threadType: ChatThreadType; threadId: string } | null = null;
@@ -49,7 +49,7 @@ type Listener = (event: ChatWsEvent) => void;
 
 /**
  * Manages a single WebSocket connection for chat events. Auth via the
- * Sec-WebSocket-Protocol subprotocol "r3dvoice.bearer.<jwt>" — the only
+ * Sec-WebSocket-Protocol subprotocol "r3dvoice.bearer.<jwt>" - the only
  * browser-WebSocket way to ship a token without leaking it in the URL.
  *
  * Owns reconnect on transient drops with exponential backoff.
@@ -137,7 +137,7 @@ export class ChatTransport {
     this.sendCmd({ type: "unsubscribe", threadType, threadId });
   }
 
-  /** 2.5l typing relay — fire-and-forget; callers throttle. */
+  /** 2.5l typing relay - fire-and-forget; callers throttle. */
   sendTyping(threadType: ChatThreadType, threadId: string): void {
     this.sendCmd({ type: "typing", threadType, threadId });
   }
@@ -163,7 +163,7 @@ export class ChatTransport {
     }
   }
 
-  /** Drop the cached value for a thread — call after a setMute mutation. */
+  /** Drop the cached value for a thread - call after a setMute mutation. */
   invalidateMute(threadType: ChatThreadType, threadId: string): void {
     this._muteCache.delete(`${threadType}:${threadId}`);
   }
@@ -196,7 +196,7 @@ export class ChatTransport {
           this.sendCmd({ type: "subscribe", threadType: t, threadId: id });
         }
       }
-      // Heartbeat every 25s — keeps NAT mappings + tunnel alive.
+      // Heartbeat every 25s - keeps NAT mappings + tunnel alive.
       this.heartbeatTimer = window.setInterval(() => {
         this.sendCmd({ type: "ping" });
       }, 25000);
@@ -210,11 +210,11 @@ export class ChatTransport {
         const me = _currentUser;
         if (!me) return;
 
-        // Bump unread on incoming messages — both regular `message` events
+        // Bump unread on incoming messages - both regular `message` events
         // (delivered to thread subscribers) AND `chat.mention` events
         // (delivered directly to the mentioned user even if they're not
         // subscribed). Skip when the user is currently looking at the
-        // thread — they don't need a badge for a thread they're reading.
+        // thread - they don't need a badge for a thread they're reading.
         if (event.type === "message" && event.message.authorId !== me.id) {
           if (!isViewingThread(event.message.threadType, event.message.threadId)) {
             useUnreadStore.getState().bump(event.message.threadType, event.message.threadId);
@@ -244,7 +244,7 @@ export class ChatTransport {
           prefs: {
             dmBanners: prefs.dmBanners,
             dmPreviews: prefs.dmPreviews,
-            // 3.7 quiet hours — suppresses every OS banner while active.
+            // 3.7 quiet hours - suppresses every OS banner while active.
             quietHours: prefs.quietHoursEnabled
               ? { start: prefs.quietHoursStart, end: prefs.quietHoursEnd }
               : undefined,
@@ -266,7 +266,7 @@ export class ChatTransport {
       }
       this.ws = null;
       // 4401 = auth failure (server rejected our subprotocol token). Reconnect
-      // loops would spin forever on a stale token — bail and let the auth flow
+      // loops would spin forever on a stale token - bail and let the auth flow
       // (re-login, re-hydrate) re-establish the singleton via ensureTransport.
       if (ev.code === 4401) {
         this.closed = true;
@@ -319,7 +319,7 @@ function httpToWs(url: string): string {
 // which meant the WS connection only existed when a chat panel was open. WS
 // events targeted at the user (chat.mention, friend.request, friend.accepted,
 // invite.redeemed, presence.update) silently dropped any time the user wasn't
-// viewing a thread — so OS notifications and friend-event UI updates were
+// viewing a thread - so OS notifications and friend-event UI updates were
 // effectively dead.
 //
 // The fix: one transport per logged-in user, kept alive for the entire
@@ -332,7 +332,7 @@ let _instance: ChatTransport | null = null;
 
 /**
  * Get (or create) the app-wide ChatTransport for the given user. Idempotent
- * — calling it again with the same serverUrl+token returns the existing
+ * - calling it again with the same serverUrl+token returns the existing
  * instance; calling with different credentials tears down the old one first.
  */
 export function ensureTransport(serverUrl: string, token: string, api?: ApiClient): ChatTransport {
@@ -351,7 +351,7 @@ export function ensureTransport(serverUrl: string, token: string, api?: ApiClien
   return _instance;
 }
 
-/** Tear down the singleton — called on logout. */
+/** Tear down the singleton - called on logout. */
 export function disconnectTransport(): void {
   if (_instance !== null) {
     _instance.stop();

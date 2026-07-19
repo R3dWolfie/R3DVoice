@@ -3,7 +3,7 @@ import type { ThreadType } from "./threads.js";
 
 /**
  * In-memory subscription registry. Maps `${threadType}:${threadId}` → set of
- * sockets currently listening. Process-local (single-process server) — for
+ * sockets currently listening. Process-local (single-process server) - for
  * multi-process deployments, swap this for a Redis pub/sub backend.
  */
 
@@ -90,7 +90,7 @@ export function broadcastToThread(
     try {
       conn.socket.send(data);
     } catch {
-      // Socket might be in a half-closed state — drop silently. The close
+      // Socket might be in a half-closed state - drop silently. The close
       // handler will clean it up.
     }
   }
@@ -98,7 +98,7 @@ export function broadcastToThread(
 
 /**
  * Per-user direct event delivery. Use for notifications targeted at a
- * specific user (mention, friend request, invite redeemed) — events the
+ * specific user (mention, friend request, invite redeemed) - events the
  * recipient should see regardless of which thread they're currently
  * subscribed to. Iterates all of that user's open sockets.
  */

@@ -1,8 +1,8 @@
-// Collaborative pointer overlay — the web-realistic version of "remote
+// Collaborative pointer overlay - the web-realistic version of "remote
 // control" of a screenshare. A viewer's cursor position (normalized to the
 // shared video) is broadcast over the LiveKit data channel; everyone watching
 // that share sees a labeled cursor where the viewer is pointing. No actual
-// input injection (a web page can't drive another OS) — a shared laser pointer.
+// input injection (a web page can't drive another OS) - a shared laser pointer.
 
 export interface RemotePointer {
   /** Sender identity (who is pointing). */
@@ -13,7 +13,7 @@ export interface RemotePointer {
   x: number;
   y: number;
   name: string;
-  /** performance.now() of the last update — used for expiry. */
+  /** performance.now() of the last update - used for expiry. */
   ts: number;
 }
 
@@ -55,7 +55,7 @@ export function pointerColor(id: string): string {
 
 /**
  * The rectangle the actual video content occupies inside a letterboxed
- * (object-fit: contain) <video> — used to map pointer coords onto the real
+ * (object-fit: contain) <video> - used to map pointer coords onto the real
  * picture, not the black bars. Coordinates are relative to the element's box.
  */
 export function videoContentRect(v: HTMLVideoElement): { x: number; y: number; w: number; h: number } {

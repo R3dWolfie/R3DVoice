@@ -65,7 +65,7 @@ async function syncE2eeKey(api: ApiClient, password: string): Promise<void> {
       if (secretKey) {
         saveKeyPair({ secretKey, publicKey: publicKeyFromSecret(secretKey) });
       } else {
-        // An escrow blob exists but wouldn't unwrap — most likely it's still
+        // An escrow blob exists but wouldn't unwrap - most likely it's still
         // wrapped under a password that changed (e.g. after a reset). Surface
         // it instead of silently leaving DMs unreadable; the in-DM "restore
         // your key" banner is the recovery path.
@@ -110,11 +110,11 @@ export function createAuthStore(
         const { token, user } = res;
         api.setToken(token);
         // Scope E2EE keys to this user before touching them (per-device key
-        // isolation — a different account must not inherit this one's key).
+        // isolation - a different account must not inherit this one's key).
         setActiveKeyUser(user.id);
         await syncE2eeKey(api, password);
         // Persisting the session must never fail the login: on Linux without a
-        // keyring, safeStorage is unavailable — the token still works in-memory
+        // keyring, safeStorage is unavailable - the token still works in-memory
         // for this run (token-store also falls back to a private file).
         try {
           await storage.saveToken(token);
@@ -124,7 +124,7 @@ export function createAuthStore(
         }
         set({ status: "authenticated", token, user, error: null, twoFactorToken: null });
       } catch (err) {
-        // For 401 (bad creds), don't leak the server's specific phrasing —
+        // For 401 (bad creds), don't leak the server's specific phrasing -
         // a clear "incorrect email or password" beats "invalid credentials"
         // for end-user clarity. For other errors (5xx, network), surface
         // the actual message so the user knows what went wrong.
@@ -134,8 +134,8 @@ export function createAuthStore(
             : err instanceof ApiError
               ? err.message
               : err instanceof Error
-                ? `Couldn't reach the server — ${err.message}`
-                : "Couldn't sign in — please try again";
+                ? `Couldn't reach the server - ${err.message}`
+                : "Couldn't sign in - please try again";
         set({ status: "unauthenticated", error: message });
       }
     },
@@ -143,7 +143,7 @@ export function createAuthStore(
     async loginTotp(code) {
       const { twoFactorToken } = get();
       if (!twoFactorToken) {
-        set({ status: "unauthenticated", error: "session expired — please sign in again" });
+        set({ status: "unauthenticated", error: "session expired - please sign in again" });
         return;
       }
       set({ status: "loading", error: null });
@@ -156,7 +156,7 @@ export function createAuthStore(
           pendingTotpPassword = null;
         }
         // Persisting the session must never fail the login: on Linux without a
-        // keyring, safeStorage is unavailable — the token still works in-memory
+        // keyring, safeStorage is unavailable - the token still works in-memory
         // for this run (token-store also falls back to a private file).
         try {
           await storage.saveToken(token);
@@ -182,7 +182,7 @@ export function createAuthStore(
     async register(email, password, displayName) {
       set({ status: "loading", error: null });
       try {
-        // Generate a FRESH E2EE keypair locally before hitting the server —
+        // Generate a FRESH E2EE keypair locally before hitting the server -
         // always new, never a reuse of some prior account's key on this device.
         // The server only receives the public half; the secret stays on the
         // device + an offered downloadable backup the user must save.
@@ -200,7 +200,7 @@ export function createAuthStore(
         // Escrow the fresh key under the password so it reaches other devices.
         await syncE2eeKey(api, password);
         // Persisting the session must never fail the login: on Linux without a
-        // keyring, safeStorage is unavailable — the token still works in-memory
+        // keyring, safeStorage is unavailable - the token still works in-memory
         // for this run (token-store also falls back to a private file).
         try {
           await storage.saveToken(token);
@@ -216,10 +216,10 @@ export function createAuthStore(
         try {
           downloadKeyBackup(email, kp);
         } catch {
-          /* ignore — Settings → Account "Download key backup" is the fallback */
+          /* ignore - Settings → Account "Download key backup" is the fallback */
         }
       } catch (err) {
-        const message = err instanceof ApiError ? err.message : "Couldn't create account — please try again";
+        const message = err instanceof ApiError ? err.message : "Couldn't create account - please try again";
         set({ status: "unauthenticated", error: message });
       }
     },
@@ -233,15 +233,15 @@ export function createAuthStore(
         try {
           await api.logout();
         } catch {
-          // Best effort — clear client state regardless of server response
+          // Best effort - clear client state regardless of server response
         }
       }
       api.setToken(null);
       await storage.clearToken();
-      // Reset the unread store — otherwise the next user to log in on
+      // Reset the unread store - otherwise the next user to log in on
       // this Electron session briefly sees the previous user's badges.
       useUnreadStore.setState({ counts: {}, totalUnread: 0 });
-      // Don't delete the keypair on logout — the same user signing back in on
+      // Don't delete the keypair on logout - the same user signing back in on
       // this device should still decrypt their old DMs (their key stays in
       // their own namespaced slot). But drop the ACTIVE user so no key is
       // readable while logged out and the next account can't touch this one's.
@@ -273,7 +273,7 @@ export function createAuthStore(
         const user = await api.me();
         set({ user });
       } catch {
-        // Best-effort refresh — leave existing user state alone on failure.
+        // Best-effort refresh - leave existing user state alone on failure.
       }
     },
 

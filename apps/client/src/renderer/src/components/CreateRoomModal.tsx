@@ -63,7 +63,7 @@ export function CreateRoomModal({
           />
         </Field>
 
-        <Field label="Description" hint="Optional — recommended if you list it publicly.">
+        <Field label="Description" hint="Optional - recommended if you list it publicly.">
           <textarea
             className="rv-input"
             value={description}

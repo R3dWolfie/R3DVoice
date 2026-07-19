@@ -8,9 +8,9 @@ import { useNotificationsStore } from "../lib/notifications-store.js";
 import { pushToast } from "../lib/toast-store.js";
 import { Avatar } from "./Avatar.js";
 
-// 4.3 — in-app corner invite queue. Directed room invites that arrive live
+// 4.3 - in-app corner invite queue. Directed room invites that arrive live
 // over the WS stack as cards: who + room + Join room / Dismiss, with a
-// "Dismiss all" row when more than one is queued. State is transient — the
+// "Dismiss all" row when more than one is queued. State is transient - the
 // bell (4.15) remains the durable list; × just clears the popup.
 
 interface InviteQueueState {
@@ -37,7 +37,7 @@ const useInviteQueue = create<InviteQueueState>((set) => ({
 
 let wiredTo: unknown = null;
 
-/** Idempotent per transport instance — mirrors wireNotificationsToTransport. */
+/** Idempotent per transport instance - mirrors wireNotificationsToTransport. */
 // Accepting/declining from the BELL must also kill the corner card: drop any
 // queued entry whose invite left the notifications store (live QA finding).
 useNotificationsStore.subscribe((state, prev) => {
@@ -135,7 +135,7 @@ export function InviteQueue({
   const [busyId, setBusyId] = useState<string | null>(null);
 
   // The transport is created by an App-level effect that may run after this
-  // component mounts — poll cheaply until wired (idempotent ref-compare).
+  // component mounts - poll cheaply until wired (idempotent ref-compare).
   useEffect(() => {
     wireInviteQueue();
     const t = window.setInterval(wireInviteQueue, 2000);
@@ -175,7 +175,7 @@ export function InviteQueue({
     try {
       await apiFor().directInviteDecline(invite.id);
     } catch {
-      /* transient popup — the bell reconciles on next refresh */
+      /* transient popup - the bell reconciles on next refresh */
     }
   };
 

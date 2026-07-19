@@ -1,6 +1,6 @@
 /**
  * Mono OUTPUT routing (task #12): downmix all received audio so both ears
- * hear the same signal — for single-ear headsets and asymmetric hearing.
+ * hear the same signal - for single-ear headsets and asymmetric hearing.
  *
  * Mechanism: each <audio> element is routed through Web Audio
  * (MediaElementAudioSourceNode → GainNode → destination). The gain node's
@@ -46,7 +46,7 @@ export function routeElement(el: HTMLAudioElement): void {
     src.connect(mixNode);
     routed.add(el);
   } catch {
-    // Element already captured by another context — leave it native.
+    // Element already captured by another context - leave it native.
   }
 }
 
@@ -69,7 +69,7 @@ export async function setMonoOutputSink(deviceId: string | null): Promise<void> 
     try {
       await c.setSinkId(deviceId ?? "");
     } catch {
-      /* unsupported sink — default output */
+      /* unsupported sink - default output */
     }
   }
 }

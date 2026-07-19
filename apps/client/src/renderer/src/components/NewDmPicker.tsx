@@ -109,8 +109,8 @@ export function NewDmPicker({ open, onClose, onPick }: Props): ReactElement {
         {shown.length === 0 && !matchIsNew ? (
           <div style={{ padding: "var(--s-4) var(--s-2)", color: "var(--text-faint)", fontSize: "var(--t-sm)" }}>
             {friends.length === 0
-              ? "No friends yet — paste a @handle to start a conversation."
-              : "No friends match — paste a full @handle to look them up."}
+              ? "No friends yet - paste a @handle to start a conversation."
+              : "No friends match - paste a full @handle to look them up."}
           </div>
         ) : (
           <div className="rv-list">

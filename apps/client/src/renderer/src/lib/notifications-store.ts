@@ -53,13 +53,13 @@ export const useNotificationsStore = create<NotificationsState>((set) => ({
         loaded: true,
       });
     } catch {
-      /* bell is passive — keep stale state on error */
+      /* bell is passive - keep stale state on error */
     }
   },
 
   async markAllRead() {
     const now = new Date().toISOString();
-    set({ seenAt: now }); // optimistic — the watermark only moves forward
+    set({ seenAt: now }); // optimistic - the watermark only moves forward
     try {
       await api()?.notificationsReadAll();
     } catch {

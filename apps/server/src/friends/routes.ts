@@ -8,7 +8,7 @@ import { isUserOnline, sendToUser } from "../chat/ws-state.js";
 import { userHandleSchema } from "@r3dvoice/shared";
 
 // Canonicalize (trim + lowercase) so the lookup matches the canonical email
-// now stored at registration — mirrors the handleLower / emailSchema convention.
+// now stored at registration - mirrors the handleLower / emailSchema convention.
 const sendBodySchema = z.object({ email: z.string().trim().email().toLowerCase() });
 const respondParamsSchema = z.object({ id: z.string().min(1) });
 
@@ -107,7 +107,7 @@ export async function friendsRoutes(app: FastifyInstance): Promise<void> {
   );
 
   // Send a friend request by email. Server reveals existence/non-existence of
-  // the email — acceptable on an invite-only self-hosted instance. For a
+  // the email - acceptable on an invite-only self-hosted instance. For a
   // public deployment, swap this for a friend-code mechanism.
   app.post(
     "/friends/request",
@@ -327,7 +327,7 @@ export async function friendsRoutes(app: FastifyInstance): Promise<void> {
           },
         });
       });
-      // The other side's friend list changed under them — push, don't wait
+      // The other side's friend list changed under them - push, don't wait
       // for a reload (QA: blocked user kept seeing the friendship live).
       sendToUser(targetId, { type: "friend.removed", userId });
       reply.status(204).send();

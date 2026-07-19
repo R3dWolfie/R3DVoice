@@ -5,7 +5,7 @@ import { dirname, join } from "node:path";
 /**
  * The server's own build version, published to clients via /health as
  * `latestClientVersion`. The ambient in-app "update available" affordance
- * compares it against the running client's APP_VERSION — unlike
+ * compares it against the running client's APP_VERSION - unlike
  * MIN_CLIENT_VERSION (a blocking floor), this is purely informational.
  *
  * Prefer the npm/pnpm-provided env var; fall back to reading the packaged

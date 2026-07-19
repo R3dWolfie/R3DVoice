@@ -89,7 +89,7 @@ export function UpdateGate({ serverUrl, children }: { serverUrl: string; childre
                 yay -Syu
               </code>
               <button type="button" className="rv-btn" data-variant="primary" style={BTN} disabled={checking} onClick={() => void recheck()}>
-                {checking ? "Checking…" : "I've updated — recheck"}
+                {checking ? "Checking…" : "I've updated - recheck"}
               </button>
             </div>
           )}

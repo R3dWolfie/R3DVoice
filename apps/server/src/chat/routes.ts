@@ -103,7 +103,7 @@ export function toDTO(
 ): MessageDTO {
   const viewerId = opts?.viewerId;
   // Room messages may be wrapped at rest with the server master key. DMs are
-  // already client-side ciphertext envelopes — never wrapped server-side.
+  // already client-side ciphertext envelopes - never wrapped server-side.
   let body: string | null = null;
   if (!m.deletedAt) {
     if (m.threadType === "room") {
@@ -271,7 +271,7 @@ export async function chatRoutes(app: FastifyInstance): Promise<void> {
     },
   );
 
-  // POST /chat/messages — send to a thread.
+  // POST /chat/messages - send to a thread.
   app.post(
     "/chat/messages",
     {
@@ -293,7 +293,7 @@ export async function chatRoutes(app: FastifyInstance): Promise<void> {
         throw new ValidationError("attachments and polls are not available in encrypted DMs");
       }
 
-      // Blocks close the pipe at SEND time only (4.13) — history stays
+      // Blocks close the pipe at SEND time only (4.13) - history stays
       // readable on both sides, matching the deck's block semantics.
       if (threadType === "dm") {
         const otherId = threadId.split(":").find((part) => part !== userId);
@@ -374,7 +374,7 @@ export async function chatRoutes(app: FastifyInstance): Promise<void> {
     },
   );
 
-  // PATCH /chat/messages/:id — edit body (author-only).
+  // PATCH /chat/messages/:id - edit body (author-only).
   app.patch(
     "/chat/messages/:id",
     { preHandler: requireAuth },
@@ -408,7 +408,7 @@ export async function chatRoutes(app: FastifyInstance): Promise<void> {
     },
   );
 
-  // DELETE /chat/messages/:id — soft delete (author-only).
+  // DELETE /chat/messages/:id - soft delete (author-only).
   app.delete(
     "/chat/messages/:id",
     { preHandler: requireAuth },
@@ -433,7 +433,7 @@ export async function chatRoutes(app: FastifyInstance): Promise<void> {
     },
   );
 
-  // GET /chat/dm-threads — list of DM threads for the current user with last
+  // GET /chat/dm-threads - list of DM threads for the current user with last
   // message preview. SQLite + Prisma can't do "distinct on" cleanly, so we
   // pull threadIds from the user's authored or received DMs and aggregate.
   app.get(
@@ -443,7 +443,7 @@ export async function chatRoutes(app: FastifyInstance): Promise<void> {
       const userId = request.auth!.userId;
       // Find every DM thread containing this user. The canonical-pair encoding
       // lets us match via two LIKE patterns: `<userId>:%` and `%:<userId>`.
-      // Only threadId strings — cheap — instead of the whole DM history.
+      // Only threadId strings - cheap - instead of the whole DM history.
       const threadRows = await prisma.message.findMany({
         where: {
           threadType: "dm",
@@ -652,7 +652,7 @@ export async function chatRoutes(app: FastifyInstance): Promise<void> {
   // Attachment upload (#30). The client sends a file as a base64 data: URL;
   // we decode, cap size, and write it under <UPLOADS_DIR>/attachments/, then
   // hand back the served URL for the sender to attach to a room message.
-  // Room-only by product decision (DMs are E2EE — no server-hosted files).
+  // Room-only by product decision (DMs are E2EE - no server-hosted files).
   // ---------------------------------------------------------------------
   const attachmentUploadSchema = z.object({
     // ~8 MB decoded ≈ ~10.9 MB base64; cap the string generously below the
@@ -709,11 +709,13 @@ export async function chatRoutes(app: FastifyInstance): Promise<void> {
     "/uploads/attachment",
     {
       preHandler: requireAuth,
-      // Default Fastify bodyLimit is 1 MiB — far too small for an ~8 MB file
-      // sent as a base64 data URL (~10.9 MB) plus JSON overhead. Raise it PER
-      // ROUTE (not globally) so only this authenticated endpoint accepts big
-      // bodies; everything else keeps the tight default.
-      bodyLimit: 12 * 1024 * 1024,
+      // Default Fastify bodyLimit is 1 MiB - far too small. The file is sent as
+      // a base64 data URL (~+33%), and Cloudflare (which fronts us) caps request
+      // bodies at 100 MB on the free plan - so the real ceiling is ~64 MiB of
+      // file ≈ ~90 MB body. Allow 96 MB here. PER ROUTE (not global).
+      // For TRUE large files (200 MB+): move to presigned direct-to-storage
+      // uploads (R2/S3) that bypass both this server's memory and the CF proxy.
+      bodyLimit: 96 * 1024 * 1024,
       config: { rateLimit: { max: 30, timeWindow: "1 minute" } },
     },
     async (request) => {
@@ -729,7 +731,7 @@ export async function chatRoutes(app: FastifyInstance): Promise<void> {
 
       const bytes = Buffer.from(m[2]!, "base64");
       if (bytes.length === 0) throw new ValidationError("empty file");
-      if (bytes.length > 8 * 1024 * 1024) throw new ValidationError("file too large (max 8 MB)");
+      if (bytes.length > 64 * 1024 * 1024) throw new ValidationError("file too large (max 64 MB)");
 
       const name = sanitizeName(parsed.data.name);
       const nameExt = /\.([a-zA-Z0-9]{1,8})$/.exec(name)?.[1]?.toLowerCase();

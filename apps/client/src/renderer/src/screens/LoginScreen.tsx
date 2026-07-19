@@ -9,7 +9,7 @@ import { ApiClient } from "../lib/api.js";
 type Mode = "login" | "register";
 
 // Auth screens per WireFrames 1.1 / 1.1a / 1.2 / 1.3: a single centered
-// 24rem column — brand row, Sign in / Create account tabs, fields, CTA —
+// 24rem column - brand row, Sign in / Create account tabs, fields, CTA -
 // with the build footer pinned to the window edge. The server picker is
 // gone from this screen (deck: centralized identity); the URL still
 // hydrates from prefs and stays editable under Settings.
@@ -58,7 +58,7 @@ export function LoginScreen(): ReactElement {
       const api = new ApiClient(prefsServerUrl);
       await api.requestPasswordReset(email);
     } catch {
-      /* deliberately ignored — never reveal whether the email exists */
+      /* deliberately ignored - never reveal whether the email exists */
     } finally {
       setForgotBusy(false);
       setForgot("sent");
@@ -74,10 +74,10 @@ export function LoginScreen(): ReactElement {
       const text = typeof reader.result === "string" ? reader.result : "";
       const kp = parseKeyBackup(text);
       if (!kp) {
-        setKeyImportMessage("Couldn't parse — make sure it's the r3dvoice-key-*.json file you downloaded at registration.");
+        setKeyImportMessage("Couldn't parse - make sure it's the r3dvoice-key-*.json file you downloaded at registration.");
         return;
       }
-      // Staged (not written to a user slot yet) — the sign-in below claims it
+      // Staged (not written to a user slot yet) - the sign-in below claims it
       // into the account's namespace once we know who's logging in.
       stageRestoredKeyPair(kp);
       setKeyImportMessage("Key restored. Sign in to decrypt your DM history.");
@@ -105,7 +105,7 @@ export function LoginScreen(): ReactElement {
   const totpStep = status === "totp-required";
 
   return (
-    // Grid centering, NOT transform centering — rv-fade-in's final keyframe
+    // Grid centering, NOT transform centering - rv-fade-in's final keyframe
     // (transform: none, fill both) would permanently clobber a translate(-50%).
     <div
       style={{
@@ -314,7 +314,7 @@ export function LoginScreen(): ReactElement {
           )}
 
           {totpStep && (
-            <Field label="Two-factor code" hint="6 digits from your authenticator — or a backup code (XXXX-XXXX)">
+            <Field label="Two-factor code" hint="6 digits from your authenticator - or a backup code (XXXX-XXXX)">
               <input
                 className="rv-input"
                 type="text"
@@ -390,7 +390,7 @@ export function LoginScreen(): ReactElement {
                 <span style={{ flex: 1, height: 1, background: "var(--border-soft)" }} />
               </div>
 
-              {/* E2EE key import — shows on new devices where the user already has
+              {/* E2EE key import - shows on new devices where the user already has
                   an account from elsewhere and needs to restore their backup. */}
               {mode === "login" && !loadKeyPair() && (
                 <label
@@ -427,7 +427,7 @@ export function LoginScreen(): ReactElement {
         )}
       </div>
 
-      {/* footer pinned to the window edge — "self-hostable" doubles as the
+      {/* footer pinned to the window edge - "self-hostable" doubles as the
           server-URL escape hatch (the deck removed the login server picker;
           self-hosters and dev still need a pre-auth way to point elsewhere) */}
       <div
@@ -479,7 +479,7 @@ export function LoginScreen(): ReactElement {
           <button
             type="button"
             onClick={() => setServerEditOpen((v) => !v)}
-            title={`Server: ${prefsServerUrl} — click to change`}
+            title={`Server: ${prefsServerUrl} - click to change`}
             style={{
               appearance: "none",
               background: "transparent",

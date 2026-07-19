@@ -5,7 +5,7 @@ import { pushToast } from "../lib/toast-store.js";
 import { Modal } from "./Modal.js";
 import { Avatar } from "./Avatar.js";
 
-// 4.17 — transfer room ownership. Impact bullets, member picker with filter,
+// 4.17 - transfer room ownership. Impact bullets, member picker with filter,
 // type-the-room-name gate, optional "also leave" checkbox. Footer primary
 // reads "Transfer to @name" once a member is picked.
 export function TransferOwnershipModal({
@@ -125,7 +125,7 @@ export function TransferOwnershipModal({
           </div>
           <ul style={{ margin: 0, paddingLeft: "1.1rem", color: "var(--text-mid)" }}>
             <li>The new owner can rename, delete, kick, and manage invites.</li>
-            <li>You become a regular member — you can leave any time.</li>
+            <li>You become a regular member - you can leave any time.</li>
             <li>Existing invite links keep working.</li>
             <li>Members will see the ownership change immediately.</li>
           </ul>
@@ -144,7 +144,7 @@ export function TransferOwnershipModal({
             {filtered.length === 0 && (
               <div style={{ padding: "var(--s-3)", fontSize: "var(--t-sm)", color: "var(--text-dim)" }}>
                 {candidates.length === 0
-                  ? "No other members — invite someone before transferring."
+                  ? "No other members - invite someone before transferring."
                   : "No members match that filter."}
               </div>
             )}

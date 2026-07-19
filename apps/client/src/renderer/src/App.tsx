@@ -39,7 +39,7 @@ function Router({ topPage, setTopPage }: { topPage: TopPage; setTopPage: (p: Top
   }, [user]);
 
   // App-wide WS lifecycle. The transport must exist for the entire logged-in
-  // session — otherwise WS-targeted events (mentions, friend requests,
+  // session - otherwise WS-targeted events (mentions, friend requests,
   // invite redemptions, presence updates) silently drop whenever the user
   // isn't viewing a chat panel. Connect on auth, disconnect on logout.
   useEffect(() => {
@@ -48,7 +48,7 @@ function Router({ topPage, setTopPage }: { topPage: TopPage; setTopPage: (p: Top
       api.setToken(token);
       ensureTransport(serverUrl, token, api);
       return () => {
-        // Don't disconnect on every re-render — only on actual logout
+        // Don't disconnect on every re-render - only on actual logout
         // (token cleared). The next branch handles that.
       };
     }
@@ -85,7 +85,7 @@ function Router({ topPage, setTopPage }: { topPage: TopPage; setTopPage: (p: Top
   const joinFrameRate = usePrefs((s) => s.frameRate);
   // Freeze the join selection for the lifetime of one call: it must rebuild
   // only when activeRoomId flips, never when a device/quality pref changes
-  // mid-call — the in-room join effect keys on this object and a new reference
+  // mid-call - the in-room join effect keys on this object and a new reference
   // would tear down and rejoin the live call.
   const callSelection = useMemo(
     () =>
@@ -166,7 +166,7 @@ function Router({ topPage, setTopPage }: { topPage: TopPage; setTopPage: (p: Top
     if (needsHandle) {
       return <HandlePickGate />;
     }
-    // Navigating while in a call must not end it — collapse to the mini bar.
+    // Navigating while in a call must not end it - collapse to the mini bar.
     const goPage = (p: TopPage): void => {
       if (activeRoomId) setCallMinimized(true);
       setTopPage(p);
@@ -226,7 +226,7 @@ function Router({ topPage, setTopPage }: { topPage: TopPage; setTopPage: (p: Top
           {/* Persistent call (#35): stays mounted across page switches. Full
               view is an overlay covering the content area (not the rail); when
               minimized it renders only its floating mini bar. Never unmounted
-              by navigation — only by leaving, which clears activeRoomId. */}
+              by navigation - only by leaving, which clears activeRoomId. */}
           {activeRoomId && callSelection && (
             <div
               style={
@@ -250,7 +250,7 @@ function Router({ topPage, setTopPage }: { topPage: TopPage; setTopPage: (p: Top
         </div>
         {settingsOpen && <SettingsModal onClose={() => setSettingsOpen(false)} />}
         <UpdateToast />
-        {/* 4.3 — corner queue for directed room invites arriving live. */}
+        {/* 4.3 - corner queue for directed room invites arriving live. */}
         <InviteQueue
           onJoinRoom={(roomId) => {
             setPendingJoinRoomId(roomId);
@@ -287,7 +287,7 @@ function Chrome(): ReactElement {
       <WindowChrome title={chromeTitle} serverLabel={serverLabel}>
         <div style={{ display: "flex", flexDirection: "column", minHeight: 0, height: "100%" }}>
           {/* App-wide connection banner slot, directly under the titlebar
-              (system/connection-banners.html) — renders nothing when healthy. */}
+              (system/connection-banners.html) - renders nothing when healthy. */}
           <ConnectionBanner />
           <div key={status} className="rv-fade-in" style={{ flex: 1, minHeight: 0 }}>
             <Router topPage={topPage} setTopPage={setTopPage} />
@@ -337,7 +337,7 @@ export function App(): ReactElement {
     return () => mq.removeEventListener("change", apply);
   }, [theme]);
 
-  // 3.6 token editor — saved per-token overrides ride on top of the preset
+  // 3.6 token editor - saved per-token overrides ride on top of the preset
   // as inline custom properties on <html>; reapplied on boot + when saved.
   const themeOverrides = usePrefs((s) => s.themeOverrides);
   useEffect(() => {

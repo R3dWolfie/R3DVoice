@@ -20,7 +20,7 @@ import { pushToast } from "../lib/toast-store.js";
 
 type DmsScreenProps = {
   onJoinRoom?: (roomId: string) => void;
-  /** Open (or start) the thread with this user on mount — "Send DM" entry. */
+  /** Open (or start) the thread with this user on mount - "Send DM" entry. */
   openUserId?: string | null | undefined;
   onOpenUserConsumed?: (() => void) | undefined;
 };
@@ -193,7 +193,7 @@ export function DmsScreen({ onJoinRoom, openUserId, onOpenUserConsumed }: DmsScr
   }, [active, threads]);
 
   // "Send DM" from the Friends page: resolve the friend, open (or start)
-  // the pair thread (live QA finding — it used to dead-end on the empty state).
+  // the pair thread (live QA finding - it used to dead-end on the empty state).
   useEffect(() => {
     if (!openUserId || !me) return;
     onOpenUserConsumed?.();
@@ -360,7 +360,7 @@ export function DmsScreen({ onJoinRoom, openUserId, onOpenUserConsumed }: DmsScr
                     color: "var(--danger)",
                   }}
                 >
-                  <span style={{ flex: 1 }}>Friends list didn’t load — presence and “start new” may be missing.</span>
+                  <span style={{ flex: 1 }}>Friends list didn’t load - presence and “start new” may be missing.</span>
                   <button
                     type="button"
                     onClick={retryLoads}
@@ -390,11 +390,11 @@ export function DmsScreen({ onJoinRoom, openUserId, onOpenUserConsumed }: DmsScr
                   peerKeys={peerKeys}
                 />
               )}
-              {/* Friends without a thread yet — start-new affordance */}
+              {/* Friends without a thread yet - start-new affordance */}
               {startNew.length > 0 && (
                 <div style={{ marginTop: shownThreads.length > 0 ? "var(--s-3)" : 0 }}>
                   <div className="rv-label" style={{ padding: "0 var(--s-3)", marginBottom: "var(--s-1)", fontSize: "var(--t-2xs)" }}>
-                    Friends — start new
+                    Friends - start new
                   </div>
                   {startNew.map((f) => (
                     <button
@@ -670,7 +670,7 @@ function DmPane({
   borderRight?: boolean;
   onClose: () => void;
   onJoinRoom?: (roomId: string) => void;
-  /** Open (or start) the thread with this user on mount — "Send DM" entry. */
+  /** Open (or start) the thread with this user on mount - "Send DM" entry. */
   openUserId?: string | null | undefined;
   onOpenUserConsumed?: (() => void) | undefined;
   actions?: ReactElement;
@@ -709,7 +709,7 @@ function DmPane({
               className="rv-btn rv-btn-icon"
               data-variant="ghost"
               data-active={userMenu !== null}
-              title={`More — ${peer.handle ? `@${peer.handle}` : peer.displayName}`}
+              title={`More - ${peer.handle ? `@${peer.handle}` : peer.displayName}`}
               onClick={(e) => {
                 const r = e.currentTarget.getBoundingClientRect();
                 setUserMenu({ x: r.right - 230, y: r.bottom + 4 });
@@ -736,7 +736,7 @@ function DmPane({
             </span>
           )}
           <span
-            title="Direct messages are end-to-end encrypted — the server can't read them."
+            title="Direct messages are end-to-end encrypted - the server can't read them."
             style={{
               marginLeft: 6,
               height: "1.15rem",
@@ -774,7 +774,7 @@ function DmPane({
           onClose={() => setUserMenu(null)}
           onViewProfile={() => setProfileOpen(true)}
           onSendDm={() => {
-            // Already in this thread — say so instead of silently doing nothing.
+            // Already in this thread - say so instead of silently doing nothing.
             pushToast({ kind: "info", text: "You’re already in this conversation." });
           }}
         />

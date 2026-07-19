@@ -3,7 +3,7 @@ import { readUxMetrics, readCallStats, type UxMetrics, type CallStats } from "..
 
 // Live UX + call-quality HUD. Toggle with Ctrl+Shift+D (or Settings › Advanced).
 // Turns "it feels laggy / buttons are unresponsive" into numbers you can read
-// on any device — especially a friend's, where the experience is bad.
+// on any device - especially a friend's, where the experience is bad.
 //
 // How to read it:
 //   INP    = ms from a click to the UI updating. <200 good · 200-500 sluggish

@@ -5,10 +5,10 @@ import { pushToast } from "../lib/toast-store.js";
 import { Modal } from "./Modal.js";
 import { I } from "./Icons.js";
 
-// 4.9c1 — invite link settings: link + copy, created/by/uses stats, expiry
+// 4.9c1 - invite link settings: link + copy, created/by/uses stats, expiry
 // select, single-use toggle, max-uses tiers (2.3b: 1 / 5 / 25 / 100 /
 // Unlimited), revoke, and ↻ regenerate (4.9c2). The server has no invite
-// PATCH — "Save changes" and "Regenerate" are revoke + create under the hood,
+// PATCH - "Save changes" and "Regenerate" are revoke + create under the hood,
 // which always mints a fresh code.
 
 const EXPIRY_CHOICES = [
@@ -66,7 +66,7 @@ export function EditInviteModal({
   myHandle: string | null;
   api: () => ApiClient;
   onClose: () => void;
-  /** A revoke/regenerate happened — parent refreshes its list. */
+  /** A revoke/regenerate happened - parent refreshes its list. */
   onChanged: () => void;
 }): ReactElement {
   const [current, setCurrent] = useState<InviteDTO>(invite);
@@ -93,7 +93,7 @@ export function EditInviteModal({
     }
   };
 
-  /** Revoke + create — the only way to change settings or mint a new code. */
+  /** Revoke + create - the only way to change settings or mint a new code. */
   const reissue = async (kind: "save" | "regen"): Promise<void> => {
     setBusy(kind);
     setError(null);

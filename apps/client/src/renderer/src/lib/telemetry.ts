@@ -1,6 +1,6 @@
 // Dependency-free real-user UX telemetry. Turns "it feels laggy / buttons are
 // unresponsive" into numbers:
-//   - inp:      Interaction-to-Next-Paint — how long after a click the UI
+//   - inp:      Interaction-to-Next-Paint - how long after a click the UI
 //               actually updates. The single best proxy for "buttons feel dead".
 //   - longTasks/blocking: main-thread blocks (>50ms) that freeze clicks + scroll.
 //   - fps:      sustained frame rate (jank).
@@ -8,7 +8,7 @@
 
 export interface UxMetrics {
   fps: number;
-  /** Worst interaction latency (ms) in the recent window — the "p-ish" INP. */
+  /** Worst interaction latency (ms) in the recent window - the "p-ish" INP. */
   inpMs: number;
   /** Most recent interaction latency (ms). */
   inpRecentMs: number;
@@ -67,7 +67,7 @@ export function startTelemetry(): void {
     /* first-input unsupported */
   }
 
-  // Long tasks — main-thread blocks. Chromium-only (Firefox has no longtask).
+  // Long tasks - main-thread blocks. Chromium-only (Firefox has no longtask).
   try {
     new PerformanceObserver((list) => {
       const t = now();
@@ -119,7 +119,7 @@ export interface CallStats {
   /** Inbound video decode fps (screenshare/camera you're receiving). */
   videoFps: number | null;
   videoRes: string | null;
-  /** Cumulative freeze count on received video — the "screenshare is laggy" number. */
+  /** Cumulative freeze count on received video - the "screenshare is laggy" number. */
   freezes: number | null;
   bitrateKbps: number | null;
 }

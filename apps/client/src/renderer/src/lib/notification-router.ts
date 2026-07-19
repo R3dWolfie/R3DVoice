@@ -1,9 +1,9 @@
 import type { ChatWsEvent, MuteLevel } from "@r3dvoice/shared";
 
 type RouteContext = {
-  /** Caller's userId — used to suppress self-mentions and self-events. */
+  /** Caller's userId - used to suppress self-mentions and self-events. */
   selfUserId: string;
-  /** Current DND state — null means not in DND. */
+  /** Current DND state - null means not in DND. */
   dndUntil: Date | null;
   /** Notification prefs (Settings › Notifications, 3.7). */
   prefs: {
@@ -12,8 +12,8 @@ type RouteContext = {
     /** Include message text in DM banners. Off = generic text (screenshare-safe). */
     dmPreviews: boolean;
     /**
-     * Quiet hours window ("HH:MM" local, 24h) — present only when enabled.
-     * Deck 3.7: "Suppress all banners + sounds during quiet hours" — so this
+     * Quiet hours window ("HH:MM" local, 24h) - present only when enabled.
+     * Deck 3.7: "Suppress all banners + sounds during quiet hours" - so this
      * silences EVERYTHING, including friend requests (unlike DND). Mentions
      * still land in the bell panel; only the popup is suppressed.
      */
@@ -28,7 +28,7 @@ type RouteContext = {
 /**
  * True when `now` falls inside the [start, end) local-time window.
  * Handles overnight wraps (22:00 → 08:00). start === end ⇒ never active
- * (a zero-length window, not a 24h one — matches the time inputs' intent).
+ * (a zero-length window, not a 24h one - matches the time inputs' intent).
  */
 export function isInQuietHours(now: Date, start: string, end: string): boolean {
   const parse = (s: string): number | null => {
@@ -50,7 +50,7 @@ export function isInQuietHours(now: Date, start: string, end: string): boolean {
  * Decide whether a WS event should fire an OS notification, and fire it.
  */
 export async function routeNotification(event: ChatWsEvent, ctx: RouteContext): Promise<void> {
-  // Quiet hours gate — ahead of everything, friend requests included (3.7).
+  // Quiet hours gate - ahead of everything, friend requests included (3.7).
   const qh = ctx.prefs.quietHours;
   if (qh && isInQuietHours(new Date(), qh.start, qh.end)) return;
 
@@ -84,7 +84,7 @@ export async function routeNotification(event: ChatWsEvent, ctx: RouteContext): 
       return;
     }
     case "friend.request": {
-      // friend.request bypasses DND per spec — rare and important.
+      // friend.request bypasses DND per spec - rare and important.
       void ctx.fireOSNotification({
         title: "New friend request",
         body: `from @${event.from.handle ?? event.from.displayName}`,

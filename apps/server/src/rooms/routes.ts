@@ -107,7 +107,7 @@ export async function roomRoutes(app: FastifyInstance): Promise<void> {
       }),
     ]);
     // Live occupancy (deck's "N in call" signal): presence already tracks
-    // each user's currentRoomId — count it per room in one groupBy.
+    // each user's currentRoomId - count it per room in one groupBy.
     const roomIds = [...owned.map((r) => r.id), ...memberships.map((m) => m.roomId)];
     const counts = roomIds.length
       ? await prisma.user.groupBy({
@@ -159,7 +159,7 @@ export async function roomRoutes(app: FastifyInstance): Promise<void> {
   });
 
   // ---------------------------------------------------------------------
-  // Get room — deck semantics: isPublic=false means UNLISTED, not private.
+  // Get room - deck semantics: isPublic=false means UNLISTED, not private.
   // Knowing the room id IS the capability (ids only travel via links), so
   // any authenticated caller may resolve it. A true invite-only "Private"
   // tier is a future third visibility level with its own members-only gate.
@@ -222,7 +222,7 @@ export async function roomRoutes(app: FastifyInstance): Promise<void> {
   );
 
   // ---------------------------------------------------------------------
-  // Transfer ownership (owner only) — `newOwnerId` must already be a member
+  // Transfer ownership (owner only) - `newOwnerId` must already be a member
   // so we don't accidentally transfer to a stranger by typo.
   // ---------------------------------------------------------------------
   app.post<{ Params: { id: string } }>(
@@ -279,7 +279,7 @@ export async function roomRoutes(app: FastifyInstance): Promise<void> {
       });
 
       // Owner appears first even if they have no membership row (they don't
-      // need one — ownership is the authority).
+      // need one - ownership is the authority).
       const ownerUser = await prisma.user.findUnique({
         where: { id: room.ownerId },
         select: { id: true, displayName: true },
@@ -355,19 +355,19 @@ export async function roomRoutes(app: FastifyInstance): Promise<void> {
       requireOwner(room, callerId);
       const targetUserId = request.params.userId;
       if (targetUserId === room.ownerId) {
-        throw new ValidationError("cannot remove the owner — transfer or delete the room instead");
+        throw new ValidationError("cannot remove the owner - transfer or delete the room instead");
       }
       await prisma.roomMembership.deleteMany({
         where: { userId: targetUserId, roomId: room.id },
       });
-      // Kick from LiveKit if they're currently connected — best effort.
+      // Kick from LiveKit if they're currently connected - best effort.
       void kickParticipant(room.id, targetUserId);
       reply.status(204).send();
     },
   );
 
   // ---------------------------------------------------------------------
-  // Leave room (self) — non-owners only
+  // Leave room (self) - non-owners only
   // ---------------------------------------------------------------------
   app.delete<{ Params: { id: string } }>(
     "/rooms/:id/membership",
@@ -376,7 +376,7 @@ export async function roomRoutes(app: FastifyInstance): Promise<void> {
       const userId = request.auth!.userId;
       const room = await loadRoomOr404(request.params.id);
       if (room.ownerId === userId) {
-        throw new ValidationError("owners cannot leave — transfer or delete the room");
+        throw new ValidationError("owners cannot leave - transfer or delete the room");
       }
       await prisma.roomMembership.deleteMany({ where: { userId, roomId: room.id } });
       void kickParticipant(room.id, userId);
@@ -385,7 +385,7 @@ export async function roomRoutes(app: FastifyInstance): Promise<void> {
   );
 
   // ---------------------------------------------------------------------
-  // Token mint — the access-control gate. Refuses non-allowed users.
+  // Token mint - the access-control gate. Refuses non-allowed users.
   // ---------------------------------------------------------------------
   app.post<{ Params: { id: string } }>(
     "/rooms/:id/token",

@@ -72,7 +72,7 @@ interface LobbyScreenProps {
   onInviteCodeConsumed?: () => void;
   onJoinRoomIdConsumed?: () => void;
   onInviteCode?: (code: string) => void;
-  /** Friend invites redeem into the DMs page — App switches the rail page. */
+  /** Friend invites redeem into the DMs page - App switches the rail page. */
   onOpenDms?: () => void;
   /** Clicking the room you're already in (call running minimized) returns to it. */
   onReturnToCall?: () => void;
@@ -109,7 +109,7 @@ export function LobbyScreen({ pendingInviteCode, pendingJoinRoomId, onInviteCode
   const [joinByLinkError, setJoinByLinkError] = useState<string | null>(null);
   const addMenuRef = useRef<HTMLDivElement>(null);
   const favoriteRoomIds = usePrefs((s) => s.favoriteRoomIds);
-  // Unread/mention badges on room rows — the store is keyed room:<id>.
+  // Unread/mention badges on room rows - the store is keyed room:<id>.
   const unreadCounts = useUnreadStore((s) => s.counts);
 
   // Friends power the "live · people talking now" feed highlight (2.1): a
@@ -143,7 +143,7 @@ export function LobbyScreen({ pendingInviteCode, pendingJoinRoomId, onInviteCode
   // join() swallows failures into store.error and flips activeRoomId on
   // success, so we read both back after it settles.
   async function attemptJoin(roomId: string): Promise<void> {
-    // Already in this call (running minimized in the shell) — clicking it should
+    // Already in this call (running minimized in the shell) - clicking it should
     // return to the call view, not re-join (which is a no-op and looks dead).
     if (roomId === store.getState().activeRoomId) {
       onReturnToCall?.();
@@ -177,13 +177,13 @@ export function LobbyScreen({ pendingInviteCode, pendingJoinRoomId, onInviteCode
     }
   }, [pendingInviteCode, phase.kind]);
 
-  // Deck rule: no pre-join screen (4.5 removed) — joins go straight in, muted,
+  // Deck rule: no pre-join screen (4.5 removed) - joins go straight in, muted,
   // with the persisted device/quality prefs. store.join() flips activeRoomId;
   // App.tsx watches it, freezes the join selection, and mounts the in-room
   // screen at shell level so the call outlives navigation.
 
   // Membership and ownership change while a room screen is up (join, delete,
-  // transfer) — refetch the sidebar on every phase flip so deleted rooms
+  // transfer) - refetch the sidebar on every phase flip so deleted rooms
   // don't linger with phantom occupancy (live QA finding).
   useEffect(() => {
     void store.getState().refresh();
@@ -202,7 +202,7 @@ export function LobbyScreen({ pendingInviteCode, pendingJoinRoomId, onInviteCode
 
   const [joinInput, setJoinInput] = useState("");
 
-  // Periodic health probe — drives the "connected" badge in the top bar.
+  // Periodic health probe - drives the "connected" badge in the top bar.
   // Validates response body so ISP NXDOMAIN redirects don't show green.
   const [online, setOnline] = useState<"checking" | "ok" | "down">("checking");
   useEffect(() => {
@@ -681,7 +681,7 @@ export function LobbyScreen({ pendingInviteCode, pendingJoinRoomId, onInviteCode
       <main style={{ display: "grid", gridTemplateRows: "auto 1fr", minHeight: 0 }}>
         {online === "down" && (
           <div className="rv-banner" data-tone="error">
-            Can't reach the server — retrying…
+            Can't reach the server - retrying…
           </div>
         )}
         {online !== "down" && <div />}
@@ -749,7 +749,7 @@ export function LobbyScreen({ pendingInviteCode, pendingJoinRoomId, onInviteCode
           {feed.length === 0 && liveRooms.length === 0 ? (
             <div className="rv-empty" style={{ paddingTop: "var(--s-10)" }}>
               <span className="rv-empty-title">Nothing here yet</span>
-              <span className="rv-empty-hint">Create a room or join one — your activity shows up here.</span>
+              <span className="rv-empty-hint">Create a room or join one - your activity shows up here.</span>
             </div>
           ) : feed.length === 0 ? null : (
             feed.map((f, i) => (
@@ -911,7 +911,7 @@ export function LobbyScreen({ pendingInviteCode, pendingJoinRoomId, onInviteCode
               label="Leave room"
               tone="danger"
               disabled
-              disabledHint="Owners can't leave — transfer or delete from Room Settings."
+              disabledHint="Owners can't leave - transfer or delete from Room Settings."
             />
           ) : (
             <MenuItem

@@ -36,7 +36,7 @@ export function useKeybind(
   // Hold the handler in a ref so callers can pass a fresh inline arrow each
   // render WITHOUT re-binding the global listener. Previously `handler` was in
   // the dep array, so all five in-room keybinds tore down + re-added a window
-  // keydown listener on every render (5-15×/sec during a call) — pure churn.
+  // keydown listener on every render (5-15×/sec during a call) - pure churn.
   const handlerRef = useRef(handler);
   useEffect(() => {
     handlerRef.current = handler;
@@ -45,7 +45,7 @@ export function useKeybind(
     if (!enabled || !accelerator) return;
     function onKey(e: KeyboardEvent): void {
       if (!matchAccelerator(e, accelerator)) return;
-      // Skip if the user is mid-edit in an input/textarea/contenteditable —
+      // Skip if the user is mid-edit in an input/textarea/contenteditable -
       // typing should never trigger app shortcuts.
       const target = e.target as HTMLElement | null;
       if (target) {

@@ -31,7 +31,7 @@ function slugFromDisplayName(name: string): string {
 
 // Handle-pick gate per WireFrames 1.4: pre-filled generated handle with an
 // inline Reroll, click-to-type-your-own, live availability, footer band
-// with the primary action. Not dismissible — the gate blocks the app.
+// with the primary action. Not dismissible - the gate blocks the app.
 export function HandlePickGate(): ReactElement {
   const serverUrl = useAuthStore((s) => s.serverUrl);
   const token = useAuthStore((s) => s.token);
@@ -71,7 +71,7 @@ export function HandlePickGate(): ReactElement {
         setAvailable("no");
       } catch (e) {
         // A 404 is the "handle is free" signal; a network/5xx failure means we
-        // genuinely couldn't check — never green-light (and enable submit) then.
+        // genuinely couldn't check - never green-light (and enable submit) then.
         if (e instanceof ApiError && e.status === 404) setAvailable("yes");
         else setAvailable("error");
       }

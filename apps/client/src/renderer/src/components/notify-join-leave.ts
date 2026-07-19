@@ -14,7 +14,7 @@ import { prefsActions } from "../lib/prefs-singleton.js";
  *     notifyJoinLeave(p.name ?? p.identity, "joined"));
  *   room.on(RoomEvent.ParticipantDisconnected, (p) =>
  *     notifyJoinLeave(p.name ?? p.identity, "left"));
- * It is intentionally NOT wired here — this module owns only the helper + pref.
+ * It is intentionally NOT wired here - this module owns only the helper + pref.
  */
 export function notifyJoinLeave(name: string, event: "joined" | "left"): void {
   if (!prefsActions().joinLeaveToasts) return;
