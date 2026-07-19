@@ -139,7 +139,7 @@ export function UpdateButton(): ReactElement | null {
         }}
         style={BTN}
       >
-        ↑ Update
+        ↑ Update available
       </button>
       {open &&
         pos &&
