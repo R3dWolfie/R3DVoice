@@ -34,7 +34,9 @@
         {
           packages.R3DVoice = pkgs.stdenv.mkDerivation (finalAttrs: {
             pname = "R3DVoice";
-            version = "0.15.9";
+            # Track the app version automatically so a bump in package.json can't
+            # leave the flake stale (it previously needed a manual sed each release).
+            version = (builtins.fromJSON (builtins.readFile ./apps/client/package.json)).version;
             src = ./.;
 
             nativeBuildInputs = [
