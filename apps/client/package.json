@@ -25,11 +25,11 @@
   "dependencies": {
     "@jitsi/rnnoise-wasm": "^0.2.1",
     "@redvoice/shared": "workspace:*",
-    "electron-updater": "^6.3.0",
-    "livekit-client": "^2.9.0",
+    "electron-updater": "^6.8.9",
+    "livekit-client": "^2.20.1",
     "tweetnacl": "^1.0.3",
     "tweetnacl-util": "^0.15.1",
-    "zustand": "^5.0.2"
+    "zustand": "^5.0.14"
   },
   "optionalDependencies": {
     "@vencord/venmic": "^6.1.0"
@@ -37,19 +37,19 @@
   "devDependencies": {
     "@testing-library/jest-dom": "^6.9.1",
     "@testing-library/react": "^16.3.2",
-    "@types/node": "^22.10.0",
-    "@types/react": "^19.0.0",
-    "@types/react-dom": "^19.0.0",
-    "@vitejs/plugin-react": "^4.3.4",
-    "electron": "^35.0.0",
-    "electron-builder": "^26.0.0",
-    "electron-vite": "^3.0.0",
-    "jsdom": "^29.1.0",
-    "react": "^19.0.0",
-    "react-dom": "^19.0.0",
-    "sharp": "^0.33.0",
-    "typescript": "^5.7.0",
-    "vite": "^6.0.0",
-    "vitest": "^2.1.0"
+    "@types/node": "^22.20.1",
+    "@types/react": "^19.2.17",
+    "@types/react-dom": "^19.2.3",
+    "@vitejs/plugin-react": "^4.7.0",
+    "electron": "^35.7.5",
+    "electron-builder": "^26.15.3",
+    "electron-vite": "^3.1.0",
+    "jsdom": "^29.1.1",
+    "react": "^19.2.7",
+    "react-dom": "^19.2.7",
+    "sharp": "^0.33.5",
+    "typescript": "^5.9.3",
+    "vite": "^6.4.3",
+    "vitest": "^2.1.9"
   }
 }

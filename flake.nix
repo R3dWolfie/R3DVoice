@@ -27,7 +27,7 @@
         }:
         let
           pnpm = pkgs.pnpm_11;
-          electron = pkgs.electron_41;
+          electron = (pkgs.callPackage ./nix/electron/default.nix { }).electron_43-bin;
           nodejs = pkgs.nodejs_24;
           prisma = pkgs.prisma-engines_6;
         in
@@ -49,7 +49,7 @@
               inherit (finalAttrs) pname version src;
               inherit pnpm;
               fetcherVersion = 4;
-              hash = "sha256-jNnoHN80t7Rbh/aoGcFL5l4vaWJaoFss7Y1WFnH2/Js=";
+              hash = "sha256-blzDVTttVC7s/WvAsbsfHVcRUi61hRmBA7GRCBUtTbQ=";
             };
 
             env = {
