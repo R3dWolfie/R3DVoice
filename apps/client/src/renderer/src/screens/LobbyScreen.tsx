@@ -400,10 +400,18 @@ export function LobbyScreen({ pendingInviteCode, pendingJoinRoomId, onInviteCode
       <div key={r.id} style={{ display: "flex", flexDirection: "column" }}>
         <div
           className="rv-list-item"
+          role="button"
+          tabIndex={busy ? -1 : 0}
           aria-busy={busy}
           onClick={() => {
             if (busy) return;
             void attemptJoin(r.id);
+          }}
+          onKeyDown={(e) => {
+            if (!busy && (e.key === "Enter" || e.key === " ")) {
+              e.preventDefault();
+              void attemptJoin(r.id);
+            }
           }}
           onContextMenu={(e) => {
             e.preventDefault();

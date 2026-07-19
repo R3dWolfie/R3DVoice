@@ -1091,13 +1091,14 @@ export function RoomChatPanel({
         )}
         {error && (
           <div
+            role="alert"
             style={{
-              color: "var(--accent-glow)",
+              color: "var(--danger)",
               fontSize: "var(--t-xs)",
               padding: "var(--s-2) var(--s-3)",
-              border: "1px solid color-mix(in oklch, var(--accent) 40%, transparent)",
+              border: "1px solid color-mix(in oklch, var(--danger) 40%, transparent)",
               borderRadius: "var(--r-sm)",
-              background: "color-mix(in oklch, var(--accent) 8%, var(--bg-elev-2))",
+              background: "color-mix(in oklch, var(--danger) 8%, var(--bg-elev-2))",
             }}
           >
             {error}

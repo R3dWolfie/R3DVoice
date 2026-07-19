@@ -778,6 +778,7 @@ button:not(.rv-btn):focus-visible { outline: 2px solid var(--accent); outline-of
 .rv-browse-card .by {
   font-family: var(--font-mono);
   font-size: var(--t-2xs); color: var(--text-dim);
+  overflow: hidden; text-overflow: ellipsis; white-space: nowrap; min-width: 0;
 }
 .rv-browse-card .desc {
   font-size: var(--t-xs); color: var(--text-mid); line-height: 1.45;

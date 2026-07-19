@@ -2981,7 +2981,8 @@ export function InRoomScreen(props: InRoomScreenProps): ReactElement {
                       key={tile.id}
                       className="rv-list-item"
                       role="button"
-                      title="Click for volume, mute-for-me, profile"
+                      tabIndex={0}
+                      title="Volume, mute-for-me, profile"
                       style={{
                         gridTemplateColumns: "30px 1fr auto",
                         cursor: "pointer",
@@ -2994,6 +2995,14 @@ export function InRoomScreen(props: InRoomScreenProps): ReactElement {
                         // click-to-close doesn't immediately dismiss it.
                         e.stopPropagation();
                         setMenu({ participantId: tile.id, x: e.clientX, y: e.clientY });
+                      }}
+                      onKeyDown={(e) => {
+                        if (e.key === "Enter" || e.key === " ") {
+                          e.preventDefault();
+                          e.stopPropagation();
+                          const r = e.currentTarget.getBoundingClientRect();
+                          setMenu({ participantId: tile.id, x: r.left + 8, y: r.bottom });
+                        }
                       }}
                       onContextMenu={(e) => {
                         e.preventDefault();
@@ -3840,6 +3849,7 @@ function VolumeRow({
       </div>
       <input
         type="range"
+        aria-label={label}
         min={0}
         max={maxPercent}
         step={5}

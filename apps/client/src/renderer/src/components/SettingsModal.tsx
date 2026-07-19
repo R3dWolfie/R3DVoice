@@ -205,9 +205,12 @@ function NavButton({
   icon: ReactNode;
   label: string;
 }): ReactElement {
+  const [hover, setHover] = useState(false);
   return (
     <button
       onClick={onClick}
+      onMouseEnter={() => setHover(true)}
+      onMouseLeave={() => setHover(false)}
       style={{
         display: "flex",
         alignItems: "center",
@@ -219,12 +222,15 @@ function NavButton({
         borderRadius: "var(--r-sm)",
         background: active
           ? "color-mix(in oklch, var(--accent) 14%, var(--bg-elev-2))"
-          : "transparent",
-        color: active ? "var(--text)" : "var(--text-mid)",
+          : hover
+            ? "var(--bg-elev-2)"
+            : "transparent",
+        color: active || hover ? "var(--text)" : "var(--text-mid)",
         fontSize: "var(--t-sm)",
         fontWeight: 500,
         borderLeft: active ? "2px solid var(--accent)" : "2px solid transparent",
         paddingLeft: 10,
+        transition: "background var(--d-fast), color var(--d-fast)",
       }}
     >
       {icon} {label}
@@ -1827,6 +1833,7 @@ function NotificationsTab(): ReactElement {
         <span>From</span>
         <input
           type="time"
+          aria-label="Quiet hours start"
           className="rv-input"
           style={{ width: "7.5rem" }}
           value={quietStart}
@@ -1836,6 +1843,7 @@ function NotificationsTab(): ReactElement {
         <span>to</span>
         <input
           type="time"
+          aria-label="Quiet hours end"
           className="rv-input"
           style={{ width: "7.5rem" }}
           value={quietEnd}
