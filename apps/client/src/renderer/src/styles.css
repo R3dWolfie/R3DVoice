@@ -1176,3 +1176,17 @@ button.rv-match-card:hover { border-color: var(--border-strong); }
   animation: rv-spin .8s linear infinite;
   vertical-align: middle;
 }
+
+/* ── Update toast: auto-dismiss timer bar (pauses on hover), reveal ✕ on hover ── */
+[data-rv="update-toast"] { position: relative; overflow: hidden; }
+[data-rv="update-toast"] .rv-toast-timer {
+  position: absolute; left: 0; bottom: 0; height: 2px; width: 100%;
+  background: var(--accent); transform-origin: left;
+  animation: rv-toast-shrink var(--rv-toast-ms, 8000ms) linear forwards;
+}
+[data-rv="update-toast"]:hover .rv-toast-timer,
+[data-rv="update-toast"]:focus-within .rv-toast-timer { animation-play-state: paused; }
+[data-rv="update-toast"] [data-rv="dismiss"] { opacity: .4; transition: opacity var(--d-fast) var(--ease-out); }
+[data-rv="update-toast"]:hover [data-rv="dismiss"],
+[data-rv="update-toast"]:focus-within [data-rv="dismiss"] { opacity: 1; }
+@keyframes rv-toast-shrink { from { transform: scaleX(1); } to { transform: scaleX(0); } }

@@ -16,6 +16,7 @@ const POLL_MS = 10 * 60 * 1000;
 export function UpdatePrompt(): ReactElement | null {
   const serverUrl = useAuthStore((s) => s.serverUrl);
   const hidden = usePrefs((s) => s.hideUpdatePopup);
+  const autoUpdate = usePrefs((s) => s.autoUpdate);
   const [latest, setLatest] = useState<string | null>(null);
   const [canSelfUpdate, setCanSelfUpdate] = useState(false);
   const [pacman, setPacman] = useState(false);
@@ -59,6 +60,15 @@ export function UpdatePrompt(): ReactElement | null {
     setBusy(false);
   };
 
+  // Same switch + polarity as Settings > Updates: on = auto-updates enabled.
+  // Turning it off here is the group-agreed opt-out, so it also silences this
+  // popup for good (setting hideUpdatePopup makes the card unmount immediately).
+  const toggleAuto = (): void => {
+    const next = !autoUpdate;
+    prefsActions().setAutoUpdate(next);
+    if (!next) prefsActions().setHideUpdatePopup(true);
+  };
+
   return (
     <div className="rv-fade-in" style={CARD}>
       <div style={{ display: "flex", alignItems: "center", gap: 8 }}>
@@ -84,18 +94,58 @@ export function UpdatePrompt(): ReactElement | null {
           Later
         </button>
       </div>
-      <label style={{ display: "flex", alignItems: "center", gap: 8, fontSize: "var(--t-2xs)", color: "var(--text-mid)", cursor: "pointer" }}>
-        <input
-          type="checkbox"
-          onChange={(e) => {
-            if (e.target.checked) {
-              prefsActions().setAutoUpdate(false);
-              prefsActions().setHideUpdatePopup(true); // stop asking, forever
+      <div
+        style={{
+          display: "flex",
+          alignItems: "center",
+          justifyContent: "space-between",
+          gap: 12,
+          paddingTop: "var(--s-2)",
+          borderTop: "1px solid var(--border-soft)",
+        }}
+      >
+        <div>
+          <div style={{ fontSize: "var(--t-2xs)", fontWeight: 600, color: "var(--text)" }}>Auto updates</div>
+          <div style={{ fontSize: "var(--t-2xs)", color: "var(--text-mid)" }}>Off also stops these reminders.</div>
+        </div>
+        <span
+          onClick={toggleAuto}
+          onKeyDown={(e) => {
+            if (e.key === "Enter" || e.key === " ") {
+              e.preventDefault();
+              toggleAuto();
             }
           }}
-        />
-        Turn off auto-updates (and stop showing this)
-      </label>
+          role="switch"
+          aria-checked={autoUpdate}
+          aria-label="Auto updates"
+          tabIndex={0}
+          style={{
+            width: 40,
+            height: 22,
+            flexShrink: 0,
+            borderRadius: 999,
+            cursor: "pointer",
+            background: autoUpdate ? "var(--accent)" : "color-mix(in oklch, var(--text) 28%, transparent)",
+            position: "relative",
+            transition: "background var(--d-base) var(--ease-out)",
+          }}
+        >
+          <span
+            style={{
+              position: "absolute",
+              top: 2,
+              left: autoUpdate ? 20 : 2,
+              width: 18,
+              height: 18,
+              borderRadius: "50%",
+              background: "#fff",
+              boxShadow: "0 1px 3px rgba(0,0,0,.4)",
+              transition: "left var(--d-base) var(--ease-out)",
+            }}
+          />
+        </span>
+      </div>
     </div>
   );
 }

@@ -18,7 +18,6 @@ import { DmsScreen } from "./screens/DmsScreen.js";
 import { SettingsModal } from "./components/SettingsModal.js";
 import { UpdateToast } from "./components/UpdateToast.js";
 import { UpdatePrompt } from "./components/UpdatePrompt.js";
-import { AutoUpdater } from "./components/AutoUpdater.js";
 import { ToastHost } from "./components/ToastHost.js";
 import { ConnectionBanner } from "./components/ConnectionBanner.js";
 import { UpdateGate } from "./components/UpdateGate.js";
@@ -269,7 +268,15 @@ function Router({ topPage, setTopPage }: { topPage: TopPage; setTopPage: (p: Top
 function Chrome(): ReactElement {
   const status = useAuthStore((s) => s.status);
   const serverUrl = useAuthStore((s) => s.serverUrl);
+  const autoUpdate = usePrefs((s) => s.autoUpdate);
   const [topPage, setTopPage] = useState<TopPage>("lobby");
+
+  // Mirror the two values the splash-phase auto-updater needs into main, so on
+  // the NEXT launch it can check + install a pacman update during the splash
+  // (one password, "app is starting" context) instead of a prompt after load.
+  useEffect(() => {
+    if (serverUrl) void window.r3dvoice?.setLaunchPrefs?.(autoUpdate, serverUrl);
+  }, [autoUpdate, serverUrl]);
   const chromeTitle =
     status === "authenticated"
       ? `R3DVOICE · ${topPage === "dms" ? "DMS" : topPage === "friends" ? "FRIENDS" : "LOBBY"}`
@@ -297,7 +304,6 @@ function Chrome(): ReactElement {
           </div>
         </div>
         <ToastHost />
-        <AutoUpdater />
       </WindowChrome>
     </UpdateGate>
   );

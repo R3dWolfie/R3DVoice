@@ -58,6 +58,8 @@ export interface R3DVoiceBridge {
    * installs only (updaterInfo().pacman).
    */
   pacmanInstall(version: string): Promise<{ ok: boolean; error?: string }>;
+  /** Mirror autoUpdate + serverUrl to main so the splash-phase updater can read them next launch. */
+  setLaunchPrefs(autoUpdate: boolean, serverUrl: string): Promise<{ ok: boolean }>;
   /**
    * Subscribe to splash-window status updates from the main process.
    * Used by the splash renderer; harmless to call from the main window.

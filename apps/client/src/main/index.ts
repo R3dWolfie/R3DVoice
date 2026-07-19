@@ -6,6 +6,8 @@ import { saveToken, getToken, clearToken } from "./token-store.js";
 import { openScreenPicker, registerScreenPickerHandlers } from "./screen-picker.js";
 import { setPttKeybind, teardownKeybinds } from "./keybinds.js";
 import { initAutoUpdate } from "./auto-update.js";
+import { installPacmanPackage } from "./pacman-install.js";
+import { writeLaunchPrefs } from "./launch-prefs.js";
 import { registerSystemAudioCaptureHandlers, stopSystemAudioCapture } from "./system-audio-capture.js";
 import { registerLinuxAudioRoutingHandlers } from "./linux-audio-routing.js";
 import {
@@ -384,38 +386,24 @@ function registerIpcHandlers(): void {
   // version. Used by both auto-update-on-launch and the manual update controls
   // for pacman installs (1 password, no terminal, vs the yay -Syu fallback).
   ipcMain.handle("updater:pacman-install", async (_evt, version: unknown) => {
-    if (process.platform !== "linux" || typeof version !== "string" || !/^[0-9.]+$/.test(version)) {
-      return { ok: false, error: "unsupported" };
-    }
-    const url = `https://github.com/R3dWolfie/R3DVoice/releases/download/v${version}/R3DVoice.pkg.tar.zst`;
-    const tmp = join(app.getPath("temp"), `r3dvoice-${version}.pkg.tar.zst`);
-    try {
-      const res = await fetch(url);
-      if (!res.ok) return { ok: false, error: `download ${res.status}` };
-      writeFileSync(tmp, Buffer.from(await res.arrayBuffer()));
-    } catch (err) {
-      return { ok: false, error: `download failed: ${err instanceof Error ? err.message : String(err)}` };
-    }
-    const ok = await new Promise<boolean>((resolve) => {
-      try {
-        const child = spawn("pkexec", ["pacman", "-U", "--noconfirm", tmp], { stdio: "ignore" });
-        child.on("error", () => resolve(false));
-        child.on("exit", (code) => resolve(code === 0));
-      } catch {
-        resolve(false);
-      }
-    });
-    try {
-      rmSync(tmp, { force: true });
-    } catch {
-      /* temp cleanup best-effort */
-    }
-    if (ok) {
+    if (typeof version !== "string") return { ok: false, error: "unsupported" };
+    const r = await installPacmanPackage(version);
+    if (r.ok) {
       app.relaunch();
       app.exit(0);
-      return { ok: true };
     }
-    return { ok: false, error: "install failed or cancelled" };
+    return r;
+  });
+
+  // The renderer mirrors autoUpdate + serverUrl here so the splash-phase
+  // auto-updater (which runs before the renderer loads) can read last-known
+  // values on the next launch.
+  ipcMain.handle("updater:set-launch-prefs", (_evt, autoUpdate: unknown, serverUrl: unknown) => {
+    writeLaunchPrefs({
+      autoUpdate: autoUpdate !== false,
+      serverUrl: typeof serverUrl === "string" ? serverUrl : null,
+    });
+    return { ok: true };
   });
 
   // AUR/pacman installs can't self-update (/opt is root-owned, and the app must

@@ -16,6 +16,7 @@ const bridge: R3DVoiceBridge = {
   updaterInfo: () => ipcRenderer.invoke("updater:info"),
   runPackageUpdate: () => ipcRenderer.invoke("updater:run-package-update"),
   pacmanInstall: (version) => ipcRenderer.invoke("updater:pacman-install", version),
+  setLaunchPrefs: (autoUpdate, serverUrl) => ipcRenderer.invoke("updater:set-launch-prefs", autoUpdate, serverUrl),
   onPttEvent: (cb) => {
     const handler = (_evt: Electron.IpcRendererEvent, pressed: boolean): void => cb(pressed);
     ipcRenderer.on("keybind:ptt", handler);

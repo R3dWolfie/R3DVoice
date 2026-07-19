@@ -15,7 +15,6 @@ export function UpdateGate({ serverUrl, children }: { serverUrl: string; childre
   const [minVersion, setMinVersion] = useState<string | null>(null);
   const [canSelfUpdate, setCanSelfUpdate] = useState(false);
   const [pacman, setPacman] = useState(false);
-  const [checking, setChecking] = useState(false);
   const [busy, setBusy] = useState(false);
   const [msg, setMsg] = useState<string | null>(null);
 
@@ -46,12 +45,6 @@ export function UpdateGate({ serverUrl, children }: { serverUrl: string; childre
 
   const required = isUpdateRequired(APP_VERSION, minVersion);
   if (!required) return <>{children}</>;
-
-  const recheck = async (): Promise<void> => {
-    setChecking(true);
-    setMinVersion(await fetchMinClientVersion(serverUrl));
-    setChecking(false);
-  };
 
   return (
     <>
@@ -92,7 +85,7 @@ export function UpdateGate({ serverUrl, children }: { serverUrl: string; childre
                   setMsg(null);
                   const outcome = await performUpdate({ isWeb: false, canSelfUpdate: false, pacman: true, version: minVersion });
                   if (outcome === "pkg-launched") setMsg("Opened a terminal - confirm there, then reopen R3DVoice.");
-                  else if (outcome === "pkg-failed") setMsg("Couldn't install automatically - run yay -Syu, then recheck.");
+                  else if (outcome === "pkg-failed") setMsg("Couldn't install automatically - run yay -Syu, then reopen R3DVoice.");
                   setBusy(false); // on success the app relaunches
                 }}
               >
@@ -102,20 +95,10 @@ export function UpdateGate({ serverUrl, children }: { serverUrl: string; childre
                 Installs with one password prompt, then restarts.
               </div>
               {msg && <div style={{ color: "var(--text-mid)", fontSize: "var(--t-sm)" }}>{msg}</div>}
-              <button
-                type="button"
-                className="rv-btn"
-                data-variant="ghost"
-                style={{ ...BTN, height: "2.2rem", fontSize: "var(--t-sm)" }}
-                disabled={checking}
-                onClick={() => void recheck()}
-              >
-                {checking ? "Checking…" : "I've updated - recheck"}
-              </button>
             </div>
           ) : (
             <div style={{ display: "flex", flexDirection: "column", gap: "var(--s-3)", width: "100%" }}>
-              <div style={{ color: "var(--text-mid)", fontSize: "var(--t-sm)" }}>Update with your package manager:</div>
+              <div style={{ color: "var(--text-mid)", fontSize: "var(--t-sm)" }}>Update with your package manager, then restart:</div>
               <code
                 style={{
                   display: "block",
@@ -129,8 +112,8 @@ export function UpdateGate({ serverUrl, children }: { serverUrl: string; childre
               >
                 yay -Syu
               </code>
-              <button type="button" className="rv-btn" data-variant="primary" style={BTN} disabled={checking} onClick={() => void recheck()}>
-                {checking ? "Checking…" : "I've updated - recheck"}
+              <button type="button" className="rv-btn" data-variant="primary" style={BTN} onClick={() => void window.r3dvoice.relaunch()}>
+                Restart R3DVoice
               </button>
             </div>
           )}

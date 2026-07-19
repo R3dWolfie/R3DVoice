@@ -59,6 +59,7 @@ export function UpdateToast(): ReactElement | null {
         boxShadow: "0 4px 12px rgba(0,0,0,0.2)",
         zIndex: 1000,
         fontSize: "var(--t-sm)",
+        overflow: "hidden",
       }}
     >
       <span>Updated to v{version}</span>
@@ -83,6 +84,9 @@ export function UpdateToast(): ReactElement | null {
       >
         ×
       </button>
+      {/* Auto-dismiss countdown. CSS pauses it on hover/focus and reveals the ×;
+          moving off resumes. animationend => dismiss. */}
+      <div className="rv-toast-timer" onAnimationEnd={dismiss} />
     </div>
   );
 }
