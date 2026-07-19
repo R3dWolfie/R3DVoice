@@ -76,3 +76,32 @@ jobs:
         run: pnpm --filter @r3dvoice/client exec electron-builder --mac dmg --publish always
         env:
           GH_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+
+  # Build the pacman package (.pkg.tar.zst) from our PKGBUILD, wrapping the
+  # AppImage the build job just published. The desktop app's in-app auto-updater
+  # downloads this and installs it with `pkexec pacman -U` (one password prompt).
+  # Everything runs in one shell step inside an Arch container so no JS action
+  # needs node in the container.
+  arch-pkg:
+    needs: build
+    runs-on: ubuntu-latest
+    container: archlinux:latest
+    steps:
+      - name: Build + upload r3dvoice-bin pacman package
+        env:
+          GH_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+        run: |
+          set -euo pipefail
+          pacman -Sy --noconfirm --needed base-devel git curl pacman-contrib sudo github-cli
+          VER="${GITHUB_REF_NAME#v}"
+          useradd -m builder
+          curl -fsSL "https://raw.githubusercontent.com/${GITHUB_REPOSITORY}/${GITHUB_REF_NAME}/packaging/aur/r3dvoice-bin/PKGBUILD" -o /home/builder/PKGBUILD
+          chown -R builder:builder /home/builder
+          sudo -u builder bash -euc "
+            cd /home/builder
+            sed -i 's/^pkgver=.*/pkgver=${VER}/;s/^pkgrel=.*/pkgrel=1/' PKGBUILD
+            updpkgsums PKGBUILD
+            makepkg -f --noconfirm --skippgpcheck
+          "
+          cp /home/builder/r3dvoice-bin-*.pkg.tar.zst R3DVoice.pkg.tar.zst
+          gh release upload "${GITHUB_REF_NAME}" R3DVoice.pkg.tar.zst --clobber -R "${GITHUB_REPOSITORY}"

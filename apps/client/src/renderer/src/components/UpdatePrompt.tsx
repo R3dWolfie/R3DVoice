@@ -18,6 +18,7 @@ export function UpdatePrompt(): ReactElement | null {
   const hidden = usePrefs((s) => s.hideUpdatePopup);
   const [latest, setLatest] = useState<string | null>(null);
   const [canSelfUpdate, setCanSelfUpdate] = useState(false);
+  const [pacman, setPacman] = useState(false);
   const [dismissed, setDismissed] = useState(false); // "Later" — this session only
   const [busy, setBusy] = useState(false);
   const [msg, setMsg] = useState<string | null>(null);
@@ -25,7 +26,10 @@ export function UpdatePrompt(): ReactElement | null {
   useEffect(() => {
     void window.r3dvoice
       ?.updaterInfo?.()
-      .then((i) => setCanSelfUpdate(Boolean(i?.canSelfUpdate)))
+      .then((i) => {
+        setCanSelfUpdate(Boolean(i?.canSelfUpdate));
+        setPacman(Boolean(i?.pacman));
+      })
       .catch(() => setCanSelfUpdate(false));
   }, []);
   useEffect(() => {
@@ -48,7 +52,7 @@ export function UpdatePrompt(): ReactElement | null {
 
   const doUpdate = async (): Promise<void> => {
     setBusy(true);
-    const outcome = await performUpdate(IS_WEB, canSelfUpdate);
+    const outcome = await performUpdate({ isWeb: IS_WEB, canSelfUpdate, pacman, version: latest });
     if (outcome === "pkg-launched") setMsg("Running your package manager. Confirm, then restart.");
     else if (outcome === "pkg-failed") setMsg("Couldn't launch a terminal. See Settings > Updates.");
     else setDismissed(true); // reload/relaunch — the app is going away anyway

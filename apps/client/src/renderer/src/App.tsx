@@ -18,6 +18,7 @@ import { DmsScreen } from "./screens/DmsScreen.js";
 import { SettingsModal } from "./components/SettingsModal.js";
 import { UpdateToast } from "./components/UpdateToast.js";
 import { UpdatePrompt } from "./components/UpdatePrompt.js";
+import { AutoUpdater } from "./components/AutoUpdater.js";
 import { ToastHost } from "./components/ToastHost.js";
 import { ConnectionBanner } from "./components/ConnectionBanner.js";
 import { UpdateGate } from "./components/UpdateGate.js";
@@ -296,6 +297,7 @@ function Chrome(): ReactElement {
           </div>
         </div>
         <ToastHost />
+        <AutoUpdater />
       </WindowChrome>
     </UpdateGate>
   );

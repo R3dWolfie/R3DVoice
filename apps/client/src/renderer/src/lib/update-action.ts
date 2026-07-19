@@ -32,18 +32,33 @@ export async function reloadFresh(): Promise<void> {
 
 export type UpdateOutcome = "reload" | "relaunch" | "pkg-launched" | "pkg-failed";
 
+export interface UpdateContext {
+  isWeb: boolean;
+  canSelfUpdate: boolean;
+  /** pacman-managed Linux install (updaterInfo().pacman). */
+  pacman?: boolean;
+  /** Latest version to install (for the pacman .pkg.tar.zst fetch). */
+  version?: string | null;
+}
+
 /**
  * Apply the update for the current build:
- *   - web              -> cache-busting reload
+ *   - web               -> cache-busting reload
+ *   - pacman install    -> download .pkg.tar.zst + `pkexec pacman -U` (1 password), relaunch
  *   - self-updating pkg -> relaunch (electron-updater installs on quit)
- *   - AUR/pacman        -> launch the package manager (returns pkg-launched/failed)
+ *   - else (AUR w/o pkg, deb) -> launch the package manager in a terminal
  */
-export async function performUpdate(isWeb: boolean, canSelfUpdate: boolean): Promise<UpdateOutcome> {
-  if (isWeb) {
+export async function performUpdate(ctx: UpdateContext): Promise<UpdateOutcome> {
+  if (ctx.isWeb) {
     await reloadFresh();
     return "reload";
   }
-  if (canSelfUpdate) {
+  if (ctx.pacman && ctx.version) {
+    const r = await window.r3dvoice?.pacmanInstall?.(ctx.version);
+    if (r?.ok) return "relaunch"; // relaunches into the new version on success
+    // else fall through to the terminal fallback (e.g. release lacks the pkg)
+  }
+  if (ctx.canSelfUpdate) {
     await window.r3dvoice.relaunch();
     return "relaunch";
   }

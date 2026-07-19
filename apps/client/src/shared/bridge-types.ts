@@ -45,13 +45,19 @@ export interface R3DVoiceBridge {
    * in-app updater is active (standalone AppImage/exe/dmg) - false for AUR/deb
    * (pacman/apt own updates) and for web. Drives the required-update gate's UX.
    */
-  updaterInfo(): Promise<{ canSelfUpdate: boolean }>;
+  updaterInfo(): Promise<{ canSelfUpdate: boolean; pacman: boolean }>;
   /**
    * Launch the system package manager (yay -Syu) in a terminal for installs
    * that can't self-update (AUR/deb). Resolves launched:false when no terminal
    * emulator is found, so the UI can fall back to showing the command.
    */
   runPackageUpdate(): Promise<{ launched: boolean; terminal?: string }>;
+  /**
+   * Download the release .pkg.tar.zst for `version` and install it with a single
+   * GUI password prompt (pkexec pacman -U); relaunches on success. Pacman
+   * installs only (updaterInfo().pacman).
+   */
+  pacmanInstall(version: string): Promise<{ ok: boolean; error?: string }>;
   /**
    * Subscribe to splash-window status updates from the main process.
    * Used by the splash renderer; harmless to call from the main window.

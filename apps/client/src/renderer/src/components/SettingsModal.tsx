@@ -1370,13 +1370,17 @@ function UpdatesTab(): ReactElement {
   const serverUrl = useAuthStore((s) => s.serverUrl);
   const [latest, setLatest] = useState<string | null>(null);
   const [canSelfUpdate, setCanSelfUpdate] = useState(false);
+  const [pacman, setPacman] = useState(false);
   const [busy, setBusy] = useState(false);
   const [msg, setMsg] = useState<string | null>(null);
 
   useEffect(() => {
     void window.r3dvoice
       ?.updaterInfo?.()
-      .then((i) => setCanSelfUpdate(Boolean(i?.canSelfUpdate)))
+      .then((i) => {
+        setCanSelfUpdate(Boolean(i?.canSelfUpdate));
+        setPacman(Boolean(i?.pacman));
+      })
       .catch(() => setCanSelfUpdate(false));
   }, []);
   useEffect(() => {
@@ -1389,7 +1393,7 @@ function UpdatesTab(): ReactElement {
   const doUpdate = async (): Promise<void> => {
     setBusy(true);
     setMsg(null);
-    const outcome = await performUpdate(IS_WEB, canSelfUpdate);
+    const outcome = await performUpdate({ isWeb: IS_WEB, canSelfUpdate, pacman, version: latest });
     if (outcome === "pkg-launched") setMsg("Running your package manager in a terminal. Confirm there, then restart R3DVoice.");
     else if (outcome === "pkg-failed") setMsg("No terminal found. Update manually with: yay -Syu");
     setBusy(false);

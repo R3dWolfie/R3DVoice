@@ -374,7 +374,49 @@ function registerIpcHandlers(): void {
   // manager, so the gate shows "run yay -Syu" instead of a Restart button.
   ipcMain.handle("updater:info", () => ({
     canSelfUpdate: app.isPackaged && !process.env["R3DVOICE_DISABLE_UPDATER"],
+    // A pacman-managed Linux install (AUR wrapper sets R3DVOICE_DISABLE_UPDATER):
+    // it can auto-install the release .pkg.tar.zst via `pkexec pacman -U`.
+    pacman: process.platform === "linux" && !!process.env["R3DVOICE_DISABLE_UPDATER"],
   }));
+
+  // Download the release .pkg.tar.zst and install it with a single GUI password
+  // prompt (`pkexec pacman -U`). On success the app relaunches into the new
+  // version. Used by both auto-update-on-launch and the manual update controls
+  // for pacman installs (1 password, no terminal, vs the yay -Syu fallback).
+  ipcMain.handle("updater:pacman-install", async (_evt, version: unknown) => {
+    if (process.platform !== "linux" || typeof version !== "string" || !/^[0-9.]+$/.test(version)) {
+      return { ok: false, error: "unsupported" };
+    }
+    const url = `https://github.com/R3dWolfie/R3DVoice/releases/download/v${version}/R3DVoice.pkg.tar.zst`;
+    const tmp = join(app.getPath("temp"), `r3dvoice-${version}.pkg.tar.zst`);
+    try {
+      const res = await fetch(url);
+      if (!res.ok) return { ok: false, error: `download ${res.status}` };
+      writeFileSync(tmp, Buffer.from(await res.arrayBuffer()));
+    } catch (err) {
+      return { ok: false, error: `download failed: ${err instanceof Error ? err.message : String(err)}` };
+    }
+    const ok = await new Promise<boolean>((resolve) => {
+      try {
+        const child = spawn("pkexec", ["pacman", "-U", "--noconfirm", tmp], { stdio: "ignore" });
+        child.on("error", () => resolve(false));
+        child.on("exit", (code) => resolve(code === 0));
+      } catch {
+        resolve(false);
+      }
+    });
+    try {
+      rmSync(tmp, { force: true });
+    } catch {
+      /* temp cleanup best-effort */
+    }
+    if (ok) {
+      app.relaunch();
+      app.exit(0);
+      return { ok: true };
+    }
+    return { ok: false, error: "install failed or cancelled" };
+  });
 
   // AUR/pacman installs can't self-update (/opt is root-owned, and the app must
   // not fight pacman). Best effort so "Update" is one click, not copy-paste:
