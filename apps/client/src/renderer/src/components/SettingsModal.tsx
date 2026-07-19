@@ -1432,7 +1432,9 @@ function UpdatesTab(): ReactElement {
 
       {!IS_WEB && !canSelfUpdate && (
         <div style={{ fontSize: "var(--t-2xs)", color: "var(--text-dim)", lineHeight: 1.5 }}>
-          This build updates through your package manager (AUR / pacman). macOS builds are unsigned and can&apos;t self-install, so there you download the new release.
+          {pacman
+            ? "This build installs updates with a single password prompt (pacman). With auto-updates on, the latest version installs on launch."
+            : "macOS builds are unsigned and can't self-install, so there you download the new release."}
         </div>
       )}
     </div>

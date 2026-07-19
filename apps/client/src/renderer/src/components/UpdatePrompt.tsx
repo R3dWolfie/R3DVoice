@@ -19,7 +19,7 @@ export function UpdatePrompt(): ReactElement | null {
   const [latest, setLatest] = useState<string | null>(null);
   const [canSelfUpdate, setCanSelfUpdate] = useState(false);
   const [pacman, setPacman] = useState(false);
-  const [dismissed, setDismissed] = useState(false); // "Later" — this session only
+  const [dismissed, setDismissed] = useState(false); // "Later" - this session only
   const [busy, setBusy] = useState(false);
   const [msg, setMsg] = useState<string | null>(null);
 
@@ -55,7 +55,7 @@ export function UpdatePrompt(): ReactElement | null {
     const outcome = await performUpdate({ isWeb: IS_WEB, canSelfUpdate, pacman, version: latest });
     if (outcome === "pkg-launched") setMsg("Running your package manager. Confirm, then restart.");
     else if (outcome === "pkg-failed") setMsg("Couldn't launch a terminal. See Settings > Updates.");
-    else setDismissed(true); // reload/relaunch — the app is going away anyway
+    else setDismissed(true); // reload/relaunch - the app is going away anyway
     setBusy(false);
   };
 

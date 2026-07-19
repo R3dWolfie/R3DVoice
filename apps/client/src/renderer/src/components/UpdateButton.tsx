@@ -3,6 +3,7 @@ import { createPortal } from "react-dom";
 import { APP_VERSION, IS_WEB } from "./Primitives.js";
 import { useAuthStore } from "../lib/auth-context.js";
 import { compareVersions, fetchLatestClientVersion } from "../lib/update-check.js";
+import { performUpdate } from "../lib/update-action.js";
 
 // How often to re-poll the server's latest version while the app stays open.
 const POLL_MS = 10 * 60 * 1000;
@@ -54,8 +55,10 @@ export function UpdateButton(): ReactElement | null {
   const serverUrl = useAuthStore((s) => s.serverUrl);
   const [latest, setLatest] = useState<string | null>(null);
   const [canSelfUpdate, setCanSelfUpdate] = useState(false);
+  const [pacman, setPacman] = useState(false);
   const [open, setOpen] = useState(false);
   const [copied, setCopied] = useState(false);
+  const [busy, setBusy] = useState(false);
   const [pkgMsg, setPkgMsg] = useState<string | null>(null);
   const btnRef = useRef<HTMLButtonElement>(null);
   const menuRef = useRef<HTMLDivElement>(null);
@@ -70,7 +73,10 @@ export function UpdateButton(): ReactElement | null {
   // Capability probe - true only for a packaged, self-updating build.
   useEffect(() => {
     void window.r3dvoice?.updaterInfo?.()
-      .then((i) => setCanSelfUpdate(Boolean(i?.canSelfUpdate)))
+      .then((i) => {
+        setCanSelfUpdate(Boolean(i?.canSelfUpdate));
+        setPacman(Boolean(i?.pacman));
+      })
       .catch(() => setCanSelfUpdate(false));
   }, []);
 
@@ -170,6 +176,32 @@ export function UpdateButton(): ReactElement | null {
               >
                 Restart to update
               </button>
+            ) : pacman ? (
+              <div style={{ display: "flex", flexDirection: "column", gap: "var(--s-2)" }}>
+                <button
+                  type="button"
+                  className="rv-btn"
+                  data-variant="primary"
+                  style={ACTION}
+                  disabled={busy}
+                  onClick={async () => {
+                    setBusy(true);
+                    setPkgMsg("Installing…");
+                    const outcome = await performUpdate({ isWeb: false, canSelfUpdate: false, pacman: true, version: latest });
+                    if (outcome === "pkg-launched") setPkgMsg("Opened a terminal - confirm there, then restart R3DVoice.");
+                    else if (outcome === "pkg-failed") {
+                      setPkgMsg("Couldn't install - copied yay -Syu instead.");
+                      copyCmd();
+                    }
+                    setBusy(false); // on success the app relaunches; this won't be seen
+                  }}
+                >
+                  {busy ? "Installing…" : "↑ Update now"}
+                </button>
+                <div style={{ fontSize: "var(--t-2xs)", color: "var(--text-mid)" }}>
+                  {pkgMsg ?? "One password prompt, then R3DVoice restarts on the new version."}
+                </div>
+              </div>
             ) : (
               <div style={{ display: "flex", flexDirection: "column", gap: "var(--s-2)" }}>
                 <button
