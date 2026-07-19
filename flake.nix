@@ -34,7 +34,7 @@
         {
           packages.R3DVoice = pkgs.stdenv.mkDerivation (finalAttrs: {
             pname = "R3DVoice";
-            version = "0.15.5";
+            version = "0.15.6";
             src = ./.;
 
             nativeBuildInputs = [

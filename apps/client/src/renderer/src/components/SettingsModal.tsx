@@ -31,9 +31,11 @@ import { Avatar } from "./Avatar.js";
 import { PresenceDot, usePresence } from "./presence.js";
 import { I } from "./Icons.js";
 import { Modal } from "./Modal.js";
-import { Field, APP_VERSION } from "./Primitives.js";
+import { Field, APP_VERSION, IS_WEB } from "./Primitives.js";
+import { compareVersions, fetchLatestClientVersion } from "../lib/update-check.js";
+import { performUpdate } from "../lib/update-action.js";
 
-type Tab = "devices" | "keybinds" | "account" | "theme" | "notifications" | "compat" | "about";
+type Tab = "devices" | "keybinds" | "account" | "theme" | "notifications" | "updates" | "compat" | "about";
 
 // Local copy of the designer's kbd inline style. Will be lifted to a shared
 // helper once a third call site appears.
@@ -56,12 +58,13 @@ const SETTINGS_TAB_TITLES: Record<Tab, string> = {
   account: "Account",
   theme: "Appearance",
   notifications: "Notifications",
+  updates: "Updates",
   compat: "Advanced",
   about: "About",
 };
 
-export function SettingsModal({ onClose }: { onClose: () => void }): ReactElement {
-  const [tab, setTab] = useState<Tab>("devices");
+export function SettingsModal({ onClose, initialTab }: { onClose: () => void; initialTab?: Tab }): ReactElement {
+  const [tab, setTab] = useState<Tab>(initialTab ?? "devices");
 
   return (
     <Modal open={true} onClose={onClose} title="Settings" hideHeader width="min(94vw, 760px)">
@@ -88,6 +91,7 @@ export function SettingsModal({ onClose }: { onClose: () => void }): ReactElemen
             <NavButton active={tab === "account"} onClick={() => setTab("account")} icon={<I.Logout size={14} />} label="Account" />
             <NavButton active={tab === "theme"} onClick={() => setTab("theme")} icon={<I.StarFilled size={14} />} label="Appearance" />
             <NavButton active={tab === "notifications"} onClick={() => setTab("notifications")} icon={<I.Bell size={14} />} label="Notifications" />
+            <NavButton active={tab === "updates"} onClick={() => setTab("updates")} icon={<I.Clock size={14} />} label="Updates" />
             <NavButton active={tab === "compat"} onClick={() => setTab("compat")} icon={<I.Grid size={14} />} label="Advanced" />
             <NavButton active={tab === "about"} onClick={() => setTab("about")} icon={<I.Star size={14} />} label="About" />
           </div>
@@ -103,6 +107,7 @@ export function SettingsModal({ onClose }: { onClose: () => void }): ReactElemen
             {tab === "account" && <AccountTab onClose={onClose} />}
             {tab === "theme" && <ThemeTab />}
             {tab === "notifications" && <NotificationsTab />}
+            {tab === "updates" && <UpdatesTab />}
             {tab === "compat" && <CompatTab />}
             {tab === "about" && <AboutTab />}
           </div>
@@ -1356,6 +1361,76 @@ function KeybindRow({ spec, allBinds }: { spec: KeybindRowSpec; allBinds: BindSu
         </div>
       )}
       {regError && <div style={warnStyle}>⚠ {regError}</div>}
+    </div>
+  );
+}
+
+function UpdatesTab(): ReactElement {
+  const autoUpdate = usePrefs((s) => s.autoUpdate);
+  const serverUrl = useAuthStore((s) => s.serverUrl);
+  const [latest, setLatest] = useState<string | null>(null);
+  const [canSelfUpdate, setCanSelfUpdate] = useState(false);
+  const [busy, setBusy] = useState(false);
+  const [msg, setMsg] = useState<string | null>(null);
+
+  useEffect(() => {
+    void window.r3dvoice
+      ?.updaterInfo?.()
+      .then((i) => setCanSelfUpdate(Boolean(i?.canSelfUpdate)))
+      .catch(() => setCanSelfUpdate(false));
+  }, []);
+  useEffect(() => {
+    if (!serverUrl) return;
+    void fetchLatestClientVersion(serverUrl).then(setLatest);
+  }, [serverUrl]);
+
+  const outdated = latest !== null && APP_VERSION !== "dev" && compareVersions(APP_VERSION, latest) < 0;
+
+  const doUpdate = async (): Promise<void> => {
+    setBusy(true);
+    setMsg(null);
+    const outcome = await performUpdate(IS_WEB, canSelfUpdate);
+    if (outcome === "pkg-launched") setMsg("Running your package manager in a terminal. Confirm there, then restart R3DVoice.");
+    else if (outcome === "pkg-failed") setMsg("No terminal found. Update manually with: yay -Syu");
+    setBusy(false);
+  };
+
+  return (
+    <div style={{ display: "flex", flexDirection: "column", gap: "var(--s-5)" }}>
+      <SimpleToggle
+        label="Auto updates"
+        hint="Install updates automatically on launch. Turn off to update on your own schedule."
+        value={autoUpdate}
+        onChange={(v) => prefsActions().setAutoUpdate(v)}
+      />
+
+      <div style={{ display: "flex", flexDirection: "column", gap: "var(--s-3)" }}>
+        <div style={{ fontSize: "var(--t-sm)", color: "var(--text-mid)" }}>
+          Current <b style={{ color: "var(--text)" }}>v{APP_VERSION}</b>
+          {latest ? (
+            <>
+              {" · "}Latest <b style={{ color: outdated ? "var(--accent)" : "var(--text)" }}>v{latest}</b>
+            </>
+          ) : null}
+        </div>
+        <button
+          type="button"
+          className="rv-btn"
+          data-variant={outdated ? "primary" : "ghost"}
+          disabled={busy || !outdated}
+          onClick={() => void doUpdate()}
+          style={{ alignSelf: "flex-start" }}
+        >
+          {busy ? "Updating…" : outdated ? `Update to v${latest}` : "You're up to date"}
+        </button>
+        {msg && <div style={{ fontSize: "var(--t-xs)", color: "var(--text-mid)" }}>{msg}</div>}
+      </div>
+
+      {!IS_WEB && !canSelfUpdate && (
+        <div style={{ fontSize: "var(--t-2xs)", color: "var(--text-dim)", lineHeight: 1.5 }}>
+          This build updates through your package manager (AUR / pacman). macOS builds are unsigned and can&apos;t self-install, so there you download the new release.
+        </div>
+      )}
     </div>
   );
 }

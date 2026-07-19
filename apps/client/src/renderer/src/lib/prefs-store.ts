@@ -43,6 +43,10 @@ export interface PrefsState {
   monoInput: boolean;
   /** Mono output: both ears get the same downmixed signal. */
   monoOutput: boolean;
+  /** Desktop: auto-install updates on launch (packaged self-updating builds). */
+  autoUpdate: boolean;
+  /** User chose "Never" on the update popup - silence it permanently. */
+  hideUpdatePopup: boolean;
   micDeviceId: string | null;
   speakerDeviceId: string | null;
   cameraDeviceId: string | null;
@@ -106,6 +110,8 @@ export interface PrefsState {
   setCompatibilityMode(v: boolean): void;
   setCrashReporting(v: boolean): void;
   setShowDiagnostics(v: boolean): void;
+  setAutoUpdate(v: boolean): void;
+  setHideUpdatePopup(v: boolean): void;
   setJoinLeaveToasts(v: boolean): void;
   setNoiseSuppression(v: NoiseSuppressionLevel): void;
   setEchoCancellation(v: boolean): void;
@@ -162,6 +168,8 @@ const DEFAULTS = {
   cameraMirror: false,
   monoInput: false,
   monoOutput: false,
+  autoUpdate: true,
+  hideUpdatePopup: false,
   micDeviceId: null as string | null,
   speakerDeviceId: null as string | null,
   cameraDeviceId: null as string | null,
@@ -290,6 +298,8 @@ export function createPrefsStore(storage: PrefsStorage): StoreApi<PrefsState> {
       cameraMirror: state.cameraMirror,
       monoInput: state.monoInput,
       monoOutput: state.monoOutput,
+      autoUpdate: state.autoUpdate,
+      hideUpdatePopup: state.hideUpdatePopup,
       favoriteRoomIds: state.favoriteRoomIds,
       participantVolumes: state.participantVolumes,
       participantScreenVolumes: state.participantScreenVolumes,
@@ -313,6 +323,8 @@ export function createPrefsStore(storage: PrefsStorage): StoreApi<PrefsState> {
     setCameraMirror: (v) => { set({ cameraMirror: v }); persistFromState(get()); },
     setMonoInput: (v) => { set({ monoInput: v }); persistFromState(get()); },
     setMonoOutput: (v) => { set({ monoOutput: v }); persistFromState(get()); },
+    setAutoUpdate: (v) => { set({ autoUpdate: v }); persistFromState(get()); },
+    setHideUpdatePopup: (v) => { set({ hideUpdatePopup: v }); persistFromState(get()); },
     setMicDeviceId: (v) => { set({ micDeviceId: v }); persistFromState(get()); },
     setSpeakerDeviceId: (v) => { set({ speakerDeviceId: v }); persistFromState(get()); },
     setCameraDeviceId: (v) => { set({ cameraDeviceId: v }); persistFromState(get()); },

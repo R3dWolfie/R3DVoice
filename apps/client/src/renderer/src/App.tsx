@@ -17,6 +17,7 @@ import { LeftIconColumn, type TopPage } from "./components/LeftIconColumn.js";
 import { DmsScreen } from "./screens/DmsScreen.js";
 import { SettingsModal } from "./components/SettingsModal.js";
 import { UpdateToast } from "./components/UpdateToast.js";
+import { UpdatePrompt } from "./components/UpdatePrompt.js";
 import { ToastHost } from "./components/ToastHost.js";
 import { ConnectionBanner } from "./components/ConnectionBanner.js";
 import { UpdateGate } from "./components/UpdateGate.js";
@@ -250,6 +251,7 @@ function Router({ topPage, setTopPage }: { topPage: TopPage; setTopPage: (p: Top
         </div>
         {settingsOpen && <SettingsModal onClose={() => setSettingsOpen(false)} />}
         <UpdateToast />
+        <UpdatePrompt />
         {/* 4.3 - corner queue for directed room invites arriving live. */}
         <InviteQueue
           onJoinRoom={(roomId) => {
