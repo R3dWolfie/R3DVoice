@@ -3,7 +3,7 @@ import { APP_VERSION, IS_WEB } from "./Primitives.js";
 import { useAuthStore } from "../lib/auth-context.js";
 import { usePrefs, prefsActions } from "../lib/prefs-singleton.js";
 import { compareVersions, fetchLatestClientVersion } from "../lib/update-check.js";
-import { performUpdate } from "../lib/update-action.js";
+import { performUpdate, PKG_UPDATE_CMD } from "../lib/update-action.js";
 
 const POLL_MS = 10 * 60 * 1000;
 
@@ -54,8 +54,7 @@ export function UpdatePrompt(): ReactElement | null {
   const doUpdate = async (): Promise<void> => {
     setBusy(true);
     const outcome = await performUpdate({ isWeb: IS_WEB, canSelfUpdate, pacman, version: latest });
-    if (outcome === "pkg-launched") setMsg("Running your package manager. Confirm, then restart.");
-    else if (outcome === "pkg-failed") setMsg("Couldn't launch a terminal. See Settings > Updates.");
+    if (outcome === "manual") setMsg(`Copied "${PKG_UPDATE_CMD}" - run it in a terminal, then restart.`);
     else setDismissed(true); // reload/relaunch - the app is going away anyway
     setBusy(false);
   };

@@ -2,56 +2,8 @@ import { app, BrowserWindow } from "electron";
 // electron-updater exports a CJS-shaped module; use default import interop.
 import electronUpdaterPkg from "electron-updater";
 import { sendSplashStatus } from "./splash-window.js";
-import { installPacmanPackage } from "./pacman-install.js";
-import { readLaunchPrefs } from "./launch-prefs.js";
 import type { SplashStatus } from "../shared/bridge-types.js";
 const { autoUpdater } = electronUpdaterPkg;
-
-/** Dotted-version compare: <0 if a<b, 0 equal, >0 if a>b. */
-function compareVersions(a: string, b: string): number {
-  const pa = a.replace(/^v/, "").split(".").map((n) => parseInt(n, 10) || 0);
-  const pb = b.replace(/^v/, "").split(".").map((n) => parseInt(n, 10) || 0);
-  const len = Math.max(pa.length, pb.length);
-  for (let i = 0; i < len; i++) {
-    const d = (pa[i] ?? 0) - (pb[i] ?? 0);
-    if (d !== 0) return d < 0 ? -1 : 1;
-  }
-  return 0;
-}
-
-/**
- * pacman/AUR builds can't use electron-updater (root-owned /opt), so the
- * launch-time auto-install happens here instead: while the splash still holds
- * the screen, check the server's latest version and, if newer, download the
- * release package and `pkexec pacman -U` it (one password prompt, in the
- * context of "app is starting"), then relaunch. Returns true if it kicked off
- * an install (the process is on its way out). Any failure/skip returns false
- * and the app opens normally - the in-app Update controls remain as a fallback.
- */
-async function tryPacmanSplashUpdate(send: (s: SplashStatus) => void): Promise<boolean> {
-  if (process.platform !== "linux") return false;
-  const { autoUpdate, serverUrl } = readLaunchPrefs();
-  if (!autoUpdate || !serverUrl) return false;
-
-  let latest: string | null = null;
-  try {
-    send({ phase: "checking" });
-    const res = await fetch(`${serverUrl.replace(/\/$/, "")}/health`);
-    if (!res.ok) return false;
-    const body = (await res.json()) as { latestClientVersion?: unknown };
-    latest = typeof body.latestClientVersion === "string" ? body.latestClientVersion : null;
-  } catch {
-    return false;
-  }
-  if (!latest || compareVersions(app.getVersion(), latest) >= 0) return false;
-
-  send({ phase: "downloaded", message: `Installing ${latest}…` });
-  const r = await installPacmanPackage(latest);
-  if (!r.ok) return false;
-  app.relaunch();
-  app.exit(0);
-  return true;
-}
 
 export type UpdateOutcome =
   | { kind: "no-update" }
@@ -98,9 +50,9 @@ export async function initAutoUpdate(
   // noisily) and doesn't fight `yay -Syu`. Standalone AppImages leave it unset
   // and self-update normally.
   if (process.env["R3DVOICE_DISABLE_UPDATER"]) {
-    // pacman/AUR: install during the splash (one password, "app is starting"
-    // context) instead of a jarring prompt after the window is open.
-    if (await tryPacmanSplashUpdate(send)) return { kind: "installing" };
+    // pacman/AUR: the app can't escalate to root from inside its sandbox
+    // (no_new_privs blocks pkexec/sudo), so it can't install its own system
+    // package. Notify-only - the running app shows `yay -Syu r3dvoice-bin`.
     setTimeout(() => send({ phase: "loading" }), 250);
     return { kind: "no-update" };
   }

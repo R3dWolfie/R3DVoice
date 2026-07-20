@@ -33,7 +33,7 @@ import { I } from "./Icons.js";
 import { Modal } from "./Modal.js";
 import { Field, APP_VERSION, IS_WEB } from "./Primitives.js";
 import { compareVersions, fetchLatestClientVersion } from "../lib/update-check.js";
-import { performUpdate } from "../lib/update-action.js";
+import { performUpdate, PKG_UPDATE_CMD } from "../lib/update-action.js";
 
 type Tab = "devices" | "keybinds" | "account" | "theme" | "notifications" | "updates" | "compat" | "about";
 
@@ -1394,8 +1394,7 @@ function UpdatesTab(): ReactElement {
     setBusy(true);
     setMsg(null);
     const outcome = await performUpdate({ isWeb: IS_WEB, canSelfUpdate, pacman, version: latest });
-    if (outcome === "pkg-launched") setMsg("Running your package manager in a terminal. Confirm there, then restart R3DVoice.");
-    else if (outcome === "pkg-failed") setMsg("No terminal found. Update manually with: yay -Syu");
+    if (outcome === "manual") setMsg(`Copied "${PKG_UPDATE_CMD}" - run it in a terminal, then restart R3DVoice.`);
     setBusy(false);
   };
 
@@ -1425,7 +1424,7 @@ function UpdatesTab(): ReactElement {
           onClick={() => void doUpdate()}
           style={{ alignSelf: "flex-start" }}
         >
-          {busy ? "Updating…" : outdated ? `Update to v${latest}` : "You're up to date"}
+          {busy ? "Working…" : !outdated ? "You're up to date" : !IS_WEB && !canSelfUpdate ? "Copy update command" : `Update to v${latest}`}
         </button>
         {msg && <div style={{ fontSize: "var(--t-xs)", color: "var(--text-mid)" }}>{msg}</div>}
       </div>
@@ -1433,7 +1432,7 @@ function UpdatesTab(): ReactElement {
       {!IS_WEB && !canSelfUpdate && (
         <div style={{ fontSize: "var(--t-2xs)", color: "var(--text-dim)", lineHeight: 1.5 }}>
           {pacman
-            ? "This build installs updates with a single password prompt (pacman). With auto-updates on, the latest version installs on launch."
+            ? "This build is managed by pacman - update it yourself with yay -Syu r3dvoice-bin. The app can't install its own system package from inside its sandbox."
             : "macOS builds are unsigned and can't self-install, so there you download the new release."}
         </div>
       )}

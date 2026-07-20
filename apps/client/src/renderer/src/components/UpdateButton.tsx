@@ -3,12 +3,11 @@ import { createPortal } from "react-dom";
 import { APP_VERSION, IS_WEB } from "./Primitives.js";
 import { useAuthStore } from "../lib/auth-context.js";
 import { compareVersions, fetchLatestClientVersion } from "../lib/update-check.js";
-import { performUpdate } from "../lib/update-action.js";
 
 // How often to re-poll the server's latest version while the app stays open.
 const POLL_MS = 10 * 60 * 1000;
 // Copyable package-manager command for installs that can't self-update (AUR).
-const PKG_CMD = "yay -Syu";
+const PKG_CMD = "yay -Syu r3dvoice-bin";
 
 /**
  * Web "update now": a plain location.reload() can be served the stale bundle
@@ -55,11 +54,8 @@ export function UpdateButton(): ReactElement | null {
   const serverUrl = useAuthStore((s) => s.serverUrl);
   const [latest, setLatest] = useState<string | null>(null);
   const [canSelfUpdate, setCanSelfUpdate] = useState(false);
-  const [pacman, setPacman] = useState(false);
   const [open, setOpen] = useState(false);
   const [copied, setCopied] = useState(false);
-  const [busy, setBusy] = useState(false);
-  const [pkgMsg, setPkgMsg] = useState<string | null>(null);
   const btnRef = useRef<HTMLButtonElement>(null);
   const menuRef = useRef<HTMLDivElement>(null);
   const [pos, setPos] = useState<{ top: number; right: number } | null>(null);
@@ -73,10 +69,7 @@ export function UpdateButton(): ReactElement | null {
   // Capability probe - true only for a packaged, self-updating build.
   useEffect(() => {
     void window.r3dvoice?.updaterInfo?.()
-      .then((i) => {
-        setCanSelfUpdate(Boolean(i?.canSelfUpdate));
-        setPacman(Boolean(i?.pacman));
-      })
+      .then((i) => setCanSelfUpdate(Boolean(i?.canSelfUpdate)))
       .catch(() => setCanSelfUpdate(false));
   }, []);
 
@@ -176,73 +169,20 @@ export function UpdateButton(): ReactElement | null {
               >
                 Restart to update
               </button>
-            ) : pacman ? (
-              <div style={{ display: "flex", flexDirection: "column", gap: "var(--s-2)" }}>
-                <button
-                  type="button"
-                  className="rv-btn"
-                  data-variant="primary"
-                  style={ACTION}
-                  disabled={busy}
-                  onClick={async () => {
-                    setBusy(true);
-                    setPkgMsg("Installing…");
-                    const outcome = await performUpdate({ isWeb: false, canSelfUpdate: false, pacman: true, version: latest });
-                    if (outcome === "pkg-launched") setPkgMsg("Opened a terminal - confirm there, then restart R3DVoice.");
-                    else if (outcome === "pkg-failed") {
-                      setPkgMsg("Couldn't install - copied yay -Syu instead.");
-                      copyCmd();
-                    }
-                    setBusy(false); // on success the app relaunches; this won't be seen
-                  }}
-                >
-                  {busy ? "Installing…" : "↑ Update now"}
-                </button>
-                <div style={{ fontSize: "var(--t-2xs)", color: "var(--text-mid)" }}>
-                  {pkgMsg ?? "One password prompt, then R3DVoice restarts on the new version."}
-                </div>
-              </div>
             ) : (
               <div style={{ display: "flex", flexDirection: "column", gap: "var(--s-2)" }}>
+                <div style={{ fontSize: "var(--t-2xs)", color: "var(--text-mid)" }}>
+                  Update with your package manager:
+                </div>
+                <code style={CODE}>{PKG_CMD}</code>
                 <button
                   type="button"
                   className="rv-btn"
                   data-variant="primary"
-                  style={ACTION}
-                  onClick={async () => {
-                    setPkgMsg("Opening a terminal…");
-                    let launched = false;
-                    try {
-                      const r = await window.r3dvoice?.runPackageUpdate?.();
-                      launched = Boolean(r?.launched);
-                    } catch {
-                      /* fall through to the copy fallback */
-                    }
-                    if (launched) {
-                      setPkgMsg("Running yay -Syu - confirm in the terminal, then restart R3DVoice.");
-                    } else {
-                      setPkgMsg("No terminal found - copied the command instead.");
-                      copyCmd();
-                    }
-                  }}
-                >
-                  ↑ Update now
-                </button>
-                {pkgMsg ? (
-                  <div style={{ fontSize: "var(--t-2xs)", color: "var(--text-mid)" }}>{pkgMsg}</div>
-                ) : (
-                  <div style={{ fontSize: "var(--t-2xs)", color: "var(--text-mid)" }}>
-                    Runs <code style={{ ...CODE, display: "inline", padding: "1px 6px" }}>{PKG_CMD}</code> in your terminal.
-                  </div>
-                )}
-                <button
-                  type="button"
-                  className="rv-btn"
-                  data-variant="ghost"
                   style={{ ...ACTION, height: "1.7rem", fontSize: "var(--t-2xs)" }}
                   onClick={copyCmd}
                 >
-                  {copied ? "Copied!" : "Copy command instead"}
+                  {copied ? "Copied!" : "Copy command"}
                 </button>
               </div>
             )}

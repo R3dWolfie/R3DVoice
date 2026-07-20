@@ -30,44 +30,43 @@ export async function reloadFresh(): Promise<void> {
   }
 }
 
-export type UpdateOutcome = "reload" | "relaunch" | "pkg-launched" | "pkg-failed";
+export type UpdateOutcome = "reload" | "relaunch" | "manual";
+
+/** The command an AUR user runs to update (notify-only path). */
+export const PKG_UPDATE_CMD = "yay -Syu r3dvoice-bin";
 
 export interface UpdateContext {
   isWeb: boolean;
   canSelfUpdate: boolean;
-  /** pacman-managed Linux install (updaterInfo().pacman). */
+  /** pacman-managed Linux install (updaterInfo().pacman). Kept for callers; the notify-only path treats it like any non-self-updating build. */
   pacman?: boolean;
-  /** Latest version to install (for the pacman .pkg.tar.zst fetch). */
   version?: string | null;
 }
 
 /**
  * Apply the update for the current build:
  *   - web               -> cache-busting reload
- *   - pacman install    -> download .pkg.tar.zst + `pkexec pacman -U` (1 password), relaunch
- *   - self-updating pkg -> relaunch (electron-updater installs on quit)
- *   - else (AUR w/o pkg, deb) -> launch the package manager in a terminal
+ *   - self-updating pkg  -> relaunch (electron-updater installs the AppImage on quit; silent, no password)
+ *   - else (pacman/AUR, deb) -> notify-only: copy `yay -Syu r3dvoice-bin` to run.
+ *
+ * Why notify-only for pacman: the app can't escalate to root from inside its
+ * sandbox (no_new_privs blocks both pkexec and a spawned `sudo`), so it can't
+ * install its own root-owned system package. AUR packages are updated by the
+ * user via their helper - so we copy the command instead of failing.
  */
 export async function performUpdate(ctx: UpdateContext): Promise<UpdateOutcome> {
   if (ctx.isWeb) {
     await reloadFresh();
     return "reload";
   }
-  if (ctx.pacman && ctx.version) {
-    const r = await window.r3dvoice?.pacmanInstall?.(ctx.version);
-    if (r?.ok) return "relaunch"; // relaunches into the new version on success
-    // else fall through to the terminal fallback (e.g. release lacks the pkg)
-  }
   if (ctx.canSelfUpdate) {
     await window.r3dvoice.relaunch();
     return "relaunch";
   }
-  let launched = false;
   try {
-    const r = await window.r3dvoice?.runPackageUpdate?.();
-    launched = Boolean(r?.launched);
+    await navigator.clipboard?.writeText(PKG_UPDATE_CMD);
   } catch {
-    /* fall through */
+    /* clipboard may be unavailable; the message still tells them the command */
   }
-  return launched ? "pkg-launched" : "pkg-failed";
+  return "manual";
 }

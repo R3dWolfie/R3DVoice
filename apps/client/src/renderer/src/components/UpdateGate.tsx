@@ -1,7 +1,6 @@
 import { useEffect, useState, type CSSProperties, type ReactElement, type ReactNode } from "react";
 import { APP_VERSION, IS_WEB } from "./Primitives.js";
 import { fetchMinClientVersion, isUpdateRequired } from "../lib/update-check.js";
-import { performUpdate } from "../lib/update-action.js";
 
 /**
  * Wraps the app and enforces the server's minimum client version. When this
@@ -14,16 +13,10 @@ import { performUpdate } from "../lib/update-action.js";
 export function UpdateGate({ serverUrl, children }: { serverUrl: string; children: ReactNode }): ReactElement {
   const [minVersion, setMinVersion] = useState<string | null>(null);
   const [canSelfUpdate, setCanSelfUpdate] = useState(false);
-  const [pacman, setPacman] = useState(false);
-  const [busy, setBusy] = useState(false);
-  const [msg, setMsg] = useState<string | null>(null);
 
   useEffect(() => {
     void window.r3dvoice?.updaterInfo?.()
-      .then((i) => {
-        setCanSelfUpdate(Boolean(i?.canSelfUpdate));
-        setPacman(Boolean(i?.pacman));
-      })
+      .then((i) => setCanSelfUpdate(Boolean(i?.canSelfUpdate)))
       .catch(() => setCanSelfUpdate(false));
   }, []);
 
@@ -72,30 +65,6 @@ export function UpdateGate({ serverUrl, children }: { serverUrl: string; childre
             >
               Restart to update
             </button>
-          ) : pacman ? (
-            <div style={{ display: "flex", flexDirection: "column", gap: "var(--s-3)", width: "100%" }}>
-              <button
-                type="button"
-                className="rv-btn"
-                data-variant="primary"
-                style={BTN}
-                disabled={busy}
-                onClick={async () => {
-                  setBusy(true);
-                  setMsg(null);
-                  const outcome = await performUpdate({ isWeb: false, canSelfUpdate: false, pacman: true, version: minVersion });
-                  if (outcome === "pkg-launched") setMsg("Opened a terminal - confirm there, then reopen R3DVoice.");
-                  else if (outcome === "pkg-failed") setMsg("Couldn't install automatically - run yay -Syu, then reopen R3DVoice.");
-                  setBusy(false); // on success the app relaunches
-                }}
-              >
-                {busy ? "Installing…" : "↑ Update now"}
-              </button>
-              <div style={{ color: "var(--text-dim)", fontSize: "var(--t-xs)" }}>
-                Installs with one password prompt, then restarts.
-              </div>
-              {msg && <div style={{ color: "var(--text-mid)", fontSize: "var(--t-sm)" }}>{msg}</div>}
-            </div>
           ) : (
             <div style={{ display: "flex", flexDirection: "column", gap: "var(--s-3)", width: "100%" }}>
               <div style={{ color: "var(--text-mid)", fontSize: "var(--t-sm)" }}>Update with your package manager, then restart:</div>
@@ -110,7 +79,7 @@ export function UpdateGate({ serverUrl, children }: { serverUrl: string; childre
                   fontSize: "var(--t-sm)",
                 }}
               >
-                yay -Syu
+                yay -Syu r3dvoice-bin
               </code>
               <button type="button" className="rv-btn" data-variant="primary" style={BTN} onClick={() => void window.r3dvoice.relaunch()}>
                 Restart R3DVoice
