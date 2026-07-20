@@ -1,8 +1,11 @@
 import { useEffect, useState, type ReactElement } from "react";
+import { useAuthStore } from "../lib/auth-context.js";
+import { compareVersions, fetchLatestClientVersion } from "../lib/update-check.js";
 
 const KEY = "r3dvoice.lastSeenVersion";
 
 export function UpdateToast(): ReactElement | null {
+  const serverUrl = useAuthStore((s) => s.serverUrl);
   const [version, setVersion] = useState<string | null>(null);
   const [show, setShow] = useState(false);
 
@@ -17,13 +20,20 @@ export function UpdateToast(): ReactElement | null {
         localStorage.setItem(KEY, current);
         return;
       }
-      if (lastSeen !== current) {
-        setVersion(current);
-        setShow(true);
+      if (lastSeen === current) return; // already seen this version
+      // Just landed on a new version - but if the server already advertises a
+      // NEWER one, the "Update available" popup owns the corner. Don't stack a
+      // "you're on vX" toast under it (defer; it'll show once we're current).
+      if (serverUrl) {
+        const latest = await fetchLatestClientVersion(serverUrl);
+        if (cancelled) return;
+        if (latest && compareVersions(current, latest) < 0) return;
       }
+      setVersion(current);
+      setShow(true);
     })();
     return () => { cancelled = true; };
-  }, []);
+  }, [serverUrl]);
 
   const dismiss = (): void => {
     if (version) localStorage.setItem(KEY, version);
